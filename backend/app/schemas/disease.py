@@ -74,3 +74,4 @@ class DiagnosisResult(BaseModel):
     model_metadata: Dict[str, Any] = Field(default_factory=dict, description="Model architecture, version, and device")
     inference_time_ms: float = Field(..., description="Total wall-clock inference and explainability latency in ms")
     is_simulated: bool = Field(default=False, description="Explicit verification that real model weights were used")
+

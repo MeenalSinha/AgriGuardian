@@ -110,8 +110,8 @@ class DynamicRuleEngine:
             }
         ]
 
-    def evaluate(self, symptoms: str, weather: Dict[str, Any]) -> Dict[str, Any]:
-        """Evaluate symptoms against active rules and weather context."""
+    def evaluate(self, symptoms: str, weather: Dict[str, Any], crop: Optional[str] = None) -> Dict[str, Any]:
+        """Evaluate symptoms against active rules, crop applicability, and weather context."""
         symptoms_lower = symptoms.lower() if symptoms else ""
         triggered_rules = []
         highest_risk = "Low"
@@ -122,7 +122,13 @@ class DynamicRuleEngine:
             if not rule.get("active", True):
                 continue
 
-            conditions = rule.get("conditions", {})
+            # Optional crop scope check
+            if crop and rule.get("applicable_crops"):
+                app_crops = [c.lower() for c in rule["applicable_crops"]]
+                if crop.lower() not in app_crops and "general" not in app_crops:
+                    continue
+
+            conditions = rule.get("trigger_conditions") or rule.get("conditions", {})
             keywords = conditions.get("symptoms_keywords", [])
             add_keywords = conditions.get("symptoms_keywords_additional", [])
             weather_conds = conditions.get("weather_conditions", {})
@@ -141,6 +147,9 @@ class DynamicRuleEngine:
                     break
 
             if keyword_match and add_match and weather_match:
+                # Ensure recommendation is mirrored in suggestion for legacy compatibility
+                if "recommendation" in rule and "suggestion" not in rule:
+                    rule["suggestion"] = rule["recommendation"]
                 triggered_rules.append(rule)
                 rule_risk = rule.get("risk_level", "Low")
                 if risk_priority.get(rule_risk, 1) > risk_priority.get(highest_risk, 1):

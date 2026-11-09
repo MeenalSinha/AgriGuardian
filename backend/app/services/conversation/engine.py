@@ -152,8 +152,23 @@ class ConversationEngine:
 
         rule_eval = self.system.rule_engine.evaluate(effective_query, weather.model_dump())
 
-        # 3. Generate agricultural guidance using LLMAdvisor with conversation context
+        # 3. Generate grounded recommendation using RecommendationEngine
+        rec = self.system.recommendation_engine.generate_recommendation(
+            query=effective_query,
+            crop=effective_crop.lower(),
+            language=lang,
+            state=None,
+            weather_context=weather.model_dump(),
+            image_diagnosis=image_diag_dict,
+        )
+
+        # 4. Generate agricultural guidance using LLMAdvisor with conversation context & grounded evidence
         history = session.get_conversation_history(limit=4)
+        retrieved_facts = [
+            f for f, _ in self.system.recommendation_engine.retrieval_service.retrieve(
+                query=effective_query, crop=effective_crop.lower(), top_k=4
+            )
+        ]
         advisory = self.system.llm_advisor.generate_advisory(
             crop=effective_crop,
             symptoms=effective_query,
@@ -162,9 +177,11 @@ class ConversationEngine:
             rule_results=rule_eval,
             farmer_name=session.farmer_name,
             conversation_history=history,
+            retrieved_facts=retrieved_facts,
+            evidence_excerpts=rec.supporting_evidence,
         )
 
-        # 4. Select response text matching farmer's preferred language
+        # 5. Select response text matching farmer's preferred language
         is_hindi = lang.startswith("hi")
         response_text = advisory.get("advisory_hi" if is_hindi else "advisory_en")
         if not response_text:
@@ -177,6 +194,10 @@ class ConversationEngine:
             full_response_text = f"{response_text}\n\n**Action Plan:**\n{steps_text}"
         else:
             full_response_text = response_text
+
+        if rec.expert_referral_required and rec.expert_referral_details:
+            if "KVK" not in full_response_text and "केवीके" not in full_response_text:
+                full_response_text += f"\n\n⚠️ **KVK Advisory**: {rec.expert_referral_details}"
 
         # 4. Generate speech using Gnani Timbre v2.5 if requested
         tts_result: Optional[SpeechSynthesisResult] = None
@@ -228,8 +249,10 @@ class ConversationEngine:
                 "risk": advisory.get("risk"),
                 "weather": weather.summary,
                 "market": market.summary,
-                "field_visit_required": advisory.get("field_visit_required", False),
+                "field_visit_required": advisory.get("field_visit_required", False) or rec.expert_referral_required,
                 "image_diagnosis": image_diag_dict,
+                "recommendation": rec.model_dump(),
+                "supporting_evidence": [e.model_dump() for e in rec.supporting_evidence],
             },
         )
 

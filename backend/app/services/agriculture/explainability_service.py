@@ -138,3 +138,4 @@ class GradCAMExplainer:
             return np.array(original_image), None, None
         finally:
             self._cleanup_hooks()
+

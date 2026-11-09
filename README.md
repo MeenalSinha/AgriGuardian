@@ -29,6 +29,15 @@ Built with **Streamlit, Gnani AI (Prisma v2.5 STT & Timbre v2.5 TTS), Open-Meteo
 * **Optical Quality Pre-flight & Abstention:** Algorithmic blur detection (Laplacian variance), exposure checks, and calibrated confidence thresholds ($\tau = 0.40$) that actively abstain on non-plant, blurry, or ambiguous inputs.
 * **ICAR-Aligned IPM Advisory:** Grounded cultural, biological, chemical precautions, and Krishi Vigyan Kendra (KVK) referral protocols.
 
+### 📚 Evidence-Grounded Knowledge Base & Recommendation Engine (Phase 3)
+* **Authoritative Source Registry:** Registered statutory Tier-1 (ICAR, CIBRC, IMD) and Tier-2 (TNAU) publications with cryptographic SHA-256 integrity digests.
+* **Atomic Knowledge Graph & Traceable Excerpts:** Stores verified atomic facts paired with verbatim source excerpts, page/section citations, and lifecycle tracking.
+* **Hybrid Lexical BM25 Retrieval:** In-memory search ranking candidate facts with multilingual Indic synonym expansion (Hindi, Hinglish, English) and authority weighting.
+* **Context Applicability & Conflict Arbitration:** Dynamic evaluation of crop growth stage, days after sowing (DAS), weather factors, and authority tier hierarchy (Tier-1 > Tier-2 > Tier-3).
+* **Agricultural Safety Guardrails:** Defenses against prompt injection, automatic query blocking of banned lethal agrochemicals (Monocrotophos, Endosulfan, Paraquat), and automatic downgrading of unconfirmed chemical advice to local Krishi Vigyan Kendra (KVK) referrals.
+* **Grounded LLM Advisory:** Strict grounding prompts preventing fabricated dosages, with deterministic fallback generating citations directly from retrieved facts.
+* **Interactive Knowledge Admin View:** Dedicated Streamlit governance console for inspecting sources, facts, safety rules, and testing retrieval queries.
+
 ### 📊 Field Officer Dashboard & PDF Exports
 * **Regional Outbreak Analytics:** Tracks crop health queries, risk distributions, and peak advisory hours.
 * **Case Management:** Review and update advisory statuses and agronomist field feedback.
@@ -123,6 +132,13 @@ python -m pytest tests/integration/test_gnani_live.py -v
 ---
 
 ## 📚 Documentation Links
+* [Phase 3 Final Engineering Report (`docs/PHASE_3_FINAL_REPORT.md`)](file:///docs/PHASE_3_FINAL_REPORT.md)
+* [Knowledge Architecture Specification (`docs/KNOWLEDGE_ARCHITECTURE.md`)](file:///docs/KNOWLEDGE_ARCHITECTURE.md)
+* [Authoritative Source Registry (`docs/SOURCE_REGISTRY.md`)](file:///docs/SOURCE_REGISTRY.md)
+* [Knowledge Governance & Safety Manual (`docs/KNOWLEDGE_GOVERNANCE.md`)](file:///docs/KNOWLEDGE_GOVERNANCE.md)
+* [Recommendation Engine Pipeline (`docs/RECOMMENDATION_ENGINE.md`)](file:///docs/RECOMMENDATION_ENGINE.md)
+* [Retrieval Benchmark Evaluation (`docs/RETRIEVAL_EVALUATION_REPORT.md`)](file:///docs/RETRIEVAL_EVALUATION_REPORT.md)
+* [Phase 2 Pre-flight Verification Report (`docs/PHASE_2_VERIFICATION.md`)](file:///docs/PHASE_2_VERIFICATION.md)
 * [Comprehensive Codebase Audit (`docs/PROJECT_AUDIT.md`)](file:///docs/PROJECT_AUDIT.md)
 * [System Architecture (`docs/ARCHITECTURE.md`)](file:///docs/ARCHITECTURE.md)
 * [Configuration Guide (`docs/CONFIGURATION.md`)](file:///docs/CONFIGURATION.md)

@@ -1,0 +1,39 @@
+{
+  "manifest_version": "3.0.0",
+  "system": "AgriGuardian Knowledge & Evidence Catalog",
+  "compiled_at": "2026-11-09T08:29:38.674041+00:00",
+  "governance": {
+    "status": "approved",
+    "jurisdiction": "India",
+    "regulatory_framework": "ICAR Package of Practices & CIBRC Approved Registrations"
+  },
+  "catalogs": {
+    "sources": {
+      "file": "sources/registry.json",
+      "total_records": 5,
+      "sha256": "9b4f3bad52830e16c03225911a4a3b2bd4f6c39cae566d07e15e6acb7ebe8ef7"
+    },
+    "facts": {
+      "file": "facts/facts.json",
+      "total_records": 10,
+      "sha256": "0a4798911e4d0d23551e650749259ece0f0c9b3e1133bd8bffc7d76d7f06b01f"
+    }
+  },
+  "supported_crops": [
+    "tomato",
+    "wheat",
+    "rice",
+    "cotton",
+    "potato",
+    "general"
+  ],
+  "supported_categories": [
+    "disease_management",
+    "pest_management",
+    "irrigation",
+    "soil_health",
+    "nutrient_management",
+    "weather_risk",
+    "agronomic_practice"
+  ]
+}

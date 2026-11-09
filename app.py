@@ -22,6 +22,7 @@ from frontend.views.dashboard_view import render_dashboard_view
 from frontend.views.demo_cases_view import render_demo_cases_view
 from frontend.views.disease_diagnosis_view import render_disease_diagnosis_view
 from frontend.views.home_view import render_home_view
+from frontend.views.knowledge_admin_view import render_knowledge_admin_view
 from frontend.views.voice_assistant_view import render_voice_assistant_view
 
 # Initialize configuration and logging
@@ -89,6 +90,7 @@ with st.sidebar:
             "🎙️ Voice Assistant",
             "🔬 Crop Disease Diagnosis",
             "🏠 Farm Advisory",
+            "📚 Knowledge Base",
             "📊 Dashboard",
             "👨‍🌾 Demo Cases",
             "ℹ️ About",
@@ -139,6 +141,8 @@ elif page == "🔬 Crop Disease Diagnosis":
     render_disease_diagnosis_view()
 elif page == "🏠 Farm Advisory":
     render_home_view()
+elif page == "📚 Knowledge Base":
+    render_knowledge_admin_view()
 elif page == "📊 Dashboard":
     render_dashboard_view()
 elif page == "👨‍🌾 Demo Cases":

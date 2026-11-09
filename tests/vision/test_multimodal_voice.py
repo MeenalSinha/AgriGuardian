@@ -51,3 +51,4 @@ def test_multimodal_turn_with_image(test_leaf_photo):
     assert diag is not None
     assert diag["is_simulated"] is False
     assert len(turn.response_text) > 20
+

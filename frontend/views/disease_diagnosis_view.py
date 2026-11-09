@@ -295,3 +295,4 @@ def render_disease_diagnosis_view() -> None:
                             st.warning(f"Voice generation note: {tts_res.error or 'Synthesis unavailable.'}")
                     except Exception as e:
                         st.error(f"Voice synthesis error: {e}")
+

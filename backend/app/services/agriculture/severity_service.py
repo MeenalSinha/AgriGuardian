@@ -132,3 +132,4 @@ class SeverityAssessor:
             environmental_warnings=env_warnings,
             clinical_summary=summary_desc,
         )
+

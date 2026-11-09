@@ -85,3 +85,4 @@ def test_validator_too_small_resolution(temp_images_dir):
     assert result.is_valid is False
     assert "too small" in result.error_message
     assert pil_img is None
+

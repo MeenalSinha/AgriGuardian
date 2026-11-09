@@ -331,5 +331,14 @@ def render_voice_assistant_view() -> None:
                 elif turn.speech_provider:
                     st.caption("ℹ️ Audio generation was requested but temporary file is no longer available.")
 
+                # Grounded Evidence Provenance
+                if turn.context_used and turn.context_used.get("supporting_evidence"):
+                    ev_list = turn.context_used["supporting_evidence"]
+                    with st.expander(f"📚 Grounded Agricultural Evidence ({len(ev_list)} Citations)", expanded=False):
+                        for ev in ev_list:
+                            org = ev.get("organization", "Authority")
+                            src_id = ev.get("source_id", "SOURCE")
+                            st.markdown(f"- **[{src_id}] {org}**: *\"{ev.get('excerpt_text', '')}\"*")
+
                 ui_divider(style="dotted")
 

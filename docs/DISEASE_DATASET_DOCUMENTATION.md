@@ -87,3 +87,4 @@ To ensure robust model generalization from laboratory-collected leaf samples to 
 
 - **No Chemical Endorsements:** Dataset labeling is purely biological and pathogen-focused. Management outputs derived from diagnosis strictly adhere to Integrated Pest Management (IPM) guidelines approved by the Indian Council of Agricultural Research (ICAR).
 - **Abstention on OOD Data:** When images of non-plant subjects, uncultivated weeds, or severely distorted leaves are submitted, the system refuses to force-fit a disease class and prompts the farmer for a clearer photo.
+

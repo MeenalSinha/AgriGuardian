@@ -53,3 +53,4 @@ def test_severity_with_weather_context():
 
     assert result.environmental_risk_multiplier > 1.0
     assert len(result.environmental_warnings) >= 2
+

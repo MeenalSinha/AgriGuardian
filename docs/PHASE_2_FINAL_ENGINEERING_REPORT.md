@@ -214,3 +214,4 @@ Recommendations for Phase 3 (Expanded Multi-Crop Diagnostics & Offline Edge Infe
 1. Expand model coverage beyond Tomato to Rice, Wheat, Cotton, and Potato foliar conditions.
 2. Export the PyTorch model to ONNX Runtime and TensorFlow Lite (TFLite) for fully offline mobile on-device edge execution without internet connectivity.
 3. Integrate GPS-based automatic regional KVK routing to directly connect farmers with local extension officers.
+

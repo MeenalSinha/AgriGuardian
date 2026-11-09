@@ -52,13 +52,16 @@ class ImageAnalysisResult(BaseModel):
     confidence: float
     top_3: List[Dict[str, Any]] = Field(default_factory=list)
     severity: str
+    severity_score_percent: Optional[float] = None
     recommendation: str
-    model_used: str = "MobileNetV2-v1.0"
-    model_version: str = "v1.0"
+    model_used: str = "MobileNetV3-Small"
+    model_version: str = "2.1.0-prod"
     device: str = "cpu"
     inference_time: float = 0.0
     gradcam_image: Optional[str] = None
-    is_simulated: bool = True
+    gradcam_base64: Optional[str] = None
+    is_simulated: bool = False
+    diagnosis_result: Optional[Dict[str, Any]] = None
 
 
 class AdvisoryResult(BaseModel):

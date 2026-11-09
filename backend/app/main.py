@@ -91,6 +91,18 @@ class AdvisoryGenerationRequest(BaseModel):
     phone_number: Optional[str] = None
 
 
+class RecommendationRequest(BaseModel):
+    """Payload for evidence-grounded recommendation generation."""
+    query: str
+    crop: str = "tomato"
+    language: str = "hi-IN"
+    state: Optional[str] = None
+    crop_stage: Optional[str] = None
+    days_after_sowing: Optional[int] = None
+    weather_context: Optional[Dict[str, Any]] = None
+    image_diagnosis: Optional[Dict[str, Any]] = None
+
+
 # ==============================================================================
 # ENDPOINTS
 # ==============================================================================
@@ -284,5 +296,62 @@ async def diagnose_disease(
     except Exception as e:
         logger.error(f"API diagnosis error: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@app.get("/api/v1/knowledge/sources", tags=["Knowledge Base"])
+def get_knowledge_sources():
+    """Retrieve all authoritative agricultural sources registered in AgriGuardian."""
+    repo = system.recommendation_engine.retrieval_service.source_repo
+    sources = repo.get_all()
+    return {
+        "sources": [s.model_dump() for s in sources],
+        "count": len(sources),
+    }
+
+
+@app.get("/api/v1/knowledge/facts", tags=["Knowledge Base"])
+def get_knowledge_facts(crop: Optional[str] = None):
+    """Retrieve verified atomic facts filtered optionally by crop."""
+    repo = system.recommendation_engine.retrieval_service.fact_repo
+    if crop:
+        facts = repo.get_by_crop(crop)
+    else:
+        facts = repo.get_all()
+    return {
+        "facts": [f.model_dump() for f in facts],
+        "count": len(facts),
+    }
+
+
+@app.get("/api/v1/knowledge/manifest", tags=["Knowledge Base"])
+def get_knowledge_manifest():
+    """Retrieve knowledge manifest with catalog metrics and integrity signatures."""
+    manifest_path = os.path.join(os.getcwd(), "data", "knowledge_manifest.json")
+    if os.path.exists(manifest_path):
+        import json
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"status": "uninitialized", "sources_count": 0, "facts_count": 0}
+
+
+@app.post("/api/v1/recommendation/generate", tags=["Recommendation Engine"])
+def generate_recommendation(req: RecommendationRequest):
+    """Generate evidence-grounded, context-aware personalized recommendation."""
+    try:
+        rec = system.recommendation_engine.generate_recommendation(
+            query=req.query,
+            crop=req.crop,
+            language=req.language,
+            state=req.state,
+            crop_stage=req.crop_stage,
+            days_after_sowing=req.days_after_sowing,
+            weather_context=req.weather_context,
+            image_diagnosis=req.image_diagnosis,
+        )
+        return rec.model_dump()
+    except Exception as e:
+        logger.error(f"Recommendation generation error: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 

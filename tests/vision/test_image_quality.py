@@ -68,3 +68,4 @@ def test_quality_over_exposed_glare_image():
     assert result.brightness_score > 220.0
     assert "over-exposure" in " ".join(result.warnings).lower()
     assert result.quality_tier == "Poor"
+

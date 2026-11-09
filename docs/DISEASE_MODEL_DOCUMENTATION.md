@@ -107,3 +107,4 @@ To protect farmers from incorrect pesticide or fungicide applications, the model
 - **Top-2 Entropy Margin:** If $\hat{p}_{(1)} - \hat{p}_{(2)} < 0.10$ and $\hat{p}_{(1)} < 0.60$, the system flags ambiguous multi-symptom overlap.
 - **Action on Abstention:** No chemical recommendations are offered. The system displays:
   > *"Diagnostic confidence is insufficient to recommend targeted treatment. Please submit a well-lit close-up of an individual leaflet or consult the nearest Krishi Vigyan Kendra (KVK) officer."*
+

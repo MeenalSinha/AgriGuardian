@@ -10,6 +10,7 @@ from backend.app.integrations.market.market_service import MarketService
 from backend.app.integrations.weather.open_meteo import WeatherService
 from backend.app.repositories.data_manager import DataManager
 from backend.app.services.agriculture.disease_detector import PlantDiseaseDetector
+from backend.app.services.agriculture.recommendation_engine import RecommendationEngine
 from backend.app.services.agriculture.rule_engine import DynamicRuleEngine
 from backend.app.services.analytics.dashboard import EnhancedDashboardAnalytics
 from backend.app.services.reporting.pdf_generator import PDFReportGenerator
@@ -26,6 +27,7 @@ class AgriGuardianSystem:
         self.weather_service = WeatherService(settings=self.settings)
         self.market_service = MarketService(settings=self.settings)
         self.disease_detector = PlantDiseaseDetector(settings=self.settings)
+        self.recommendation_engine = RecommendationEngine(settings=self.settings)
         self.llm_advisor = LLMAdvisorService(settings=self.settings, api_key=api_key)
         self.data_manager = DataManager(settings=self.settings)
         self.pdf_generator = PDFReportGenerator(settings=self.settings)
@@ -77,19 +79,51 @@ class AgriGuardianSystem:
 
             if image_analysis.get("disease") not in ("Unable to detect", "Invalid or Unreadable Image", "Uncertain / Unrecognized Foliar Symptom"):
                 effective_symptoms = f"{symptoms}. Image analysis reveals: {image_analysis['disease']} (Severity: {image_analysis.get('severity', 'Unknown')})"
-                severity_explanation = self.disease_detector.calculate_severity(
-                    image_analysis["disease"],
-                    image_analysis["confidence"],
-                    weather.model_dump(),
-                )
+                diag_data = image_analysis.get("diagnosis_result")
+                if diag_data and "severity_assessment" in diag_data:
+                    sev = diag_data["severity_assessment"]
+                    severity_explanation = {
+                        "score": sev.get("severity_score_percent", 0.0),
+                        "final_score": sev.get("severity_score_percent", 0.0),
+                        "level": sev.get("severity_stage", "Unknown"),
+                        "severity": sev.get("severity_stage", "Unknown"),
+                        "factors": sev.get("environmental_warnings", []),
+                        "weather_factors": sev.get("environmental_warnings", []),
+                        "weather_multiplier": sev.get("environmental_risk_multiplier", 1.0),
+                        "clinical_summary": sev.get("clinical_summary", ""),
+                    }
+                else:
+                    severity_explanation = self.disease_detector.calculate_severity(
+                        image_analysis["disease"],
+                        image_analysis["confidence"],
+                        weather.model_dump(),
+                    )
 
         # Step 4: Rule Engine
         t0 = time.time()
         rule_results = self.rule_engine.evaluate(effective_symptoms, weather.model_dump())
         timing["rules"] = time.time() - t0
 
-        # Step 5: LLM Advisory
+        # Step 5: Phase 3 Recommendation Engine (Evidence Retrieval, Applicability, Conflict Arbitration & Safety)
         t0 = time.time()
+        diag_dict = image_analysis.get("diagnosis_result") if image_analysis else None
+        recommendation = self.recommendation_engine.generate_recommendation(
+            query=effective_symptoms,
+            crop=crop.lower(),
+            language=language,
+            state=None,
+            weather_context=weather.model_dump(),
+            image_diagnosis=diag_dict,
+        )
+        timing["recommendation"] = time.time() - t0
+
+        # Step 6: Grounded LLM Advisory
+        t0 = time.time()
+        retrieved_facts = [
+            f for f, _ in self.recommendation_engine.retrieval_service.retrieve(
+                query=effective_symptoms, crop=crop.lower(), top_k=4
+            )
+        ]
         advisory = self.llm_advisor.generate_advisory(
             crop=crop,
             symptoms=effective_symptoms,
@@ -97,6 +131,8 @@ class AgriGuardianSystem:
             market=market.model_dump(),
             rule_results=rule_results,
             farmer_name=farmer_name,
+            retrieved_facts=retrieved_facts,
+            evidence_excerpts=recommendation.supporting_evidence,
         )
         timing["llm"] = time.time() - t0
         timing["total"] = time.time() - overall_start
@@ -112,7 +148,7 @@ class AgriGuardianSystem:
             "advisory_en": advisory.get("advisory_en", ""),
             "three_step_plan": advisory.get("three_step_plan", []),
             "justification": advisory.get("justification", ""),
-            "field_visit_required": advisory.get("field_visit_required", False),
+            "field_visit_required": advisory.get("field_visit_required", False) or recommendation.expert_referral_required,
             "weather_summary": weather.summary,
             "market_summary": market.summary,
             "weather_details": weather.model_dump(),
@@ -120,6 +156,10 @@ class AgriGuardianSystem:
             "rule_results": rule_results,
             "image_analysis": image_analysis,
             "severity_explanation": severity_explanation,
+            "recommendation": recommendation.model_dump(),
+            "supporting_evidence": [e.model_dump() for e in recommendation.supporting_evidence],
+            "expert_referral_required": recommendation.expert_referral_required,
+            "expert_referral_details": recommendation.expert_referral_details,
             "audio_file": None,
             "language": language,
             "phone_number": phone_number,

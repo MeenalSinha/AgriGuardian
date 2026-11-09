@@ -23,6 +23,10 @@ from backend.app.schemas.disease import (
     ManagementGuidelines,
     DiagnosisResult,
 )
+from backend.app.schemas.source import SourceRecord
+from backend.app.schemas.evidence import EvidenceExcerpt
+from backend.app.schemas.knowledge import AtomicFact
+from backend.app.schemas.recommendation import ActionItem, PersonalizedRecommendation
 
 __all__ = [
     "AudioValidationResult",
@@ -43,5 +47,10 @@ __all__ = [
     "SeverityAssessmentResult",
     "ManagementGuidelines",
     "DiagnosisResult",
+    "SourceRecord",
+    "EvidenceExcerpt",
+    "AtomicFact",
+    "ActionItem",
+    "PersonalizedRecommendation",
 ]
 

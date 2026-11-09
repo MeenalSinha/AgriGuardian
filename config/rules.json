@@ -1,72 +1,120 @@
 {
-  "version": "1.0",
-  "last_updated": "2026-11-09T12:25:39.504511",
+  "version": "3.0.0",
+  "last_updated": "2026-11-09T08:00:00Z",
+  "governance": {
+    "jurisdiction": "India",
+    "standards_body": "Indian Council of Agricultural Research & CIBRC"
+  },
   "rules": [
     {
-      "id": "FUNGAL_001",
-      "name": "Fungal Risk - Yellowing + Rain",
-      "category": "disease",
+      "id": "RULE-TOM-BLIGHT-RAIN-01",
+      "name": "Tomato Early Blight Foliar Moisture Risk",
+      "description": "Evaluates fungal Alternaria spore acceleration when foliar yellowing/spots coincide with recent rainfall.",
+      "category": "disease_risk",
       "risk_level": "High",
-      "conditions": {
-        "symptoms_keywords": [
-          "yellow",
-          "yellowing"
-        ],
+      "applicable_crops": ["tomato"],
+      "applicable_regions": ["Karnataka", "Maharashtra", "Andhra Pradesh", "Uttar Pradesh", "Gujarat"],
+      "growth_stage_conditions": ["vegetative", "flowering", "fruiting"],
+      "trigger_conditions": {
+        "symptoms_keywords": ["yellow", "yellowing", "spot", "spots", "धब्बा", "पीला"],
         "weather_conditions": {
           "rain_recent": true
         }
       },
-      "suggestion": "Possible fungal infection due to moisture. Apply fungicide and improve drainage.",
+      "recommendation": "Recent rainfall accelerates Alternaria spore splash. Prune lower diseased foliage, improve drainage, and apply biological Trichoderma viride or protective copper/mancozeb as per CIBRC label.",
+      "source_id": "SRC-ICAR-TOMATO-2024",
+      "safety_classification": "low_risk_cultural",
+      "review_status": "approved",
+      "effective_date": "2024-01-15",
+      "review_due_at": "2027-08-20",
       "active": true
     },
     {
-      "id": "WATER_001",
-      "name": "Water Stress - Wilting + High Temp",
-      "category": "environmental",
+      "id": "RULE-TOM-WATER-STRESS-01",
+      "name": "Tomato High Heat Transpiration Stress",
+      "description": "Detects high temperature moisture depletion causing temporary wilting or leaf curl.",
+      "category": "water_stress",
       "risk_level": "High",
-      "conditions": {
-        "symptoms_keywords": [
-          "wilt",
-          "drooping"
-        ],
+      "applicable_crops": ["tomato"],
+      "applicable_regions": [],
+      "growth_stage_conditions": ["flowering", "fruit_setting"],
+      "trigger_conditions": {
+        "symptoms_keywords": ["wilt", "wilting", "drooping", "मुरझाना"],
         "weather_conditions": {
           "temp_high": true
         }
       },
-      "suggestion": "Water stress detected. Increase irrigation immediately and add mulch.",
+      "recommendation": "Ambient thermal stress detected. Apply drip irrigation in evening hours and use straw/plastic mulch around root zone to retain soil moisture.",
+      "source_id": "SRC-ICAR-TOMATO-2024",
+      "safety_classification": "low_risk_cultural",
+      "review_status": "approved",
+      "effective_date": "2024-01-15",
+      "review_due_at": "2027-08-20",
       "active": true
     },
     {
-      "id": "DISEASE_001",
-      "name": "Leaf Spot Disease",
-      "category": "disease",
-      "risk_level": "Medium",
-      "conditions": {
-        "symptoms_keywords": [
-          "spot",
-          "spots"
-        ],
-        "symptoms_keywords_additional": [
-          "brown",
-          "black"
-        ]
+      "id": "RULE-WHEAT-CRI-IRRIG-01",
+      "name": "Wheat Crown Root Initiation Critical Irrigation",
+      "description": "Flags critical 20-25 days after sowing window where water stress severely penalizes tillering.",
+      "category": "irrigation",
+      "risk_level": "High",
+      "applicable_crops": ["wheat"],
+      "applicable_regions": ["Punjab", "Haryana", "Uttar Pradesh", "Bihar", "Rajasthan", "Madhya Pradesh"],
+      "growth_stage_conditions": ["crown_root_initiation"],
+      "trigger_conditions": {
+        "symptoms_keywords": ["irrigation", "water", "watering", "सिंचाई", "पानी", "cri", "सीआरआई"],
+        "weather_conditions": {}
       },
-      "suggestion": "Leaf spot disease suspected. Remove affected leaves and monitor closely.",
+      "recommendation": "Crown Root Initiation (20-25 DAS) is the most critical irrigation stage for wheat. Apply first irrigation immediately if field has not received rain.",
+      "source_id": "SRC-ICAR-WHEAT-2023",
+      "safety_classification": "low_risk_cultural",
+      "review_status": "approved",
+      "effective_date": "2023-10-10",
+      "review_due_at": "2027-02-15",
       "active": true
     },
     {
-      "id": "PEST_001",
-      "name": "Pest Infestation",
-      "category": "pest",
-      "risk_level": "Medium",
-      "conditions": {
-        "symptoms_keywords": [
-          "pest",
-          "insect",
-          "holes"
-        ]
+      "id": "RULE-GEN-DRAIN-WATERLOG-01",
+      "name": "Post-Rain Drainage and Root Rot Prevention",
+      "description": "Triggers immediate field drainage advisory following heavy precipitation to prevent root asphyxiation.",
+      "category": "weather_risk",
+      "risk_level": "High",
+      "applicable_crops": ["tomato", "wheat", "rice", "cotton", "potato", "general"],
+      "applicable_regions": [],
+      "growth_stage_conditions": [],
+      "trigger_conditions": {
+        "symptoms_keywords": ["rain", "waterlogging", "stagnation", "बारिश", "जलभराव"],
+        "weather_conditions": {
+          "rain_recent": true
+        }
       },
-      "suggestion": "Pest infestation detected. Apply neem oil or appropriate bio-pesticide.",
+      "recommendation": "Drain standing water within 12-24 hours to prevent anoxic root collapse and soil-borne damping-off fungi. Defer foliar chemical sprays until surface dries.",
+      "source_id": "SRC-IMD-AGROMET-2024",
+      "safety_classification": "low_risk_cultural",
+      "review_status": "approved",
+      "effective_date": "2024-05-20",
+      "review_due_at": "2027-05-25",
+      "active": true
+    },
+    {
+      "id": "RULE-TOM-TYLCV-WHITEFLY-01",
+      "name": "Tomato Viral Vector Monitoring",
+      "description": "Directs whitefly monitoring and early rogueing upon leaf curling or stunting symptoms.",
+      "category": "pest_risk",
+      "risk_level": "Medium",
+      "applicable_crops": ["tomato"],
+      "applicable_regions": [],
+      "growth_stage_conditions": ["vegetative"],
+      "trigger_conditions": {
+        "symptoms_keywords": ["curl", "curling", "whitefly", "stunted", "सिकुड़ना", "मरोड़िया"],
+        "weather_conditions": {}
+      },
+      "recommendation": "Tomato leaf curl is vectored by whiteflies. Install bright yellow sticky traps (15-20/acre) and rogue out severely curled young plants early.",
+      "source_id": "SRC-ICAR-TOMATO-2024",
+      "safety_classification": "low_risk_cultural",
+      "review_status": "approved",
+      "effective_date": "2024-01-15",
+      "review_due_at": "2027-08-20",
       "active": true
     }
   ]

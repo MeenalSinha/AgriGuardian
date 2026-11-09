@@ -1,0 +1,337 @@
+{
+  "version": "1.0.0",
+  "last_compiled": "2026-11-09T08:29:38.642155+00:00",
+  "total_facts": 10,
+  "facts": [
+    {
+      "fact_id": "FCT-TOM-EBLIGHT-CULT-01",
+      "category": "disease_management",
+      "subject": "tomato",
+      "predicate": "managed_by_cultural_practice",
+      "value": "Prune and safely destroy lower infected leaves touching the soil surface, maintain 60x45 cm plant spacing, and apply organic mulch to suppress rain splash inoculation of Alternaria spores.",
+      "scientific_name": "Alternaria solani",
+      "conditions": {
+        "symptom": "concentric ring spots",
+        "crop_stage": "vegetative_to_fruiting"
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": []
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-TOM-001",
+          "source_id": "SRC-ICAR-TOMATO-2024",
+          "source_title": "Package of Practices for Commercial Tomato Cultivation in India",
+          "organization": "ICAR - Indian Institute of Horticultural Research (IIHR)",
+          "page": 24,
+          "section": "Foliar Fungal Disease Management",
+          "quote_or_excerpt": "Sanitation through removal of bottom leaves and soil mulching with paddy straw reduces Alternaria inoculum pressure by up to 45%.",
+          "confidence_score": 0.98,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "low_risk_cultural"
+    },
+    {
+      "fact_id": "FCT-TOM-EBLIGHT-BIO-02",
+      "category": "disease_management",
+      "subject": "tomato",
+      "predicate": "managed_by_biological_agent",
+      "value": "Apply preventative foliar spray of Trichoderma harzianum or Trichoderma viride @ 5-10 g/L or Neem Seed Kernel Extract (NSKE 5%) during early vegetative stages.",
+      "scientific_name": "Alternaria solani",
+      "conditions": {
+        "infestation_stage": "early_mild",
+        "severity_stage": "Mild"
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": []
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-TOM-002",
+          "source_id": "SRC-TNAU-AGRITECH-2023",
+          "source_title": "Expert System for Crop Protection: Horticultural IPM Protocols",
+          "organization": "Tamil Nadu Agricultural University (TNAU)",
+          "page": 12,
+          "section": "Bio-control of Solanaceous Pathogens",
+          "quote_or_excerpt": "Prophylactic application of Trichoderma viride formulation @ 10g/L significantly curtails early blight lesion development in field tomatoes.",
+          "confidence_score": 0.95,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "biological_control"
+    },
+    {
+      "fact_id": "FCT-TOM-EBLIGHT-CHEM-03",
+      "category": "disease_management",
+      "subject": "tomato",
+      "predicate": "chemical_precaution_recommended",
+      "value": "For moderate-to-severe established Early Blight infections, CIBRC approves Mancozeb 75% WP @ 2.0 g/L or Chlorothalonil 75% WP @ 2.0 g/L as contact protectants. Observe minimum 7-day pre-harvest interval (PHI) and rotate modes of action to prevent resistance.",
+      "scientific_name": "Alternaria solani",
+      "conditions": {
+        "severity_stage": "Moderate_to_Severe",
+        "leaf_damage_pct_gt": 10.0
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": []
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-CIBRC-001",
+          "source_id": "SRC-CIBRC-FUNGICIDES-2024",
+          "source_title": "Major Uses of Pesticides Registered Under the Insecticides Act, 1968",
+          "organization": "Central Insecticides Board & Registration Committee (CIB&RC)",
+          "page": 88,
+          "section": "Fungicides Approved for Tomato",
+          "quote_or_excerpt": "Mancozeb 75% WP is officially labeled for Alternaria solani on Tomato at 1.5-2.0 kg/ha (2.0 g/L dilution) with a statutory waiting period of 7 days.",
+          "confidence_score": 0.99,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "chemical_restricted"
+    },
+    {
+      "fact_id": "FCT-TOM-LBLIGHT-ALERT-01",
+      "category": "weather_risk",
+      "subject": "tomato",
+      "predicate": "susceptible_to_weather_risk",
+      "value": "Late blight (Phytophthora infestans) epidemics trigger rapidly when ambient temperatures remain between 18-22°C paired with continuous relative humidity > 90% or heavy overcast rainfall. Fields can face catastrophic defoliation within 48-72 hours.",
+      "scientific_name": "Phytophthora infestans",
+      "conditions": {
+        "temp_celsius_range": [
+          15,
+          23
+        ],
+        "humidity_pct_gt": 88,
+        "rain_recent": true
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": []
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-IMD-001",
+          "source_id": "SRC-IMD-AGROMET-2024",
+          "source_title": "Standard Operating Procedure for Weather-Based Crop Risk Warnings",
+          "organization": "India Meteorological Department (IMD)",
+          "page": 19,
+          "section": "Oomycete Pathogen Meteorological Triggers",
+          "quote_or_excerpt": "Foliar leaf wetness > 10 hours at temperatures 12-22°C represents critical high-risk threshold for late blight outbreak in Solanaceae.",
+          "confidence_score": 0.97,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "advisory_only"
+    },
+    {
+      "fact_id": "FCT-TOM-BSPOT-CULT-01",
+      "category": "disease_management",
+      "subject": "tomato",
+      "predicate": "managed_by_cultural_practice",
+      "value": "Eliminate overhead sprinkler irrigation completely; switch to drip or ground furrow watering. Bacterial spot spreads primarily through water droplets splashing between foliage.",
+      "scientific_name": "Xanthomonas campestris pv. vesicatoria",
+      "conditions": {
+        "symptom": "small water-soaked dark lesions"
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": []
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-TOM-003",
+          "source_id": "SRC-ICAR-TOMATO-2024",
+          "source_title": "Package of Practices for Commercial Tomato Cultivation in India",
+          "organization": "ICAR - Indian Institute of Horticultural Research (IIHR)",
+          "page": 28,
+          "section": "Bacterial Foliar Disease Protocols",
+          "quote_or_excerpt": "Avoiding overhead wetting prevents bacterial dispersal and reduces spot incidence by over 60%.",
+          "confidence_score": 0.96,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "low_risk_cultural"
+    },
+    {
+      "fact_id": "FCT-TOM-TYLCV-VECT-01",
+      "category": "pest_management",
+      "subject": "tomato",
+      "predicate": "managed_by_cultural_practice",
+      "value": "Erect bright yellow sticky traps (15-20 traps/acre) across field borders to intercept whiteflies (Bemisia tabaci). Immediately rogue out and burn stunted plants showing upward-cupped leaves within the first 30 days after transplanting.",
+      "scientific_name": "Begomovirus (TYLCV)",
+      "conditions": {
+        "symptom": "stunting, upward leaf cupping, marginal yellowing"
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": []
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-TOM-004",
+          "source_id": "SRC-ICAR-TOMATO-2024",
+          "source_title": "Package of Practices for Commercial Tomato Cultivation in India",
+          "organization": "ICAR - Indian Institute of Horticultural Research (IIHR)",
+          "page": 31,
+          "section": "Vector Management in Tomato Viruses",
+          "quote_or_excerpt": "Yellow sticky traps monitor whitefly build-up; early rogueing of viral foci prevents field-wide spread.",
+          "confidence_score": 0.98,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "low_risk_cultural"
+    },
+    {
+      "fact_id": "FCT-WHEAT-IRRIG-CRI-01",
+      "category": "irrigation",
+      "subject": "wheat",
+      "predicate": "has_critical_irrigation_stage",
+      "value": "Crown Root Initiation (CRI) stage, occurring 20 to 25 days after sowing, is the single most critical irrigation window for wheat in India. Moisture stress at CRI causes irreversible tillering reduction and up to 30-40% yield penalty.",
+      "conditions": {
+        "crop_stage": "crown_root_initiation",
+        "days_after_sowing": [
+          20,
+          25
+        ]
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": [
+          "Punjab",
+          "Haryana",
+          "Uttar Pradesh",
+          "Bihar",
+          "Rajasthan",
+          "Madhya Pradesh"
+        ]
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-WHEAT-001",
+          "source_id": "SRC-ICAR-WHEAT-2023",
+          "source_title": "Wheat Production Technology & Rust Resistance Management for Indo-Gangetic Plains",
+          "organization": "ICAR - Indian Agricultural Research Institute (IARI)",
+          "page": 14,
+          "section": "Water Management & Critical Growth Stages",
+          "quote_or_excerpt": "If only one irrigation is available, it must be applied at Crown Root Initiation (21-25 DAS) to secure root anchoring and tiller primordia.",
+          "confidence_score": 0.99,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "low_risk_cultural"
+    },
+    {
+      "fact_id": "FCT-WHEAT-YRUST-RISK-01",
+      "category": "weather_risk",
+      "subject": "wheat",
+      "predicate": "susceptible_to_weather_risk",
+      "value": "Yellow / Stripe Rust (Puccinia striiformis) flourishes in cool, humid sub-mountainous and plains tracts when day temperatures range between 10-15°C with heavy morning fog or intermittent showers during December to February.",
+      "scientific_name": "Puccinia striiformis",
+      "conditions": {
+        "season": "Rabi",
+        "temp_celsius_range": [
+          10,
+          16
+        ],
+        "humidity_pct_gt": 80
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": [
+          "Punjab",
+          "Haryana",
+          "Himachal Pradesh",
+          "Jammu and Kashmir",
+          "Uttar Pradesh"
+        ]
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-WHEAT-002",
+          "source_id": "SRC-ICAR-WHEAT-2023",
+          "source_title": "Wheat Production Technology & Rust Resistance Management for Indo-Gangetic Plains",
+          "organization": "ICAR - Indian Agricultural Research Institute (IARI)",
+          "page": 27,
+          "section": "Stripe Rust Epidemiology and Varietal Safeguards",
+          "quote_or_excerpt": "Continuous dew formation with daytime temperatures below 15°C accelerates yellow rust sporulation on susceptible varieties.",
+          "confidence_score": 0.98,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "advisory_only"
+    },
+    {
+      "fact_id": "FCT-RICE-BLAST-NUTRI-01",
+      "category": "disease_management",
+      "subject": "rice",
+      "predicate": "managed_by_cultural_practice",
+      "value": "Avoid excessive nitrogen top-dressing. High nitrogen fertilizer application creates soft, succulent foliar tissues highly prone to Magnaporthe blast infection. Split nitrogen into 3-4 balanced doses paired with adequate potash.",
+      "scientific_name": "Magnaporthe oryzae",
+      "conditions": {
+        "nutrient": "nitrogen",
+        "soil_stage": "tillering_to_panicle"
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": []
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-TNAU-001",
+          "source_id": "SRC-TNAU-AGRITECH-2023",
+          "source_title": "Expert System for Crop Protection: Horticultural & Field Crop IPM Protocols",
+          "organization": "Tamil Nadu Agricultural University (TNAU)",
+          "page": 44,
+          "section": "Nutrient-Disease Dynamics in Paddy",
+          "quote_or_excerpt": "Overuse of urea fertilizer without potash balance directly triggers virulent blast epidemics under cloudy Kharif conditions.",
+          "confidence_score": 0.97,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "low_risk_cultural"
+    },
+    {
+      "fact_id": "FCT-GEN-DRAIN-RAIN-01",
+      "category": "weather_risk",
+      "subject": "general",
+      "predicate": "managed_by_cultural_practice",
+      "value": "After heavy unseasonal rains or severe waterlogging exceeding 24 hours, clear field drainage channels immediately to prevent root asphyxiation and soil-borne Phytophthora/Fusarium root rot. Do not apply heavy chemical sprays while soil is inundated.",
+      "conditions": {
+        "weather_trigger": "heavy_rainfall",
+        "rainfall_mm_gt": 25.0
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": []
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-IMD-002",
+          "source_id": "SRC-IMD-AGROMET-2024",
+          "source_title": "Standard Operating Procedure for Weather-Based Crop Risk Warnings",
+          "organization": "India Meteorological Department (IMD)",
+          "page": 32,
+          "section": "Post-Rain Field Remediation Protocols",
+          "quote_or_excerpt": "Excess surface stagnation must be drained within 12-24 hours to prevent anoxic root damage and secondary collar rot complexes.",
+          "confidence_score": 0.96,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "low_risk_cultural"
+    }
+  ]
+}

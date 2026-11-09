@@ -143,6 +143,32 @@ def render_home_view() -> None:
                 unsafe_allow_html=True,
             )
 
+        # Phase 3: Evidence Grounding & Provenance
+        rec_data = res.get("recommendation")
+        if rec_data:
+            if rec_data.get("expert_referral_required"):
+                st.warning(
+                    f"⚠️ **KVK Expert Consultation Advised:** {rec_data.get('expert_referral_details', 'High foliar damage detected. Immediate on-site inspection recommended.')}"
+                )
+
+            precautions = rec_data.get("precautions", [])
+            if precautions:
+                st.markdown("#### ⚠️ Key Safety Precautions")
+                for prec in precautions:
+                    st.markdown(f"- 🛑 {prec}")
+
+            ev_list = rec_data.get("supporting_evidence", []) or res.get("supporting_evidence", [])
+            if ev_list:
+                with st.expander(f"📚 Grounded Evidence Provenance ({len(ev_list)} Authoritative Citations)", expanded=False):
+                    conf = rec_data.get("confidence_assessment", {})
+                    if conf:
+                        st.caption(f"**Evidence Confidence:** {conf.get('level', 'Moderate')} — *{conf.get('rationale', '')}*")
+                    for ev in ev_list:
+                        org = ev.get("organization", "Agricultural Authority")
+                        src_id = ev.get("source_id", "SOURCE")
+                        text = ev.get("excerpt_text", "")
+                        st.markdown(f"- **[{src_id}] {org}**: *\"{text}\"*")
+
         # Environmental & Market Context
         st.markdown("### 🌦️ Agro-Climatic & Market Conditions")
         col_m1, col_m2 = st.columns(2)

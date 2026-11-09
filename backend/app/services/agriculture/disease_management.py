@@ -193,3 +193,4 @@ UNKNOWN_DISEASE_IPM = ManagementGuidelines(
 def get_management_guidelines(class_id: str) -> ManagementGuidelines:
     """Retrieve IPM guidelines for given disease class identifier."""
     return TOMATO_DISEASE_IPM.get(class_id, UNKNOWN_DISEASE_IPM)
+

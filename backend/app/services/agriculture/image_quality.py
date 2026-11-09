@@ -85,3 +85,4 @@ class ImageQualityAssessor:
             warnings=warnings,
             farmer_advice=farmer_advice,
         )
+

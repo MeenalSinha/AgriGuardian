@@ -84,9 +84,21 @@ def test_quiet_hours_blocks_non_emergency_external_channels(policy_fixture):
 
 
 def test_emergency_weather_overrides_quiet_hours(policy_fixture):
-    """Verify emergency priority alert bypasses quiet hours and activates SMS."""
+    """Verify emergency priority alert bypasses quiet hours and activates SMS when consented."""
     engine = policy_fixture["engine"]
+    repo = policy_fixture["repo"]
     night_time = datetime(2026, 11, 9, 2, 15)  # 2:15 AM
+
+    # Grant explicit SMS consent
+    repo.set_channel_consent(
+        NotificationChannelConsent(
+            consent_id="cns_test_sms",
+            farmer_id="fmr_policy_01",
+            channel=NotificationChannel.SMS,
+            is_granted=True,
+            granted_at=datetime.now().isoformat(),
+        )
+    )
 
     event = NotificationEvent(
         event_id="evt_emergency_night",
@@ -101,8 +113,42 @@ def test_emergency_weather_overrides_quiet_hours(policy_fixture):
     assert eval_result.allowed is True
     assert eval_result.is_quiet_hours is True
     assert eval_result.bypass_quiet_hours is True
-    # Emergency forces external reachability
+    # Emergency forces external reachability for consented channels
     assert NotificationChannel.SMS in eval_result.target_channels
+
+
+def test_revoked_consent_blocks_external_channel_even_in_emergency(policy_fixture):
+    """Verify that if farmer explicitly revoked SMS consent, emergency alerts do not violate consent."""
+    engine = policy_fixture["engine"]
+    repo = policy_fixture["repo"]
+    night_time = datetime(2026, 11, 9, 2, 15)
+
+    # Explicitly revoke SMS consent
+    repo.set_channel_consent(
+        NotificationChannelConsent(
+            consent_id="cns_revoked_sms",
+            farmer_id="fmr_policy_01",
+            channel=NotificationChannel.SMS,
+            is_granted=False,
+            granted_at=datetime.now().isoformat(),
+            revoked_at=datetime.now().isoformat(),
+        )
+    )
+
+    event = NotificationEvent(
+        event_id="evt_emergency_night_revoked",
+        event_type="weather_alert_extreme",
+        category=NotificationCategory.WEATHER_ALERT,
+        priority=NotificationPriority.EMERGENCY,
+        farmer_id="fmr_policy_01",
+        payload={"hazard_type": "Flash Flood"},
+    )
+
+    eval_result = engine.evaluate(event, now=night_time)
+    assert eval_result.allowed is True
+    # In-app is always delivered, but revoked SMS is blocked!
+    assert NotificationChannel.SMS not in eval_result.target_channels
+    assert NotificationChannel.IN_APP in eval_result.target_channels
 
 
 def test_farmer_category_opt_out_suppresses_event(policy_fixture):

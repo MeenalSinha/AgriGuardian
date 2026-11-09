@@ -77,34 +77,37 @@ class NotificationPolicyEngine:
             else:
                 logger.info(f"Quiet hours active for farmer {event.farmer_id} ({pref.quiet_hours_start}-{pref.quiet_hours_end}). Restricting to in-app or deferring.")
 
-        # 4. Channel Selection & Consent Cross-Check
+        # 4. Channel Selection & Explicit DPDP Consent Cross-Check
         active_consents = {c.channel: c.is_granted for c in self.repo.get_channel_consents(event.farmer_id)}
         target_channels: List[NotificationChannel] = []
 
         for ch in pref.channels_enabled:
-            # IN_APP is always permitted
+            # IN_APP is always permitted and guaranteed
             if ch == NotificationChannel.IN_APP:
                 target_channels.append(ch)
                 continue
 
-            # If quiet hours are active and not bypassed, omit external noisy channels
-            if is_quiet and not bypass_quiet:
+            # External channels strictly require affirmative, explicit opt-in consent
+            if not active_consents.get(ch, False):
+                logger.info(
+                    f"External channel '{ch.value}' omitted for farmer {event.farmer_id}: missing or revoked explicit consent."
+                )
                 continue
 
-            # External channels require explicit consent or verified opt-in
-            # If consent record exists and is_granted is False, omit
-            if ch in active_consents and not active_consents[ch]:
+            # If quiet hours are active and not bypassed by emergency, omit external noisy channels
+            if is_quiet and not bypass_quiet:
+                logger.info(f"External channel '{ch.value}' suppressed during quiet hours for farmer {event.farmer_id}.")
                 continue
 
             target_channels.append(ch)
 
-        # If priority is EMERGENCY and voice is not in channels, add VOICE_CALL or SMS if available
-        if event.priority == NotificationPriority.EMERGENCY:
-            if NotificationChannel.SMS not in target_channels:
-                target_channels.append(NotificationChannel.SMS)
+        # Emergency Priority: If farmer enabled emergency override, ensure consenting urgent channels are attached
+        if event.priority == NotificationPriority.EMERGENCY and pref.emergency_override:
+            for em_ch in (NotificationChannel.SMS, NotificationChannel.VOICE_CALL):
+                if em_ch not in target_channels and active_consents.get(em_ch, False):
+                    target_channels.append(em_ch)
 
         if not target_channels:
-            # Always ensure at least IN_APP if enabled in preferences
             target_channels = [NotificationChannel.IN_APP]
 
         return PolicyEvaluationResult(
@@ -154,3 +157,4 @@ class NotificationPolicyEngine:
                 return True, defer_dt
 
         return False, None
+

@@ -4,7 +4,11 @@ import os
 import time
 from typing import Any, Dict, Optional
 
-from backend.app.integrations.notifications.base_provider import BaseNotificationProvider, ProviderDeliveryResult
+from backend.app.integrations.notifications.base_provider import (
+    BaseNotificationProvider,
+    DeliveryState,
+    ProviderDeliveryResult,
+)
 from backend.app.schemas.notification import NotificationChannel
 
 
@@ -41,6 +45,7 @@ class EmailNotificationProvider(BaseNotificationProvider):
                 latency_ms=round(latency, 2),
                 error_message="Missing or invalid recipient email address.",
                 response_code="400_INVALID_EMAIL",
+                delivery_state=DeliveryState.FAILED,
             )
 
         if not self.is_configured():
@@ -53,6 +58,7 @@ class EmailNotificationProvider(BaseNotificationProvider):
                 error_message="Email provider not configured (SMTP_HOST / SENDGRID_API_KEY unset).",
                 response_code="503_EMAIL_UNCONFIGURED",
                 not_configured=True,
+                delivery_state=DeliveryState.NOT_CONFIGURED,
             )
 
         latency = (time.perf_counter() - start) * 1000.0
@@ -63,4 +69,6 @@ class EmailNotificationProvider(BaseNotificationProvider):
             latency_ms=round(latency, 2),
             response_code="200_EMAIL_SENT",
             details=f"Email notification dispatched to {recipient_email}",
+            delivery_state=DeliveryState.SENT,
         )
+

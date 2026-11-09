@@ -89,10 +89,10 @@ class NotificationEventBus:
             status=NotificationStatus.UNREAD,
             created_at=now_str,
         )
-        self.repo.create_notification(notif_record)
 
-        # 5. Route to external channels via Transactional Outbox
+        # 5. Route to external channels via Transactional Outbox (committed atomically)
         outbox_ids = []
+        outbox_items = []
         for channel in policy_result.target_channels:
             if channel == NotificationChannel.IN_APP:
                 continue
@@ -110,11 +110,14 @@ class NotificationEventBus:
                 created_at=now_str,
                 updated_at=now_str,
             )
-            self.repo.enqueue_outbox_message(outbox_item)
+            outbox_items.append(outbox_item)
             outbox_ids.append(outbox_id)
 
+        # Atomic commit of notification + outbox items
+        self.repo.create_notification_with_outbox(notif_record, outbox_items)
+
         logger.info(
-            f"Event {event.event_id} processed into notification {notif_id} with {len(outbox_ids)} outbox jobs (channels: {[c.value for c in policy_result.target_channels]})"
+            f"Event {event.event_id} transactionally processed into notification {notif_id} with {len(outbox_ids)} outbox jobs (channels: {[c.value for c in policy_result.target_channels]})"
         )
 
         return {
@@ -309,3 +312,4 @@ class NotificationEventBus:
             dedup_key=dedup_key,
         )
         return self.publish_event(event)
+

@@ -51,6 +51,7 @@ class NotificationOutboxService:
             channel = NotificationChannel(channel_str)
             retry_count = item["retry_count"]
             max_retries = item["max_retries"]
+            lease_token = item.get("lease_token")
             phone = item.get("phone_number")
             pref_lang = item.get("preferred_language", "hi-IN")
 
@@ -64,15 +65,26 @@ class NotificationOutboxService:
 
             provider = self.registry.get_provider(channel)
             attempt_start = time.perf_counter()
-            result = provider.send(
-                recipient_id=item["farmer_id"],
-                recipient_phone=phone,
-                title=title,
-                body=body,
-                language=pref_lang,
-                action_url=item.get("action_url"),
-                metadata=item.get("metadata", {}),
-            )
+            try:
+                result = provider.send(
+                    recipient_id=item["farmer_id"],
+                    recipient_phone=phone,
+                    title=title,
+                    body=body,
+                    language=pref_lang,
+                    action_url=item.get("action_url"),
+                    metadata=item.get("metadata", {}),
+                )
+            except Exception as exc:
+                logger.error(f"Provider {provider.provider_name} raised unhandled exception for outbox {outbox_id}: {exc}")
+                result = ProviderDeliveryResult(
+                    success=False,
+                    channel=channel,
+                    provider_name=provider.provider_name,
+                    error_message=f"Unhandled provider error: {str(exc)}",
+                    response_code="500_UNHANDLED_EXCEPTION",
+                )
+
             attempt_latency = (time.perf_counter() - attempt_start) * 1000.0
 
             # Record attempt log
@@ -92,15 +104,23 @@ class NotificationOutboxService:
             )
 
             if result.success:
-                self.repo.update_outbox_status(outbox_id=outbox_id, status=OutboxStatus.DELIVERED.value)
-                delivered += 1
-                logger.info(f"Outbox {outbox_id} successfully delivered via {channel.value}.")
+                updated = self.repo.update_outbox_status(
+                    outbox_id=outbox_id,
+                    status=OutboxStatus.DELIVERED.value,
+                    lease_token=lease_token,
+                )
+                if updated:
+                    delivered += 1
+                    logger.info(f"Outbox {outbox_id} successfully delivered via {channel.value}.")
+                else:
+                    logger.warning(f"Outbox {outbox_id} lease expired before success could be recorded.")
             else:
                 new_retry = retry_count + 1
                 if new_retry >= max_retries:
                     self.repo.update_outbox_status(
                         outbox_id=outbox_id,
                         status=OutboxStatus.DEAD_LETTER.value,
+                        lease_token=lease_token,
                         error_message=result.error_message,
                         increment_retry=True,
                     )
@@ -109,12 +129,13 @@ class NotificationOutboxService:
                         f"Outbox {outbox_id} moved to DEAD_LETTER after {new_retry} attempts. Error: {result.error_message}"
                     )
                 else:
-                    # Exponential backoff: 60s * 2^retry
-                    backoff_seconds = 60 * (2 ** retry_count)
+                    # Exponential backoff: 30s * 2^retry
+                    backoff_seconds = 30 * (2 ** retry_count)
                     next_retry = datetime.now() + timedelta(seconds=backoff_seconds)
                     self.repo.update_outbox_status(
                         outbox_id=outbox_id,
                         status=OutboxStatus.FAILED.value,
+                        lease_token=lease_token,
                         next_retry_at=next_retry.isoformat(),
                         error_message=result.error_message,
                         increment_retry=True,
@@ -149,3 +170,52 @@ class NotificationOutboxService:
     def retry_outbox_item(self, outbox_id: str) -> bool:
         """Manually trigger retry for a failed or dead-letter message."""
         return self.repo.retry_outbox_item(outbox_id)
+
+
+if __name__ == "__main__":
+    import argparse
+    import signal
+    import sys
+
+    parser = argparse.ArgumentParser(description="AgriGuardian Notification Outbox Worker")
+    parser.add_argument("--daemon", action="store_true", help="Run continuously as background daemon")
+    parser.add_argument("--interval", type=int, default=15, help="Polling interval in seconds (default: 15)")
+    parser.add_argument("--batch-size", type=int, default=20, help="Batch size per lease cycle (default: 20)")
+    parser.add_argument("--once", action="store_true", help="Process one batch and exit")
+    args = parser.parse_args()
+
+    service = NotificationOutboxService()
+    running = True
+
+    def signal_handler(sig, frame):
+        global running
+        logger.info("Graceful shutdown signal received. Stopping outbox worker loop...")
+        running = False
+
+    signal.signal(signal.SIGINT, signal_handler)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, signal_handler)
+
+    logger.info(f"Notification Outbox Worker started (daemon={args.daemon}, interval={args.interval}s, batch_size={args.batch_size})")
+
+    if args.once or not args.daemon:
+        res = service.process_outbox_batch(batch_size=args.batch_size)
+        print(f"Processed batch: {res.processed_count} items ({res.delivered_count} delivered, {res.failed_count} retrying, {res.dead_letter_count} dead-lettered) in {res.duration_ms}ms")
+        sys.exit(0)
+
+    while running:
+        try:
+            res = service.process_outbox_batch(batch_size=args.batch_size)
+            if res.processed_count > 0:
+                logger.info(f"Processed batch: {res.processed_count} items ({res.delivered_count} delivered, {res.failed_count} retrying, {res.dead_letter_count} dead-lettered) in {res.duration_ms}ms")
+        except Exception as e:
+            logger.error(f"Error during outbox worker processing: {e}")
+
+        # Sleep for configured interval
+        for _ in range(args.interval):
+            if not running:
+                break
+            time.sleep(1)
+
+    logger.info("Outbox worker loop terminated cleanly.")
+

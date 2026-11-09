@@ -414,6 +414,24 @@ class ExpertReviewService:
                     "total_reviewed_cases": expert.total_reviewed_cases + 1,
                 },
             )
+
+            # Proactive notification to farmer
+            try:
+                from backend.app.services.notifications.notification_service import NotificationService
+                notif_svc = NotificationService.get_instance()
+                if notif_svc and notif_svc.event_bus and case and getattr(case, "farmer_id", None):
+                    notif_svc.event_bus.emit_expert_review_event(
+                        farmer_id=case.farmer_id,
+                        case_id=case_id,
+                        crop_name=case.crop or "Crop",
+                        expert_name=expert.full_name if hasattr(expert, "full_name") else "Agronomist",
+                        institution=expert.institution if hasattr(expert, "institution") else "ICAR / KVK",
+                        is_secondary_approved=False,
+                        phi_days=getattr(submission, "pre_harvest_interval_days", None),
+                    )
+            except Exception as e:
+                logger.warning(f"Could not emit expert review event: {e}")
+
             return {
                 "review_id": submission.review_id,
                 "status": final_status,
@@ -454,6 +472,25 @@ class ExpertReviewService:
 
         now_str = datetime.now().isoformat()
         case_id = rev["case_id"]
+
+        # Proactive notification to farmer for secondary review completion
+        try:
+            from backend.app.services.notifications.notification_service import NotificationService
+            notif_svc = NotificationService.get_instance()
+            case = self.repo.get_advisory_case(case_id)
+            if notif_svc and notif_svc.event_bus and case and getattr(case, "farmer_id", None):
+                sec_expert = self.repo.get_expert_profile(secondary_expert_id)
+                notif_svc.event_bus.emit_expert_review_event(
+                    farmer_id=case.farmer_id,
+                    case_id=case_id,
+                    crop_name=case.crop or "Crop",
+                    expert_name=sec_expert.full_name if (sec_expert and hasattr(sec_expert, "full_name")) else "Senior Agronomist",
+                    institution=sec_expert.institution if (sec_expert and hasattr(sec_expert, "institution")) else "ICAR / KVK",
+                    is_secondary_approved=submission.approved,
+                    phi_days=getattr(submission, "pre_harvest_interval_days", None),
+                )
+        except Exception as e:
+            logger.warning(f"Could not emit secondary review notification event: {e}")
 
         if submission.approved:
             final_status = CaseReviewStatus.APPROVED.value

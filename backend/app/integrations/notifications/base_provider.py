@@ -2,9 +2,21 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Dict, Optional
 
 from backend.app.schemas.notification import NotificationChannel
+
+
+class DeliveryState(str, Enum):
+    """Truthful provider dispatch and delivery status."""
+    NOT_CONFIGURED = "NOT_CONFIGURED"
+    REQUEST_ACCEPTED = "REQUEST_ACCEPTED"
+    SENT = "SENT"
+    DELIVERED = "DELIVERED"
+    READ = "READ"
+    FAILED = "FAILED"
+    UNKNOWN = "UNKNOWN"
 
 
 @dataclass
@@ -18,6 +30,7 @@ class ProviderDeliveryResult:
     response_code: Optional[str] = None
     details: Optional[str] = None
     not_configured: bool = False
+    delivery_state: DeliveryState = DeliveryState.UNKNOWN
 
 
 class BaseNotificationProvider(ABC):
@@ -45,3 +58,4 @@ class BaseNotificationProvider(ABC):
     ) -> ProviderDeliveryResult:
         """Deliver the message to recipient."""
         pass
+

@@ -79,6 +79,27 @@ class AlertManager:
                 logger.info(f"Registered new weather alert: {alert.alert_id} [{alert.hazard_type.value} - {alert.risk_level.value}]")
                 registered.append(alert)
 
+            # Proactively emit notifications for new or updated alert
+            try:
+                from backend.app.services.notifications.notification_service import NotificationService
+                notif_svc = NotificationService.get_instance()
+                if notif_svc and notif_svc.event_bus:
+                    target_district = getattr(alert, "location_district", None) or getattr(alert, "district", None)
+                    if target_district:
+                        farmer_ids = notif_svc.repo.get_farmer_ids_by_district(target_district)
+                        hazard_name = alert.hazard_type.value if hasattr(alert.hazard_type, "value") else str(alert.hazard_type)
+                        risk_name = alert.risk_level.value if hasattr(alert.risk_level, "value") else str(alert.risk_level)
+                        for f_id in farmer_ids:
+                            notif_svc.event_bus.emit_weather_alert_event(
+                                farmer_id=f_id,
+                                hazard_type=hazard_name,
+                                severity=risk_name,
+                                summary=alert.summary,
+                                village_or_district=target_district,
+                            )
+            except Exception as e:
+                logger.warning(f"Could not dispatch proactive weather alert notification: {e}")
+
         self._save_alerts()
         return registered
 

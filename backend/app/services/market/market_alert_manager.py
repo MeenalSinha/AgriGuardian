@@ -153,6 +153,27 @@ class MarketAlertManager:
         if new_alerts:
             self._save_alerts()
 
+            # Proactively emit market alerts to farmers growing this crop
+            try:
+                from backend.app.services.notifications.notification_service import NotificationService
+                notif_svc = NotificationService.get_instance()
+                if notif_svc and notif_svc.event_bus:
+                    farmer_ids = notif_svc.repo.get_farmer_ids_by_crop(latest_obs.commodity_name)
+                    for alert in new_alerts:
+                        is_surge = alert.alert_type == "PRICE_SURGE"
+                        for fmr_id in farmer_ids:
+                            notif_svc.event_bus.emit_market_price_event(
+                                farmer_id=fmr_id,
+                                crop_name=latest_obs.commodity_name,
+                                mandi_name=latest_obs.market_name,
+                                current_price=float(alert.current_price or 0.0),
+                                previous_price=float(alert.benchmark_price or alert.current_price or 0.0),
+                                price_change_pct=float(alert.change_pct or 0.0),
+                                is_surge=is_surge,
+                            )
+            except Exception as e:
+                pass
+
         return new_alerts
 
     def get_active_alerts(

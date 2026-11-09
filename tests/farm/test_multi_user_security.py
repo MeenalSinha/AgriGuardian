@@ -6,6 +6,7 @@ farms, plots, crop cycles, soil records, irrigation profiles, and calendar activ
 
 import os
 import tempfile
+from datetime import datetime, timedelta
 import pytest
 
 from backend.app.repositories.farm_db import FarmDatabaseRepository
@@ -280,7 +281,7 @@ def test_farm_activities_multi_user_isolation(multi_tenant_fixture):
     act_a = cal_srv.create_activity(farm_a.farm_id, fa.farmer_id, FarmActivityCreate(
         activity_type=ActivityType.IRRIGATION,
         activity_title="Alice Secret Irrigation",
-        scheduled_date="2026-11-10",
+        scheduled_date=(datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"),
     ))
 
     # 1. Farmer B querying activities on Farm A receives empty list

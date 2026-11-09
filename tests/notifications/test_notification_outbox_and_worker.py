@@ -9,7 +9,7 @@ import pytest
 from backend.app.integrations.notifications.base_provider import BaseNotificationProvider, ProviderDeliveryResult
 from backend.app.integrations.notifications.provider_registry import NotificationProviderRegistry
 from backend.app.repositories.farm_db import FarmDatabaseRepository
-from backend.app.schemas.farm import FarmerProfile, LiteracyPreference, UserRecord
+from backend.app.schemas.farm import FarmerProfile, LiteracyPreference, UserRecord, UserRole
 from backend.app.schemas.notification import (
     NotificationCategory,
     NotificationChannel,
@@ -48,15 +48,14 @@ def outbox_fixture():
     os.close(fd)
     repo = FarmDatabaseRepository(db_path=path)
 
-    now_str = datetime.now().isoformat()
-    # Seed user, farmer and notification
+    # Seed user and farmer
     user = UserRecord(
         user_id="usr_outbox_01",
-        username="vikram_choudhary",
-        password_hash="fakehash",
-        salt="fakesalt",
-        role="farmer",
-        created_at=now_str,
+        username="farmer_outbox_01",
+        password_hash="hash",
+        salt="salt",
+        role=UserRole.FARMER,
+        created_at="2026-11-09T00:00:00",
     )
     repo.create_user(user)
 
@@ -65,10 +64,12 @@ def outbox_fixture():
         user_id="usr_outbox_01",
         full_name="Vikram Choudhary",
         phone_number="9876543210",
+        state="Rajasthan",
+        district="Jaipur",
         preferred_language="hi-IN",
-        literacy_preference=LiteracyPreference.VOICE_PRIMARY,
-        created_at=now_str,
-        updated_at=now_str,
+        literacy_preference=LiteracyPreference.TEXT,
+        created_at="2026-11-09T00:00:00",
+        updated_at="2026-11-09T00:00:00",
     )
     repo.create_farmer_profile(farmer)
 

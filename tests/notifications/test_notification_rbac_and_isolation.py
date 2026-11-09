@@ -8,8 +8,11 @@ from fastapi import HTTPException
 
 from backend.app.main import (
     complete_farm_reminder,
+    create_farm_reminder,
+    delete_farm_reminder,
     dismiss_notification,
     get_admin_outbox_queue,
+    get_farm_reminder,
     get_notification_channels_telemetry,
     get_notification_preferences,
     get_unread_notification_count,
@@ -23,6 +26,7 @@ from backend.app.main import (
     snooze_farm_reminder,
     system,
     update_channel_consent,
+    update_farm_reminder,
     update_notification_preferences,
 )
 from backend.app.repositories.farm_db import FarmDatabaseRepository
@@ -32,6 +36,7 @@ from backend.app.schemas.notification import (
     FarmReminderCreate,
     FarmReminderRecord,
     FarmReminderSnooze,
+    FarmReminderUpdate,
     NotificationCategory,
     NotificationChannel,
     NotificationPreference,
@@ -83,8 +88,10 @@ def rbac_isolation_fixture():
         user_id=u_farmer_a.user_id,
         full_name="Farmer Alpha",
         phone_number="9876543210",
+        state="Punjab",
+        district="Ludhiana",
         preferred_language="hi-IN",
-        literacy_preference=LiteracyPreference.VOICE_PRIMARY,
+        literacy_preference=LiteracyPreference.TEXT,
         created_at="2026-11-09T00:00:00",
         updated_at="2026-11-09T00:00:00",
     )
@@ -105,8 +112,10 @@ def rbac_isolation_fixture():
         user_id=u_farmer_b.user_id,
         full_name="Farmer Beta",
         phone_number="9876543211",
+        state="Haryana",
+        district="Karnal",
         preferred_language="en-IN",
-        literacy_preference=LiteracyPreference.VOICE_PRIMARY,
+        literacy_preference=LiteracyPreference.TEXT,
         created_at="2026-11-09T00:00:00",
         updated_at="2026-11-09T00:00:00",
     )
@@ -227,3 +236,61 @@ def test_admin_outbox_process_and_telemetry(rbac_isolation_fixture):
     assert len(telemetry) == 5  # IN_APP, SMS, WHATSAPP, EMAIL, VOICE_CALL
     in_app_status = next(t for t in telemetry if t.channel == NotificationChannel.IN_APP)
     assert in_app_status.configured is True
+
+
+def test_farm_ownership_authorization_on_reminder_creation(rbac_isolation_fixture):
+    """Verify farmer cannot attach a reminder to a farm owned by another farmer (403 Forbidden)."""
+    farmer_a = rbac_isolation_fixture["farmer_a"]
+    prof_b = rbac_isolation_fixture["prof_b"]
+    repo = rbac_isolation_fixture["repo"]
+
+    # Seed farm for Farmer B
+    from backend.app.schemas.farm import AreaUnit, Farm, OwnershipType
+    farm_b = Farm(
+        farm_id="frm_secret_b",
+        farmer_id=prof_b.farmer_id,
+        farm_name="Beta Protected Orchard",
+        state="Haryana",
+        district="Karnal",
+        total_area=4.0,
+        total_area_acres=4.0,
+        area_unit=AreaUnit.ACRE,
+        ownership_type=OwnershipType.OWNED,
+        created_at="2026-11-09T00:00:00",
+        updated_at="2026-11-09T00:00:00",
+    )
+    repo.create_farm(farm_b)
+
+    # Farmer A tries to create a reminder attached to Farmer B's farm
+    req = FarmReminderCreate(
+        farm_id=farm_b.farm_id,
+        activity_type=ReminderActivityType.PEST_SPRAY,
+        title_en="Spray Beta's Trees",
+        scheduled_date="2026-11-12",
+    )
+    with pytest.raises(HTTPException) as exc:
+        create_farm_reminder(req=req, user=farmer_a)
+    assert exc.value.status_code == 403
+    assert "Cannot attach reminder to a farm owned by another farmer" in exc.value.detail
+
+
+def test_reminder_crud_api_authorization_and_isolation(rbac_isolation_fixture):
+    """Verify single-reminder GET, PUT, and DELETE enforce strict tenant isolation."""
+    farmer_a = rbac_isolation_fixture["farmer_a"]
+    rem_b = rbac_isolation_fixture["rem_b"]
+
+    # Farmer A cannot GET Farmer B's reminder (403)
+    with pytest.raises(HTTPException) as exc_get:
+        get_farm_reminder(reminder_id=rem_b.reminder_id, user=farmer_a)
+    assert exc_get.value.status_code == 403
+
+    # Farmer A cannot UPDATE Farmer B's reminder (403)
+    upd = FarmReminderUpdate(title_en="Hacked Title")
+    with pytest.raises(HTTPException) as exc_put:
+        update_farm_reminder(reminder_id=rem_b.reminder_id, req=upd, user=farmer_a)
+    assert exc_put.value.status_code == 403
+
+    # Farmer A cannot DELETE Farmer B's reminder (403)
+    with pytest.raises(HTTPException) as exc_del:
+        delete_farm_reminder(reminder_id=rem_b.reminder_id, user=farmer_a)
+    assert exc_del.value.status_code == 403

@@ -1,12 +1,11 @@
 """Unit and integration tests for NotificationEventBus and TemplateService."""
 
-from datetime import datetime
 import os
 import tempfile
 import pytest
 
 from backend.app.repositories.farm_db import FarmDatabaseRepository
-from backend.app.schemas.farm import FarmerProfile, LiteracyPreference, UserRecord
+from backend.app.schemas.farm import FarmerProfile, LiteracyPreference, UserRecord, UserRole
 from backend.app.schemas.notification import (
     NotificationCategory,
     NotificationChannel,
@@ -24,15 +23,14 @@ def event_bus_fixture():
     os.close(fd)
     repo = FarmDatabaseRepository(db_path=path)
 
-    now_str = datetime.now().isoformat()
     # Seed user and farmer
     user = UserRecord(
         user_id="usr_test_01",
-        username="harpreet_singh",
-        password_hash="fakehash",
-        salt="fakesalt",
-        role="farmer",
-        created_at=now_str,
+        username="farmer_test_01",
+        password_hash="hash",
+        salt="salt",
+        role=UserRole.FARMER,
+        created_at="2026-11-09T00:00:00",
     )
     repo.create_user(user)
 
@@ -41,10 +39,13 @@ def event_bus_fixture():
         user_id="usr_test_01",
         full_name="Harpreet Singh",
         phone_number="9876543210",
+        state="Punjab",
+        district="Ludhiana",
+        village="Gill",
         preferred_language="hi-IN",
-        literacy_preference=LiteracyPreference.VOICE_PRIMARY,
-        created_at=now_str,
-        updated_at=now_str,
+        literacy_preference=LiteracyPreference.TEXT,
+        created_at="2026-11-09T00:00:00",
+        updated_at="2026-11-09T00:00:00",
     )
     repo.create_farmer_profile(farmer)
 

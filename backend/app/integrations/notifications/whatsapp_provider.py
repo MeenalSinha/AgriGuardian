@@ -4,7 +4,11 @@ import os
 import time
 from typing import Any, Dict, Optional
 
-from backend.app.integrations.notifications.base_provider import BaseNotificationProvider, ProviderDeliveryResult
+from backend.app.integrations.notifications.base_provider import (
+    BaseNotificationProvider,
+    DeliveryState,
+    ProviderDeliveryResult,
+)
 from backend.app.schemas.notification import NotificationChannel
 
 
@@ -40,6 +44,7 @@ class WhatsAppNotificationProvider(BaseNotificationProvider):
                 latency_ms=round(latency, 2),
                 error_message="Missing or invalid recipient phone number for WhatsApp message.",
                 response_code="400_INVALID_PHONE",
+                delivery_state=DeliveryState.FAILED,
             )
 
         if not self.is_configured():
@@ -52,6 +57,7 @@ class WhatsAppNotificationProvider(BaseNotificationProvider):
                 error_message="WhatsApp Business API not configured (WHATSAPP_API_KEY unset).",
                 response_code="503_WHATSAPP_UNCONFIGURED",
                 not_configured=True,
+                delivery_state=DeliveryState.NOT_CONFIGURED,
             )
 
         latency = (time.perf_counter() - start) * 1000.0
@@ -60,6 +66,8 @@ class WhatsAppNotificationProvider(BaseNotificationProvider):
             channel=self.channel,
             provider_name=self.provider_name,
             latency_ms=round(latency, 2),
-            response_code="200_WHATSAPP_QUEUED",
-            details=f"Template message sent via WhatsApp to {recipient_phone[-4:]}",
+            response_code="202_WHATSAPP_QUEUED",
+            details=f"Template message accepted by WhatsApp for {recipient_phone[-4:]}",
+            delivery_state=DeliveryState.REQUEST_ACCEPTED,
         )
+

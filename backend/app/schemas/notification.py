@@ -108,7 +108,7 @@ class NotificationPreference(BaseModel):
     """Per-farmer notification configuration and quiet hours settings."""
     farmer_id: str
     channels_enabled: List[NotificationChannel] = Field(
-        default_factory=lambda: [NotificationChannel.IN_APP, NotificationChannel.SMS]
+        default_factory=lambda: [NotificationChannel.IN_APP]
     )
     categories_enabled: List[NotificationCategory] = Field(
         default_factory=lambda: [
@@ -154,6 +154,7 @@ class NotificationOutboxItem(BaseModel):
     retry_count: int = 0
     max_retries: int = 3
     next_retry_at: Optional[str] = None
+    lease_token: Optional[str] = None
     lease_expires_at: Optional[str] = None
     last_error: Optional[str] = None
     created_at: str
@@ -226,6 +227,18 @@ class FarmReminderSnooze(BaseModel):
     """Payload to snooze a farm reminder."""
     snooze_days: int = Field(default=1, ge=1, le=14)
     custom_date: Optional[str] = None
+
+
+class FarmReminderUpdate(BaseModel):
+    """Payload to update an existing scheduled farm reminder."""
+    title_en: Optional[str] = None
+    title_hi: Optional[str] = None
+    description_en: Optional[str] = None
+    description_hi: Optional[str] = None
+    scheduled_date: Optional[str] = None
+    due_time: Optional[str] = None
+    activity_type: Optional[ReminderActivityType] = None
+    status: Optional[ReminderStatus] = None
 
 
 class OutboxProcessResult(BaseModel):

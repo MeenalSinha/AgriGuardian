@@ -547,12 +547,19 @@ class FarmDatabaseRepository:
                 retry_count INTEGER NOT NULL DEFAULT 0,
                 max_retries INTEGER NOT NULL DEFAULT 3,
                 next_retry_at TEXT,
+                lease_token TEXT,
                 lease_expires_at TEXT,
                 last_error TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
             """)
+
+            # Migration check: ensure lease_token column exists
+            cursor.execute("PRAGMA table_info(notification_outbox);")
+            outbox_cols = [r[1] for r in cursor.fetchall()]
+            if "lease_token" not in outbox_cols:
+                cursor.execute("ALTER TABLE notification_outbox ADD COLUMN lease_token TEXT;")
 
             # 24. Phase 9 Delivery Attempts Audit
             cursor.execute("""
@@ -933,13 +940,19 @@ class FarmDatabaseRepository:
             )
         return farm
 
-    def get_farm(self, farm_id: str, farmer_id: str) -> Optional[Farm]:
-        """Fetch farm enforcing tenant ownership."""
+    def get_farm(self, farm_id: str, farmer_id: Optional[str] = None) -> Optional[Farm]:
+        """Fetch farm, optionally enforcing tenant ownership."""
         with self.get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM farms WHERE farm_id = ? AND farmer_id = ?",
-                (farm_id, farmer_id),
-            ).fetchone()
+            if farmer_id:
+                row = conn.execute(
+                    "SELECT * FROM farms WHERE farm_id = ? AND farmer_id = ?",
+                    (farm_id, farmer_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM farms WHERE farm_id = ?",
+                    (farm_id,),
+                ).fetchone()
             if not row:
                 return None
             return self._row_to_farm(row)
@@ -2876,18 +2889,15 @@ class FarmDatabaseRepository:
     ) -> Optional[Dict[str, Any]]:
         """Find if a duplicate event was logged within the specified sliding window."""
         with self.get_connection() as conn:
-            query = """
+            cursor = conn.execute(
+                """
                 SELECT event_id, event_type, category, priority, farmer_id, created_at
                 FROM notification_events
-                WHERE dedup_key = ?
-            """
-            params = [dedup_key]
-            if exclude_event_id:
-                query += " AND event_id != ?"
-                params.append(exclude_event_id)
-            query += " ORDER BY created_at DESC LIMIT 1;"
-
-            cursor = conn.execute(query, tuple(params))
+                WHERE dedup_key = ? AND (? IS NULL OR event_id != ?)
+                ORDER BY created_at DESC LIMIT 1;
+                """,
+                (dedup_key, exclude_event_id, exclude_event_id),
+            )
             row = cursor.fetchone()
             if not row:
                 return None
@@ -3156,8 +3166,8 @@ class FarmDatabaseRepository:
                 INSERT INTO notification_outbox (
                     outbox_id, notification_id, farmer_id, channel,
                     status, retry_count, max_retries, next_retry_at,
-                    lease_expires_at, last_error, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    lease_token, lease_expires_at, last_error, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     item.outbox_id,
@@ -3168,6 +3178,7 @@ class FarmDatabaseRepository:
                     item.retry_count,
                     item.max_retries,
                     item.next_retry_at,
+                    item.lease_token,
                     item.lease_expires_at,
                     item.last_error,
                     item.created_at,
@@ -3176,18 +3187,86 @@ class FarmDatabaseRepository:
             )
         return item.outbox_id
 
+    def create_notification_with_outbox(
+        self,
+        n: NotificationRecord,
+        outbox_items: List[NotificationOutboxItem],
+    ) -> str:
+        """Transactionally persist a notification and all associated outbox jobs inside a single database transaction."""
+        with self.get_connection() as conn:
+            # 1. Insert notification record
+            conn.execute(
+                """
+                INSERT INTO notifications (
+                    notification_id, farmer_id, category, priority,
+                    title_en, title_hi, body_en, body_hi, action_url,
+                    metadata_json, status, read_at, dismissed_at,
+                    created_at, expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    n.notification_id,
+                    n.farmer_id,
+                    n.category.value,
+                    n.priority.value,
+                    n.title_en,
+                    n.title_hi,
+                    n.body_en,
+                    n.body_hi,
+                    n.action_url,
+                    json.dumps(n.metadata or {}),
+                    n.status.value,
+                    n.read_at,
+                    n.dismissed_at,
+                    n.created_at,
+                    n.expires_at,
+                ),
+            )
+
+            # 2. Insert outbox dispatch jobs atomically
+            for item in outbox_items:
+                conn.execute(
+                    """
+                    INSERT INTO notification_outbox (
+                        outbox_id, notification_id, farmer_id, channel,
+                        status, retry_count, max_retries, next_retry_at,
+                        lease_token, lease_expires_at, last_error, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    (
+                        item.outbox_id,
+                        item.notification_id,
+                        item.farmer_id,
+                        item.channel.value,
+                        item.status.value,
+                        item.retry_count,
+                        item.max_retries,
+                        item.next_retry_at,
+                        item.lease_token,
+                        item.lease_expires_at,
+                        item.last_error,
+                        item.created_at,
+                        item.updated_at,
+                    ),
+                )
+        return n.notification_id
+
     def claim_pending_outbox_items(
         self,
         batch_size: int = 20,
         lease_duration_seconds: int = 60,
     ) -> List[Dict[str, Any]]:
-        """Atomically claim pending or expired outbox items for worker processing."""
+        """Atomically claim pending, due-failed, or expired-lease outbox items with a unique worker lease token."""
         now = datetime.now()
         now_str = now.isoformat()
         lease_expires = datetime.fromtimestamp(now.timestamp() + lease_duration_seconds).isoformat()
+        lease_token = f"lease_{uuid.uuid4().hex[:12]}"
 
         with self.get_connection() as conn:
-            # Find eligible outbox IDs
+            # Find eligible outbox IDs:
+            # - New pending jobs
+            # - Failed jobs whose exponential backoff has arrived (status = 'failed' AND next_retry_at <= now)
+            # - Processing jobs whose worker lease has expired (status = 'processing' AND lease_expires_at < now)
             cursor = conn.execute(
                 """
                 SELECT o.outbox_id, o.notification_id, o.farmer_id, o.channel, o.retry_count, o.max_retries,
@@ -3196,8 +3275,11 @@ class FarmDatabaseRepository:
                 FROM notification_outbox o
                 JOIN notifications n ON o.notification_id = n.notification_id
                 LEFT JOIN farmer_profiles p ON o.farmer_id = p.farmer_id
-                WHERE (o.status = 'pending' OR (o.status = 'processing' AND o.lease_expires_at < ?))
-                  AND (o.next_retry_at IS NULL OR o.next_retry_at <= ?)
+                WHERE (
+                    o.status = 'pending'
+                    OR (o.status = 'failed' AND (o.next_retry_at IS NULL OR o.next_retry_at <= ?))
+                    OR (o.status = 'processing' AND o.lease_expires_at < ?)
+                )
                 ORDER BY CASE n.priority
                     WHEN 'emergency' THEN 1
                     WHEN 'high' THEN 2
@@ -3213,18 +3295,29 @@ class FarmDatabaseRepository:
 
             claimed_ids = [r["outbox_id"] for r in rows]
             placeholders = ",".join(["?"] * len(claimed_ids))
+
+            # Concurrency-safe atomic lease update
             conn.execute(
                 f"""
                 UPDATE notification_outbox
-                SET status = 'processing', lease_expires_at = ?, updated_at = ?
-                WHERE outbox_id IN ({placeholders});
+                SET status = 'processing',
+                    lease_token = ?,
+                    lease_expires_at = ?,
+                    updated_at = ?
+                WHERE outbox_id IN ({placeholders})
+                  AND (
+                      status = 'pending'
+                      OR (status = 'failed' AND (next_retry_at IS NULL OR next_retry_at <= ?))
+                      OR (status = 'processing' AND lease_expires_at < ?)
+                  );
                 """,
-                [lease_expires, now_str] + claimed_ids,
+                [lease_token, lease_expires, now_str] + claimed_ids + [now_str, now_str],
             )
 
             result = []
             for r in rows:
                 d = dict(r)
+                d["lease_token"] = lease_token
                 if d.get("metadata_json"):
                     try:
                         d["metadata"] = json.loads(d["metadata_json"])
@@ -3237,33 +3330,38 @@ class FarmDatabaseRepository:
         self,
         outbox_id: str,
         status: str,
+        lease_token: Optional[str] = None,
         next_retry_at: Optional[str] = None,
         error_message: Optional[str] = None,
         increment_retry: bool = False,
-    ) -> None:
-        """Update outbox delivery state after an attempt."""
+    ) -> bool:
+        """Update outbox delivery state after an attempt, verifying lease ownership to prevent stale overwrites."""
         now_str = datetime.now().isoformat()
         with self.get_connection() as conn:
             if increment_retry:
-                conn.execute(
-                    """
+                query = """
                     UPDATE notification_outbox
                     SET status = ?, retry_count = retry_count + 1, next_retry_at = ?,
-                        last_error = ?, lease_expires_at = NULL, updated_at = ?
-                    WHERE outbox_id = ?;
-                    """,
-                    (status, next_retry_at, error_message, now_str, outbox_id),
-                )
+                        last_error = ?, lease_token = NULL, lease_expires_at = NULL, updated_at = ?
+                    WHERE outbox_id = ?
+                """
+                params = [status, next_retry_at, error_message, now_str, outbox_id]
             else:
-                conn.execute(
-                    """
+                query = """
                     UPDATE notification_outbox
                     SET status = ?, next_retry_at = ?, last_error = ?,
-                        lease_expires_at = NULL, updated_at = ?
-                    WHERE outbox_id = ?;
-                    """,
-                    (status, next_retry_at, error_message, now_str, outbox_id),
-                )
+                        lease_token = NULL, lease_expires_at = NULL, updated_at = ?
+                    WHERE outbox_id = ?
+                """
+                params = [status, next_retry_at, error_message, now_str, outbox_id]
+
+            if lease_token:
+                query += " AND (lease_token = ? OR lease_token IS NULL)"
+                params.append(lease_token)
+
+            query += ";"
+            cursor = conn.execute(query, tuple(params))
+            return cursor.rowcount > 0
 
     def record_delivery_attempt(self, attempt: NotificationDeliveryAttempt) -> None:
         """Record physical delivery attempt in the audit log."""
@@ -3567,6 +3665,71 @@ class FarmDatabaseRepository:
             created_at=r["created_at"],
             updated_at=r["updated_at"],
         )
+
+    def update_farm_reminder(
+        self,
+        reminder_id: str,
+        updates: Dict[str, Any],
+        farmer_id: Optional[str] = None,
+    ) -> bool:
+        """Update fields of an existing farm reminder."""
+        allowed = {
+            "title_en", "title_hi", "description_en", "description_hi",
+            "scheduled_date", "due_time", "activity_type", "status"
+        }
+        filtered = {k: v for k, v in updates.items() if k in allowed and v is not None}
+        if not filtered:
+            return False
+        filtered["updated_at"] = datetime.now().isoformat()
+
+        set_clauses = [f"{k} = ?" for k in filtered.keys()]
+        params = list(filtered.values())
+        params.append(reminder_id)
+
+        query = f"UPDATE farm_reminders SET {', '.join(set_clauses)} WHERE reminder_id = ?"
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return cursor.rowcount > 0
+
+    def delete_farm_reminder(self, reminder_id: str, farmer_id: Optional[str] = None) -> bool:
+        """Permanently delete a farm reminder."""
+        query = "DELETE FROM farm_reminders WHERE reminder_id = ?"
+        params = [reminder_id]
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return cursor.rowcount > 0
+
+    def get_farmer_ids_by_district(self, district: str) -> List[str]:
+        """Return distinct farmer_ids possessing farms or residing in target district."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT DISTINCT farmer_id FROM farms WHERE LOWER(district) = LOWER(?)
+                UNION
+                SELECT DISTINCT farmer_id FROM farmer_profiles WHERE LOWER(district) = LOWER(?)
+                """,
+                (district, district),
+            )
+            return [row[0] for row in cursor.fetchall() if row[0]]
+
+    def get_farmer_ids_by_crop(self, crop_name: str) -> List[str]:
+        """Return distinct farmer_ids who have registered or active crop cycles for crop_name."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT DISTINCT farmer_id FROM crop_cycles WHERE LOWER(crop_name) LIKE LOWER(?)
+                """,
+                (f"%{crop_name}%",),
+            )
+            return [row[0] for row in cursor.fetchall() if row[0]]
 
 
 

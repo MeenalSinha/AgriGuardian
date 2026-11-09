@@ -9,6 +9,7 @@ from backend.app.schemas.notification import (
     ChannelHealthInfo,
     FarmReminderCreate,
     FarmReminderRecord,
+    FarmReminderUpdate,
     NotificationPreference,
     NotificationRecord,
     OutboxProcessResult,
@@ -21,11 +22,22 @@ from backend.app.services.notifications.reminder_service import ReminderService
 
 logger = get_logger("NotificationService")
 
+_notification_service_singleton: Optional["NotificationService"] = None
+
 
 class NotificationService:
     """Master service orchestrating events, templates, outbox dispatch, and smart reminders."""
 
+    @classmethod
+    def get_instance(cls, repo: Optional[FarmDatabaseRepository] = None) -> "NotificationService":
+        """Return global singleton instance, initializing if needed."""
+        global _notification_service_singleton
+        if _notification_service_singleton is None or repo is not None:
+            _notification_service_singleton = cls(repo=repo)
+        return _notification_service_singleton
+
     def __init__(self, repo: Optional[FarmDatabaseRepository] = None):
+        global _notification_service_singleton
         self.repo = repo or get_farm_repo()
         self.registry = NotificationProviderRegistry()
         self.policy_engine = NotificationPolicyEngine(self.repo)
@@ -43,6 +55,8 @@ class NotificationService:
             repo=self.repo,
             event_bus=self.event_bus,
         )
+        if _notification_service_singleton is None:
+            _notification_service_singleton = self
 
     # In-App Notifications
     def list_notifications(
@@ -117,6 +131,23 @@ class NotificationService:
         """Snooze reminder."""
         return self.reminder_service.snooze_reminder(reminder_id, snooze_days, custom_date, farmer_id)
 
+    def get_reminder(self, reminder_id: str, farmer_id: Optional[str] = None) -> Optional[FarmReminderRecord]:
+        """Fetch reminder by ID with optional tenant scope."""
+        return self.reminder_service.get_reminder(reminder_id, farmer_id=farmer_id)
+
+    def update_reminder(
+        self,
+        reminder_id: str,
+        update_req: FarmReminderUpdate,
+        farmer_id: Optional[str] = None,
+    ) -> Optional[FarmReminderRecord]:
+        """Update reminder and re-evaluate weather risk."""
+        return self.reminder_service.update_reminder(reminder_id, update_req, farmer_id=farmer_id)
+
+    def delete_reminder(self, reminder_id: str, farmer_id: Optional[str] = None) -> bool:
+        """Permanently delete reminder."""
+        return self.reminder_service.delete_reminder(reminder_id, farmer_id=farmer_id)
+
     def generate_crop_reminders(self, farmer_id: str) -> List[FarmReminderRecord]:
         """Generate smart reminders from active crop cycle activities."""
         return self.reminder_service.generate_reminders_from_crop_cycles(farmer_id)
@@ -141,3 +172,4 @@ class NotificationService:
     def get_channel_health(self) -> List[ChannelHealthInfo]:
         """Return truthful channel readiness and delivery statistics."""
         return self.outbox_service.get_channel_health_report()
+

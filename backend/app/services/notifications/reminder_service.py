@@ -5,14 +5,18 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from backend.app.core.logging import get_logger
+from backend.app.integrations.weather.open_meteo import WeatherService
 from backend.app.repositories.farm_db import FarmDatabaseRepository, get_farm_repo
 from backend.app.schemas.farm import ActivityType
+from backend.app.schemas.location import LocationRecord
 from backend.app.schemas.notification import (
     FarmReminderCreate,
     FarmReminderRecord,
+    FarmReminderUpdate,
     ReminderActivityType,
     ReminderStatus,
 )
+from backend.app.services.weather.location_manager import LocationManager
 
 logger = get_logger("ReminderService")
 
@@ -24,9 +28,13 @@ class ReminderService:
         self,
         repo: Optional[FarmDatabaseRepository] = None,
         event_bus: Optional[Any] = None,
+        weather_service: Optional[WeatherService] = None,
+        location_manager: Optional[LocationManager] = None,
     ):
         self.repo = repo or get_farm_repo()
         self.event_bus = event_bus
+        self.weather_service = weather_service or WeatherService()
+        self.location_manager = location_manager or LocationManager()
 
     def create_reminder(self, farmer_id: str, req: FarmReminderCreate) -> FarmReminderRecord:
         """Create a custom or planned farm reminder."""
@@ -58,6 +66,44 @@ class ReminderService:
         # Cross-reference weather
         self._evaluate_weather_risk(reminder)
         return self.repo.get_farm_reminder(reminder_id) or reminder
+
+    def get_reminder(self, reminder_id: str, farmer_id: Optional[str] = None) -> Optional[FarmReminderRecord]:
+        """Fetch reminder by ID with optional tenant check."""
+        rem = self.repo.get_farm_reminder(reminder_id)
+        if rem and farmer_id and rem.farmer_id != farmer_id:
+            return None
+        return rem
+
+    def update_reminder(
+        self,
+        reminder_id: str,
+        update_req: FarmReminderUpdate,
+        farmer_id: Optional[str] = None,
+    ) -> Optional[FarmReminderRecord]:
+        """Update reminder and re-evaluate weather risk if date or activity changed."""
+        rem = self.get_reminder(reminder_id, farmer_id=farmer_id)
+        if not rem:
+            return None
+
+        updates = update_req.model_dump(exclude_unset=True)
+        if "activity_type" in updates and hasattr(updates["activity_type"], "value"):
+            updates["activity_type"] = updates["activity_type"].value
+        if "status" in updates and hasattr(updates["status"], "value"):
+            updates["status"] = updates["status"].value
+
+        ok = self.repo.update_farm_reminder(reminder_id, updates, farmer_id=farmer_id)
+        if not ok:
+            return None
+
+        updated_rem = self.repo.get_farm_reminder(reminder_id)
+        if updated_rem:
+            self._evaluate_weather_risk(updated_rem)
+            return self.repo.get_farm_reminder(reminder_id) or updated_rem
+        return None
+
+    def delete_reminder(self, reminder_id: str, farmer_id: Optional[str] = None) -> bool:
+        """Permanently delete reminder with tenant isolation."""
+        return self.repo.delete_farm_reminder(reminder_id, farmer_id=farmer_id)
 
     def list_reminders(
         self,
@@ -119,7 +165,7 @@ class ReminderService:
 
         for cycle in cycles:
             crop_name = cycle.crop_name
-            farm = self.repo.get_farm(cycle.farm_id, farmer_id) if cycle.farm_id else None
+            farm = self.repo.get_farm(cycle.farm_id, farmer_id=farmer_id) if cycle.farm_id else None
             farm_name = farm.farm_name if farm else "Primary Farm"
 
             # Check planned activities
@@ -158,48 +204,172 @@ class ReminderService:
         return created_reminders
 
     def _evaluate_weather_risk(self, reminder: FarmReminderRecord) -> None:
-        """Cross-reference reminder date and activity against weather forecasts."""
-        # Simple microclimate rule engine:
-        # Check if activity is pest spraying, fertilization, or harvesting
+        """Cross-reference reminder date and activity against real WeatherService forecasts."""
         activity = reminder.activity_type
-        if activity not in (ReminderActivityType.PEST_SPRAY, ReminderActivityType.FERTILIZATION, ReminderActivityType.IRRIGATION, ReminderActivityType.HARVESTING):
+        if activity not in (
+            ReminderActivityType.PEST_SPRAY,
+            ReminderActivityType.FERTILIZATION,
+            ReminderActivityType.IRRIGATION,
+            ReminderActivityType.HARVESTING,
+        ):
             return
 
-        # Query recent weather observations/forecast for the farm's location
-        weather_summary = "Clear weather"
-        expected_rain_mm = 0.0
-
+        loc: Optional[LocationRecord] = None
+        farm = None
         if reminder.farm_id:
             farm = self.repo.get_farm(reminder.farm_id, reminder.farmer_id)
             if farm:
-                # Retrieve weather data if available
-                pass
-
-        # If activity is chemical spray or fertilization, evaluate rain risk
-        # For demonstration and production integration, check if today or scheduled date has rain
-        # (simulated or real Open-Meteo precipitation forecast)
-        if activity == ReminderActivityType.PEST_SPRAY:
-            # Check if rain is expected
-            # If weather risk is detected:
-            if "rain" in weather_summary.lower() or expected_rain_mm > 2.0:
-                reason_en = f"Rain forecast ({expected_rain_mm}mm) during scheduled spray. Risk of chemical runoff and reduced efficacy."
-                reason_hi = f"छिड़काव के समय बारिश ({expected_rain_mm}मिमी) की संभावना। दवा बहने और प्रभाव कम होने का जोखिम।"
-                self.repo.update_farm_reminder_weather_risk(
-                    reminder.reminder_id,
-                    risk_flag=True,
-                    reason_en=reason_en,
-                    reason_hi=reason_hi,
-                )
-                if self.event_bus:
-                    self.event_bus.emit_spray_weather_conflict_event(
-                        farmer_id=reminder.farmer_id,
-                        farm_name="Farm",
-                        crop_name="Crop",
-                        chemical_name=reminder.title_en,
-                        expected_rain_mm=expected_rain_mm,
-                        farm_id=reminder.farm_id,
-                        crop_cycle_id=reminder.crop_cycle_id,
+                if farm.latitude is not None and farm.longitude is not None:
+                    loc = self.location_manager.resolve_coordinates(
+                        latitude=farm.latitude,
+                        longitude=farm.longitude,
+                        source="gps",
+                        consent_granted=True,
+                        label_override=farm.farm_name,
                     )
+                elif farm.state and farm.district:
+                    try:
+                        loc = self.location_manager.resolve_preset_district(
+                            state=farm.state,
+                            district=farm.district,
+                            is_confirmed=True,
+                        )
+                    except Exception:
+                        loc = None
+
+        if loc is None:
+            farmer = self.repo.get_farmer_profile(reminder.farmer_id)
+            if farmer and getattr(farmer, "state", None) and getattr(farmer, "district", None):
+                try:
+                    loc = self.location_manager.resolve_preset_district(
+                        state=farmer.state,
+                        district=farmer.district,
+                        is_confirmed=True,
+                    )
+                except Exception:
+                    loc = None
+
+        if loc is None:
+            loc = self.location_manager.get_default_location()
+
+        try:
+            report = self.weather_service.get_weather_report(location=loc, forecast_days=7)
+        except Exception as e:
+            logger.warning(f"Error querying weather service for reminder {reminder.reminder_id}: {e}")
+            self.repo.update_farm_reminder_weather_risk(
+                reminder.reminder_id,
+                risk_flag=False,
+                reason_en="Weather service connection failed. Manual weather check recommended.",
+                reason_hi="मौसम सेवा संपर्क विफल। मैन्युअल जांच की सलाह दी जाती है।",
+            )
+            return
+
+        if report.provenance and report.provenance.is_unavailable:
+            provider = report.provenance.provider or "Weather Provider"
+            self.repo.update_farm_reminder_weather_risk(
+                reminder.reminder_id,
+                risk_flag=False,
+                reason_en=f"Weather forecast temporarily unavailable from {provider}. Manual weather check recommended.",
+                reason_hi="मौसम पूर्वानुमान अस्थायी रूप से अनुपलब्ध है। मैन्युअल जांच की सलाह दी जाती है।",
+            )
+            return
+
+        scheduled_date_str = str(reminder.scheduled_date)
+        matching_day = None
+        for day in report.daily:
+            day_str = getattr(day, "date_str", getattr(day, "date", None))
+            if day_str == scheduled_date_str:
+                matching_day = day
+                break
+
+        if not matching_day:
+            provider = report.provenance.provider if report.provenance else "Open-Meteo"
+            self.repo.update_farm_reminder_weather_risk(
+                reminder.reminder_id,
+                risk_flag=False,
+                reason_en=f"Date {scheduled_date_str} is beyond the 7-day forecast horizon ({provider}).",
+                reason_hi=f"तारीख {scheduled_date_str} 7-दिवसीय मौसम पूर्वानुमान सीमा से बाहर है।",
+            )
+            return
+
+        provider = report.provenance.provider if report.provenance else "Open-Meteo"
+        rain_mm = float(matching_day.precipitation_sum_mm or 0.0)
+        wind_kmh = float(matching_day.max_wind_gusts_kmh or matching_day.max_wind_speed_kmh or 0.0)
+
+        has_conflict = False
+        reason_en = ""
+        reason_hi = ""
+
+        if activity == ReminderActivityType.PEST_SPRAY:
+            if rain_mm >= 2.0 or wind_kmh >= 25.0:
+                has_conflict = True
+                details = []
+                details_hi = []
+                if rain_mm >= 2.0:
+                    details.append(f"{rain_mm:.1f}mm rain")
+                    details_hi.append(f"{rain_mm:.1f}मिमी बारिश")
+                if wind_kmh >= 25.0:
+                    details.append(f"gusts {wind_kmh:.1f} km/h")
+                    details_hi.append(f"हवा {wind_kmh:.1f} किमी/घंटा")
+                reason_en = f"Adverse weather on {scheduled_date_str}: {', '.join(details)} (Source: {provider}). Chemical wash-off or drift hazard."
+                reason_hi = f"{scheduled_date_str} को प्रतिकूल मौसम: {', '.join(details_hi)}। दवा बहने या उड़ने का जोखिम।"
+        elif activity == ReminderActivityType.FERTILIZATION:
+            if rain_mm >= 20.0:
+                has_conflict = True
+                reason_en = f"Heavy rain ({rain_mm:.1f}mm) expected on {scheduled_date_str} (Source: {provider}). High nutrient leaching risk."
+                reason_hi = f"{scheduled_date_str} को भारी बारिश ({rain_mm:.1f}मिमी) की संभावना। पोषक तत्व बहने (लीचिंग) का जोखिम।"
+        elif activity == ReminderActivityType.HARVESTING:
+            if rain_mm >= 5.0:
+                has_conflict = True
+                reason_en = f"Rain ({rain_mm:.1f}mm) expected on {scheduled_date_str} (Source: {provider}). Spoilage & moisture damage hazard."
+                reason_hi = f"{scheduled_date_str} को बारिश ({rain_mm:.1f}मिमी) की संभावना। फसल खराब होने और नमी का जोखिम।"
+        elif activity == ReminderActivityType.IRRIGATION:
+            if rain_mm >= 10.0:
+                has_conflict = True
+                reason_en = f"Significant rain ({rain_mm:.1f}mm) expected on {scheduled_date_str} (Source: {provider}). Postpone irrigation to avoid waterlogging."
+                reason_hi = f"{scheduled_date_str} को पर्याप्त बारिश ({rain_mm:.1f}मिमी) की संभावना। जलभराव से बचने के लिए सिंचाई टालें।"
+
+        if has_conflict:
+            self.repo.update_farm_reminder_weather_risk(
+                reminder.reminder_id,
+                risk_flag=True,
+                reason_en=reason_en,
+                reason_hi=reason_hi,
+            )
+            if self.event_bus and activity == ReminderActivityType.PEST_SPRAY:
+                farm_name = farm.farm_name if (farm and hasattr(farm, "farm_name")) else "Farm"
+                crop_name = "Crop"
+                if reminder.crop_cycle_id:
+                    cycle = self.repo.get_crop_cycle(reminder.crop_cycle_id)
+                    if cycle and hasattr(cycle, "crop_name"):
+                        crop_name = cycle.crop_name
+                self.event_bus.emit_spray_weather_conflict_event(
+                    farmer_id=reminder.farmer_id,
+                    farm_name=farm_name,
+                    crop_name=crop_name,
+                    chemical_name=reminder.title_en,
+                    expected_rain_mm=rain_mm,
+                    farm_id=reminder.farm_id,
+                    crop_cycle_id=reminder.crop_cycle_id,
+                )
+        else:
+            self.repo.update_farm_reminder_weather_risk(
+                reminder.reminder_id,
+                risk_flag=False,
+                reason_en=None,
+                reason_hi=None,
+            )
+
+    def evaluate_all_active_reminders(self, farmer_id: Optional[str] = None) -> int:
+        """Scan active scheduled reminders and re-evaluate weather conflict status."""
+        farmers = [farmer_id] if farmer_id else [f.farmer_id for f in self.repo.list_farmers()]
+        evaluated = 0
+        for fmr_id in farmers:
+            rems = self.repo.list_farm_reminders(fmr_id, status=ReminderStatus.SCHEDULED.value)
+            for r in rems:
+                self._evaluate_weather_risk(r)
+                evaluated += 1
+        return evaluated
 
     def _map_activity_type(self, farm_act_type: ActivityType) -> ReminderActivityType:
         """Map farm domain activity types to reminder activity types."""
@@ -230,3 +400,4 @@ class ReminderService:
     def _translate_title(self, title_en: str, act_type: ReminderActivityType) -> str:
         act_hi = self._translate_activity(act_type.value)
         return f"{act_hi}: {title_en}"
+

@@ -3,7 +3,11 @@
 import time
 from typing import Any, Dict, Optional
 
-from backend.app.integrations.notifications.base_provider import BaseNotificationProvider, ProviderDeliveryResult
+from backend.app.integrations.notifications.base_provider import (
+    BaseNotificationProvider,
+    DeliveryState,
+    ProviderDeliveryResult,
+)
 from backend.app.schemas.notification import NotificationChannel
 
 
@@ -36,4 +40,6 @@ class InAppNotificationProvider(BaseNotificationProvider):
             latency_ms=round(latency, 2),
             response_code="200_IN_APP_QUEUED",
             details=f"In-app notification ready for farmer {recipient_id}",
+            delivery_state=DeliveryState.DELIVERED,
         )
+

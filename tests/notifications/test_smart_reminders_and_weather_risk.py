@@ -22,6 +22,7 @@ from backend.app.schemas.farm import (
     Plot,
     SoilType,
     UserRecord,
+    UserRole,
 )
 from backend.app.schemas.notification import (
     FarmReminderCreate,
@@ -37,28 +38,28 @@ def reminder_fixture():
     os.close(fd)
     repo = FarmDatabaseRepository(db_path=path)
 
-    now_str = datetime.now().isoformat()
-    # 0. User
+    # 1. User & Farmer
     user = UserRecord(
         user_id="usr_rem_01",
-        username="kisan_ramesh",
-        password_hash="fakehash",
-        salt="fakesalt",
-        role="farmer",
-        created_at=now_str,
+        username="farmer_rem_01",
+        password_hash="hash",
+        salt="salt",
+        role=UserRole.FARMER,
+        created_at="2026-11-09T00:00:00",
     )
     repo.create_user(user)
 
-    # 1. Farmer
     farmer = FarmerProfile(
         farmer_id="fmr_rem_01",
         user_id="usr_rem_01",
         full_name="Kisan Ramesh",
         phone_number="9876543210",
+        state="Haryana",
+        district="Karnal",
         preferred_language="hi-IN",
-        literacy_preference=LiteracyPreference.VOICE_PRIMARY,
-        created_at=now_str,
-        updated_at=now_str,
+        literacy_preference=LiteracyPreference.TEXT,
+        created_at="2026-11-09T00:00:00",
+        updated_at="2026-11-09T00:00:00",
     )
     repo.create_farmer_profile(farmer)
 
@@ -70,11 +71,11 @@ def reminder_fixture():
         state="Haryana",
         district="Karnal",
         total_area=5.0,
-        area_unit=AreaUnit.ACRE,
         total_area_acres=5.0,
+        area_unit=AreaUnit.ACRE,
         ownership_type=OwnershipType.OWNED,
-        created_at=now_str,
-        updated_at=now_str,
+        created_at="2026-11-09T00:00:00",
+        updated_at="2026-11-09T00:00:00",
     )
     repo.create_farm(farm)
 
@@ -84,11 +85,11 @@ def reminder_fixture():
         farmer_id="fmr_rem_01",
         plot_name="North Field",
         area=5.0,
-        area_unit=AreaUnit.ACRE,
         area_acres=5.0,
+        area_unit=AreaUnit.ACRE,
         soil_type=SoilType.ALLUVIAL,
-        created_at=now_str,
-        updated_at=now_str,
+        created_at="2026-11-09T00:00:00",
+        updated_at="2026-11-09T00:00:00",
     )
     repo.create_plot(plot)
 
@@ -103,10 +104,9 @@ def reminder_fixture():
         season=CropSeason.RABI,
         sowing_date=today_str,
         current_stage=CropGrowthStage.VEGETATIVE_TILLERING,
-        days_since_sowing=20,
         status=CropCycleStatus.ACTIVE,
-        created_at=now_str,
-        updated_at=now_str,
+        created_at="2026-11-09T00:00:00",
+        updated_at="2026-11-09T00:00:00",
     )
     repo.create_crop_cycle(cycle)
 
@@ -115,15 +115,14 @@ def reminder_fixture():
         activity_id="act_rem_01",
         cycle_id="cyc_rem_01",
         farm_id="frm_rem_01",
-        plot_id="plt_rem_01",
         farmer_id="fmr_rem_01",
         activity_type=ActivityType.IRRIGATION,
-        activity_title="Irrigation",
+        activity_title="Crown Root Initiation Irrigation",
         scheduled_date=(datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d"),
         status=ActivityStatus.PLANNED,
         notes="First Crown Root Initiation (CRI) irrigation",
-        created_at=now_str,
-        updated_at=now_str,
+        created_at="2026-11-09T00:00:00",
+        updated_at="2026-11-09T00:00:00",
     )
     repo.create_farm_activity(act)
 
@@ -221,3 +220,101 @@ def test_weather_spray_conflict_flagging(reminder_fixture):
     assert flagged.weather_risk_flag is True
     assert "Heavy rain" in flagged.weather_risk_reason_en
     assert "भारी बारिश" in flagged.weather_risk_reason_hi
+
+
+def test_reminder_crud_operations(reminder_fixture):
+    """Verify GET, PUT update, and DELETE for farm reminders."""
+    service = reminder_fixture["service"]
+    farmer = reminder_fixture["farmer"]
+
+    # 1. Create
+    req = FarmReminderCreate(
+        activity_type=ReminderActivityType.WEEDING,
+        title_en="Manual Weeding Field A",
+        description_en="Remove broadleaf weeds.",
+        scheduled_date="2026-11-15",
+    )
+    rem = service.create_reminder(farmer.farmer_id, req)
+    assert rem.reminder_id is not None
+
+    # 2. Get by ID
+    fetched = service.get_reminder(rem.reminder_id, farmer_id=farmer.farmer_id)
+    assert fetched is not None
+    assert fetched.title_en == "Manual Weeding Field A"
+
+    # Isolation check: other farmer cannot get
+    assert service.get_reminder(rem.reminder_id, farmer_id="fmr_other") is None
+
+    # 3. Update
+    from backend.app.schemas.notification import FarmReminderUpdate
+    upd = FarmReminderUpdate(
+        title_en="Mechanical Weeding Field A",
+        scheduled_date="2026-11-16",
+    )
+    updated = service.update_reminder(rem.reminder_id, upd, farmer_id=farmer.farmer_id)
+    assert updated is not None
+    assert updated.title_en == "Mechanical Weeding Field A"
+    assert updated.scheduled_date == "2026-11-16"
+
+    # 4. Delete
+    deleted = service.delete_reminder(rem.reminder_id, farmer_id=farmer.farmer_id)
+    assert deleted is True
+    assert service.get_reminder(rem.reminder_id) is None
+
+
+def test_genuine_weather_risk_conflict_evaluation(reminder_fixture):
+    """Verify real microclimate forecast cross-referencing detects spray conflicts."""
+    repo = reminder_fixture["repo"]
+    farmer = reminder_fixture["farmer"]
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    from unittest.mock import MagicMock
+    from backend.app.schemas.location import LocationRecord
+    from backend.app.schemas.weather import DailyForecastPoint, WeatherProvenance, WeatherReport
+
+    mock_weather = MagicMock()
+    mock_weather.get_weather_report.return_value = WeatherReport(
+        location=LocationRecord(
+            location_id="LOC-TEST",
+            display_name="Karnal, Haryana",
+            state="Haryana",
+            district="Karnal",
+            latitude=29.68,
+            longitude=76.99,
+            precision="district_centroid",
+        ),
+        daily=[
+            DailyForecastPoint(
+                date_str=today_str,
+                min_temperature_c=18.0,
+                max_temperature_c=28.0,
+                precipitation_sum_mm=8.5,
+                max_wind_speed_kmh=15.0,
+                max_wind_gusts_kmh=28.0,
+            )
+        ],
+        provenance=WeatherProvenance(
+            provider="Open-Meteo NWP",
+            is_live=True,
+            is_unavailable=False,
+        ),
+    )
+
+    mock_bus = MagicMock()
+    service = ReminderService(repo=repo, event_bus=mock_bus, weather_service=mock_weather)
+
+    req = FarmReminderCreate(
+        farm_id="frm_rem_01",
+        activity_type=ReminderActivityType.PEST_SPRAY,
+        title_en="Fungicide Spray for Rust",
+        description_en="Propiconazole application.",
+        scheduled_date=today_str,
+    )
+    rem = service.create_reminder(farmer.farmer_id, req)
+
+    # Check that weather conflict was automatically detected
+    assert rem.weather_risk_flag is True
+    assert "8.5mm rain" in rem.weather_risk_reason_en
+    assert "gusts 28.0 km/h" in rem.weather_risk_reason_en
+    assert "Open-Meteo NWP" in rem.weather_risk_reason_en
+    assert mock_bus.emit_spray_weather_conflict_event.called

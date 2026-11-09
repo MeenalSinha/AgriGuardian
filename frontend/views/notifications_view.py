@@ -636,3 +636,4 @@ def render_admin_outbox_tab(service: NotificationService, repo: FarmDatabaseRepo
                         if ok:
                             st.success("Re-queued for immediate dispatch!")
                             st.rerun()
+

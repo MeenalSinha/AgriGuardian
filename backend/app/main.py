@@ -7,7 +7,7 @@ crop diagnostics, weather context, and agricultural advisory services.
 import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -95,6 +95,7 @@ from backend.app.schemas.notification import (
     FarmReminderCreate,
     FarmReminderRecord,
     FarmReminderSnooze,
+    FarmReminderUpdate,
     NotificationCategory,
     NotificationChannel,
     NotificationChannelConsent,
@@ -1846,15 +1847,23 @@ def update_knowledge_proposal_status(
 # PHASE 9: PROACTIVE NOTIFICATIONS, SMART REMINDERS & OUTBOX ORCHESTRATION
 # =============================================================================
 
-def _get_farmer_id_for_user(user: UserRecord) -> str:
+def _get_farmer_id_for_user(user: UserRecord, target_farmer_id: Optional[str] = None) -> str:
     """Helper to retrieve farmer_id from authenticated user record."""
     if user.role == UserRole.FARMER:
         profile = system.farm_context.repo.get_farmer_profile_by_user_id(user.user_id)
         if not profile:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farmer profile not found for user.")
         return profile.farmer_id
-    elif user.role == UserRole.ADMINISTRATOR:
-        return "fmr_admin"
+    elif user.role in (UserRole.ADMINISTRATOR, UserRole.FIELD_OFFICER):
+        if target_farmer_id:
+            return target_farmer_id
+        profile = system.farm_context.repo.get_farmer_profile_by_user_id(user.user_id)
+        if profile:
+            return profile.farmer_id
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{user.role.value.title()} must specify target farmer_id or link a farmer profile.",
+        )
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Role does not have associated farmer identity.")
 
 
@@ -1864,10 +1873,11 @@ def list_farmer_notifications(
     category: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
+    target_farmer_id: Optional[str] = Query(None, alias="farmer_id"),
     user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
 ):
     """List proactive notifications in the farmer's inbox."""
-    farmer_id = _get_farmer_id_for_user(user)
+    farmer_id = _get_farmer_id_for_user(user, target_farmer_id=target_farmer_id)
     return system.notification_service.list_notifications(
         farmer_id=farmer_id,
         status=status,
@@ -1879,10 +1889,11 @@ def list_farmer_notifications(
 
 @app.get("/api/v1/notifications/unread-count", tags=["Proactive Notifications & Alerts"])
 def get_unread_notification_count(
+    target_farmer_id: Optional[str] = Query(None, alias="farmer_id"),
     user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
 ):
     """Fast unread notification count for UI badge display."""
-    farmer_id = _get_farmer_id_for_user(user)
+    farmer_id = _get_farmer_id_for_user(user, target_farmer_id=target_farmer_id)
     count = system.notification_service.get_unread_count(farmer_id)
     return {"farmer_id": farmer_id, "unread_count": count}
 
@@ -1996,10 +2007,11 @@ def list_farm_reminders(
     status: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
+    target_farmer_id: Optional[str] = Query(None, alias="farmer_id"),
     user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.FIELD_OFFICER, UserRole.ADMINISTRATOR])),
 ):
     """List smart agronomic reminders for the farmer."""
-    farmer_id = _get_farmer_id_for_user(user) if user.role == UserRole.FARMER else "fmr_admin"
+    farmer_id = _get_farmer_id_for_user(user, target_farmer_id=target_farmer_id)
     return system.notification_service.list_reminders(
         farmer_id=farmer_id,
         status=status,
@@ -2008,22 +2020,94 @@ def list_farm_reminders(
     )
 
 
+@app.get("/api/v1/reminders/{reminder_id}", response_model=FarmReminderRecord, tags=["Smart Farm Reminders"])
+def get_farm_reminder(
+    reminder_id: str,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.FIELD_OFFICER, UserRole.ADMINISTRATOR])),
+):
+    """Retrieve details for a single farm reminder with tenant isolation."""
+    farmer_id = _get_farmer_id_for_user(user) if user.role == UserRole.FARMER else None
+    rem = system.farm_context.repo.get_farm_reminder(reminder_id)
+    if not rem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found.")
+    if user.role == UserRole.FARMER and rem.farmer_id != farmer_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot access another farmer's reminder.")
+    return rem
+
+
 @app.post("/api/v1/reminders", response_model=FarmReminderRecord, status_code=status.HTTP_201_CREATED, tags=["Smart Farm Reminders"])
 def create_farm_reminder(
     req: FarmReminderCreate,
+    target_farmer_id: Optional[str] = Query(None, alias="farmer_id"),
     user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
 ):
-    """Create a new smart agricultural reminder."""
-    farmer_id = _get_farmer_id_for_user(user)
+    """Create a new smart agricultural reminder with strict farm and crop ownership checks."""
+    farmer_id = _get_farmer_id_for_user(user, target_farmer_id=target_farmer_id)
+
+    # Validate multi-tenant farm and cycle ownership
+    if req.farm_id:
+        farm = system.farm_context.repo.get_farm(req.farm_id)
+        if not farm:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Farm '{req.farm_id}' not found.")
+        if user.role == UserRole.FARMER and farm.farmer_id != farmer_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot attach reminder to a farm owned by another farmer.")
+
+    if req.crop_cycle_id:
+        cycle = system.farm_context.repo.get_crop_cycle(req.crop_cycle_id)
+        if not cycle:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Crop cycle '{req.crop_cycle_id}' not found.")
+        if user.role == UserRole.FARMER and cycle.farmer_id != farmer_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot attach reminder to a crop cycle owned by another farmer.")
+
     return system.notification_service.create_reminder(farmer_id, req)
+
+
+@app.put("/api/v1/reminders/{reminder_id}", response_model=FarmReminderRecord, tags=["Smart Farm Reminders"])
+def update_farm_reminder(
+    reminder_id: str,
+    req: FarmReminderUpdate,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Update title, description, scheduled date, due time, or activity of an existing reminder."""
+    farmer_id = _get_farmer_id_for_user(user) if user.role == UserRole.FARMER else None
+    rem = system.farm_context.repo.get_farm_reminder(reminder_id)
+    if not rem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found.")
+    if user.role == UserRole.FARMER and rem.farmer_id != farmer_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify another farmer's reminder.")
+
+    updated = system.notification_service.update_reminder(reminder_id, req, farmer_id=farmer_id)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not update reminder.")
+    return updated
+
+
+@app.delete("/api/v1/reminders/{reminder_id}", tags=["Smart Farm Reminders"])
+def delete_farm_reminder(
+    reminder_id: str,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Permanently delete a scheduled reminder."""
+    farmer_id = _get_farmer_id_for_user(user) if user.role == UserRole.FARMER else None
+    rem = system.farm_context.repo.get_farm_reminder(reminder_id)
+    if not rem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found.")
+    if user.role == UserRole.FARMER and rem.farmer_id != farmer_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete another farmer's reminder.")
+
+    ok = system.notification_service.delete_reminder(reminder_id, farmer_id=farmer_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not delete reminder.")
+    return {"message": "Reminder deleted successfully.", "reminder_id": reminder_id}
 
 
 @app.post("/api/v1/reminders/generate", response_model=List[FarmReminderRecord], tags=["Smart Farm Reminders"])
 def generate_cycle_reminders(
+    target_farmer_id: Optional[str] = Query(None, alias="farmer_id"),
     user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
 ):
     """Auto-schedule smart reminders based on active crop cycles and agronomic milestones."""
-    farmer_id = _get_farmer_id_for_user(user)
+    farmer_id = _get_farmer_id_for_user(user, target_farmer_id=target_farmer_id)
     return system.notification_service.generate_crop_reminders(farmer_id)
 
 

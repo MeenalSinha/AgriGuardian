@@ -54,3 +54,4 @@ class NotificationProviderRegistry:
                 )
             )
         return health_list
+

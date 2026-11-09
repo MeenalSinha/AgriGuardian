@@ -4,7 +4,11 @@ import os
 import time
 from typing import Any, Dict, Optional
 
-from backend.app.integrations.notifications.base_provider import BaseNotificationProvider, ProviderDeliveryResult
+from backend.app.integrations.notifications.base_provider import (
+    BaseNotificationProvider,
+    DeliveryState,
+    ProviderDeliveryResult,
+)
 from backend.app.schemas.notification import NotificationChannel
 
 
@@ -40,6 +44,7 @@ class SmsNotificationProvider(BaseNotificationProvider):
                 latency_ms=round(latency, 2),
                 error_message="Missing or invalid recipient phone number for SMS delivery.",
                 response_code="400_INVALID_PHONE",
+                delivery_state=DeliveryState.FAILED,
             )
 
         if not self.is_configured():
@@ -52,6 +57,7 @@ class SmsNotificationProvider(BaseNotificationProvider):
                 error_message="SMS gateway not configured in environment (SMS_API_KEY unset).",
                 response_code="503_GATEWAY_UNCONFIGURED",
                 not_configured=True,
+                delivery_state=DeliveryState.NOT_CONFIGURED,
             )
 
         # In production with live API key, send HTTP request to SMS gateway
@@ -63,4 +69,6 @@ class SmsNotificationProvider(BaseNotificationProvider):
             latency_ms=round(latency, 2),
             response_code="200_DISPATCHED",
             details=f"SMS dispatched to {recipient_phone[-4:]}",
+            delivery_state=DeliveryState.SENT,
         )
+

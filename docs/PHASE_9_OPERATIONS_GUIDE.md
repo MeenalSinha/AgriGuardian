@@ -139,3 +139,4 @@ To ensure optimal query performance on high-volume production deployments:
    VACUUM;
    ANALYZE;
    ```
+

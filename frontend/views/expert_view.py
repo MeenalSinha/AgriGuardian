@@ -603,3 +603,4 @@ def _render_admin_governance_tab(repo, admin_user):
                 else:
                     st.caption("Accredited & Active")
             ui_divider(style="dotted")
+

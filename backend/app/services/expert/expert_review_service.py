@@ -180,13 +180,13 @@ class ExpertReviewService:
         img_analysis = case.image_analysis or {}
         img_url = img_analysis.get("image_path") or img_analysis.get("image_url")
         gradcam = img_analysis.get("gradcam_heatmap_path")
-        ai_disease = img_analysis.get("disease_name") or img_analysis.get("primary_disease") or "Suspected Blight"
-        ai_conf = float(img_analysis.get("confidence", 0.75))
-        ai_sec = img_analysis.get("secondary_diseases", [])
+        ai_disease = (img_analysis.get("disease_name") or img_analysis.get("primary_disease")) if img_analysis else None
+        ai_conf = float(img_analysis["confidence"]) if (img_analysis and img_analysis.get("confidence") is not None) else None
+        ai_sec = img_analysis.get("secondary_diseases", []) if img_analysis else []
         ai_sev = case.risk or "Medium"
 
         # Microclimate weather telemetry
-        weather_summary = case.weather_summary or "Normal regional meteorological parameters."
+        weather_summary = case.weather_summary if case.weather_summary else "Weather data not recorded for this case."
         hazard_level = "LOW"
         if "warning" in weather_summary.lower() or "alert" in weather_summary.lower():
             hazard_level = "HIGH"
@@ -213,18 +213,21 @@ class ExpertReviewService:
         }
 
         # ICAR & CIBRC Grounding
-        icar_facts = [
-            {
-                "topic": "Integrated Pest Management (IPM)",
-                "source": "ICAR-NCIPM Standard Protocol",
-                "recommendation": "Maintain clean cultivation and remove collateral weed hosts before chemical application.",
-            },
-            {
-                "topic": "CIBRC Pre-Harvest Interval (PHI)",
-                "source": "Central Insecticides Board & Registration Committee",
-                "recommendation": "Enforce mandatory waiting interval between final chemical spray and crop harvest.",
-            },
-        ]
+        icar_facts = []
+        try:
+            from backend.app.repositories.fact_repository import FactRepository
+            fact_repo = FactRepository.get_instance()
+            real_facts = fact_repo.filter_facts(subject=case.crop) if case.crop else []
+            for rf in real_facts[:5]:
+                src = rf.evidence[0].organization if rf.evidence else "ICAR Repository"
+                icar_facts.append({
+                    "topic": f"{rf.category.title()}: {rf.predicate}",
+                    "source": src,
+                    "recommendation": rf.value,
+                })
+        except Exception as e:
+            logger.warning(f"Could not load ICAR facts for crop {case.crop}: {e}")
+            icar_facts = []
 
         return CaseDossier(
             case_id=case.case_id,
@@ -428,8 +431,26 @@ class ExpertReviewService:
         if not rev:
             raise ValueError(f"Review case '{submission.review_id}' not found.")
 
-        if rev["secondary_expert_id"] and rev["secondary_expert_id"] != secondary_expert_id:
-            raise PermissionError("User is not designated secondary reviewer for this case.")
+        # Enforce that status requires secondary review
+        if rev["status"] != CaseReviewStatus.SECONDARY_REVIEW_REQUIRED.value:
+            raise ValueError(f"Review case '{submission.review_id}' does not require secondary review (current status: {rev['status']}).")
+
+        # Must have an explicitly assigned secondary expert
+        if not rev.get("secondary_expert_id"):
+            raise ValueError("Secondary expert has not been assigned to this case yet.")
+
+        # User submitting must match assigned secondary expert
+        if rev["secondary_expert_id"] != secondary_expert_id:
+            raise PermissionError("User is not the designated secondary reviewer for this case.")
+
+        # Secondary reviewer cannot be the primary assigned expert
+        if rev.get("assigned_expert_id") and secondary_expert_id == rev["assigned_expert_id"]:
+            raise PermissionError("Primary reviewer cannot perform their own secondary review.")
+
+        # Verify that secondary expert is active and verified
+        sec_expert = self.repo.get_expert_profile(secondary_expert_id)
+        if not sec_expert or sec_expert.verification_status != ExpertAccountStatus.ACTIVE_VERIFIED:
+            raise PermissionError("Secondary expert must be an active, verified expert.")
 
         now_str = datetime.now().isoformat()
         case_id = rev["case_id"]
@@ -486,8 +507,8 @@ class ExpertReviewService:
 
         status_str = rev["status"]
         expert = self.repo.get_expert_profile(rev["assigned_expert_id"]) if rev.get("assigned_expert_id") else None
-        expert_name = expert.full_name if expert else "ICAR Accredited Agronomist"
-        institution = expert.institution if expert else "Indian Council of Agricultural Research"
+        expert_name = expert.full_name if expert else None
+        institution = expert.institution if expert else None
 
         latest_diag = self.repo.get_diagnosis_assessment(rev["review_id"])
         latest_rec = self.repo.get_latest_recommendation_version(rev["review_id"])
@@ -495,27 +516,35 @@ class ExpertReviewService:
         diag_name = (
             latest_diag.revised_disease
             if latest_diag and latest_diag.revised_disease
-            else (case.image_analysis.get("disease_name") if case.image_analysis else "Observed Condition")
+            else (case.image_analysis.get("disease_name") if (case.image_analysis and case.image_analysis.get("disease_name")) else "Observed Condition")
         )
 
         if status_str in ("queued", "claimed", "in_review", "secondary_review_required"):
             badge = FarmerBadgeStatus.AWAITING_EXPERT_REVIEW
             label_en = "Awaiting Expert Review"
             label_hi = "कृषि विशेषज्ञ समीक्षा प्रतीक्षित"
-            tts_en = f"Your case has been routed to an accredited agricultural expert from {institution}. Please await human confirmation before spraying chemical treatments."
-            tts_hi = f"आपका मामला {institution} के कृषि विशेषज्ञ को भेजा गया है। रासायनिक उपचार छिड़कने से पहले विशेषज्ञ की पुष्टि की प्रतीक्षा करें।"
+            if institution and expert_name:
+                tts_en = f"Your case has been routed to accredited agricultural expert {expert_name} from {institution}. Please await human confirmation before spraying chemical treatments."
+                tts_hi = f"आपका मामला {institution} के कृषि विशेषज्ञ {expert_name} को भेजा गया है। रासायनिक उपचार छिड़कने से पहले विशेषज्ञ की पुष्टि की प्रतीक्षा करें।"
+            else:
+                tts_en = "Your case has been routed to an accredited agricultural expert. Please await human confirmation before spraying chemical treatments."
+                tts_hi = "आपका मामला कृषि विशेषज्ञ को भेजा गया है। रासायनिक उपचार छिड़कने से पहले विशेषज्ञ की पुष्टि की प्रतीक्षा करें।"
         elif status_str == "approved":
             badge = FarmerBadgeStatus.EXPERT_VERIFIED
-            label_en = f"Verified by {expert_name} ({institution})"
-            label_hi = f"विशेषज्ञ सत्यापित: {expert_name} ({institution})"
-            tts_en = f"Diagnosis of {diag_name} and recommended interventions have been thoroughly verified by agronomist {expert_name} from {institution}."
-            tts_hi = f"{institution} के कृषि विशेषज्ञ {expert_name} ने {diag_name} के निदान और अनुशंसित उपचार की पूर्ण पुष्टि की है।"
+            name_disp = expert_name or "Accredited Agronomist"
+            inst_disp = f" ({institution})" if institution else ""
+            label_en = f"Verified by {name_disp}{inst_disp}"
+            label_hi = f"विशेषज्ञ सत्यापित: {name_disp}{inst_disp}"
+            tts_en = f"Diagnosis of {diag_name} and recommended interventions have been thoroughly verified by agronomist {name_disp}."
+            tts_hi = f"कृषि विशेषज्ञ {name_disp} ने {diag_name} के निदान और अनुशंसित उपचार की पूर्ण पुष्टि की है।"
         elif status_str == "modified":
             badge = FarmerBadgeStatus.EXPERT_MODIFIED
-            label_en = f"Expert-Reviewed with Modifications ({expert_name})"
-            label_hi = f"विशेषज्ञ द्वारा संशोधित परामर्श ({expert_name})"
-            tts_en = f"Agronomist {expert_name} from {institution} reviewed your case and updated the treatment protocol to ensure safe crop recovery."
-            tts_hi = f"{institution} के कृषि विशेषज्ञ {expert_name} ने आपके मामले की समीक्षा की है और फसल सुरक्षा हेतु उपचार में आवश्यक सुधार किए हैं।"
+            name_disp = expert_name or "Accredited Agronomist"
+            inst_disp = f" ({institution})" if institution else ""
+            label_en = f"Expert-Reviewed with Modifications ({name_disp})"
+            label_hi = f"विशेषज्ञ द्वारा संशोधित परामर्श ({name_disp})"
+            tts_en = f"Agronomist {name_disp} reviewed your case and updated the treatment protocol to ensure safe crop recovery."
+            tts_hi = f"कृषि विशेषज्ञ {name_disp} ने आपके मामले की समीक्षा की है और फसल सुरक्षा हेतु उपचार में आवश्यक सुधार किए हैं।"
         else:
             badge = FarmerBadgeStatus.AWAITING_INFORMATION
             label_en = "Awaiting Additional Details"
@@ -543,3 +572,4 @@ class ExpertReviewService:
             audio_tts_text_en=tts_en,
             audio_tts_text_hi=tts_hi,
         )
+

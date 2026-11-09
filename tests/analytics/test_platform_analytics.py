@@ -34,12 +34,14 @@ def admin_setup():
         password="ValidPassword123!",
         full_name="Farmer One",
         role=UserRole.FARMER,
+        phone_number="9876543210",
     ))
     _, f2, _ = auth_srv.register_farmer(UserRegistrationRequest(
         username="farmer_two",
         password="ValidPassword123!",
         full_name="Farmer Two",
         role=UserRole.FARMER,
+        phone_number="9876543211",
     ))
 
     # Add 2 farms

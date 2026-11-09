@@ -219,8 +219,8 @@ class CaseDossier(BaseModel):
     farmer_masked_phone: Optional[str] = None
     farm_id: Optional[str] = None
     farm_name: Optional[str] = None
-    state: str
-    district: str
+    state: Optional[str] = None
+    district: Optional[str] = None
     village: Optional[str] = None
     plot_size_acres: Optional[float] = None
     soil_type: Optional[str] = None
@@ -229,15 +229,15 @@ class CaseDossier(BaseModel):
     variety: Optional[str] = None
     sowing_date: Optional[str] = None
     growth_stage: Optional[str] = None
-    symptoms: str
+    symptoms: Optional[str] = None
     farmer_notes: Optional[str] = None
     preferred_language: str = "hi-IN"
     
     # Vision & ML diagnosis
     image_url_or_path: Optional[str] = None
     gradcam_heatmap_path: Optional[str] = None
-    ai_primary_disease: str
-    ai_confidence: float
+    ai_primary_disease: Optional[str] = None
+    ai_confidence: Optional[float] = None
     ai_secondary_diseases: List[Dict[str, Any]] = Field(default_factory=list)
     ai_severity: str = "Low"
 

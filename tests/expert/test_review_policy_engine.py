@@ -89,3 +89,4 @@ def test_policy_engine_farmer_explicit_request():
 
     assert ReviewTriggerType.FARMER_REQUEST in result.triggers
     assert result.priority == ReviewPriority.MEDIUM
+

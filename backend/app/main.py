@@ -1613,6 +1613,13 @@ def get_review_case_details(
     rev = system.farm_context.repo.get_review_case(review_id)
     if not rev:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review case not found.")
+    if user.role == UserRole.AGRONOMIST:
+        profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Expert profile not found.")
+        if rev.get("assigned_expert_id") and rev["assigned_expert_id"] != profile.expert_id:
+            if rev.get("secondary_expert_id") != profile.expert_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Case is assigned to another expert.")
     return rev
 
 
@@ -1622,6 +1629,23 @@ def get_case_dossier(
     user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST, UserRole.ADMINISTRATOR, UserRole.FIELD_OFFICER])),
 ):
     """Assemble complete agricultural case dossier for expert review."""
+    advisory = system.farm_context.repo.get_advisory_case(case_id)
+    if not advisory:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found.")
+
+    rev = system.farm_context.repo.get_review_case_by_advisory_id(case_id)
+    if user.role == UserRole.AGRONOMIST:
+        profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Expert profile not found.")
+        if rev and rev.get("assigned_expert_id") and rev["assigned_expert_id"] != profile.expert_id:
+            if rev.get("secondary_expert_id") != profile.expert_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Case is assigned to another expert.")
+    elif user.role == UserRole.FIELD_OFFICER:
+        officer = system.farm_context.repo.get_field_officer(user.user_id)
+        if officer and officer.assigned_districts and advisory.district not in officer.assigned_districts:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Case is outside assigned territory.")
+
     try:
         return system.expert_review_service.build_case_dossier(case_id)
     except ValueError as e:
@@ -1682,6 +1706,16 @@ def list_recommendation_versions(
     user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST, UserRole.ADMINISTRATOR])),
 ):
     """List immutable recommendation versions for a case audit trail."""
+    rev = system.farm_context.repo.get_review_case(review_id)
+    if not rev:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review case not found.")
+    if user.role == UserRole.AGRONOMIST:
+        profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Expert profile not found.")
+        if rev.get("assigned_expert_id") and rev["assigned_expert_id"] != profile.expert_id:
+            if rev.get("secondary_expert_id") != profile.expert_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Case is assigned to another expert.")
     return system.farm_context.repo.list_recommendation_versions(review_id)
 
 
@@ -1692,6 +1726,22 @@ def add_review_comment(
     user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST, UserRole.ADMINISTRATOR, UserRole.FIELD_OFFICER])),
 ):
     """Add a collaboration comment to the review timeline."""
+    rev = system.farm_context.repo.get_review_case(review_id)
+    if not rev:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review case not found.")
+    if user.role == UserRole.AGRONOMIST:
+        profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Expert profile not found.")
+        if rev.get("assigned_expert_id") and rev["assigned_expert_id"] != profile.expert_id:
+            if rev.get("secondary_expert_id") != profile.expert_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Case is assigned to another expert.")
+    elif user.role == UserRole.FIELD_OFFICER:
+        advisory = system.farm_context.repo.get_advisory_case(rev["case_id"])
+        officer = system.farm_context.repo.get_field_officer(user.user_id)
+        if officer and officer.assigned_districts and advisory and advisory.district not in officer.assigned_districts:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Case is outside assigned territory.")
+
     import uuid
     comment = ExpertReviewComment(
         comment_id=f"cmt_{uuid.uuid4().hex[:12]}",
@@ -1711,6 +1761,22 @@ def list_review_comments(
     user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST, UserRole.ADMINISTRATOR, UserRole.FIELD_OFFICER])),
 ):
     """List chronological collaboration comments for a case."""
+    rev = system.farm_context.repo.get_review_case(review_id)
+    if not rev:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review case not found.")
+    if user.role == UserRole.AGRONOMIST:
+        profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Expert profile not found.")
+        if rev.get("assigned_expert_id") and rev["assigned_expert_id"] != profile.expert_id:
+            if rev.get("secondary_expert_id") != profile.expert_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Case is assigned to another expert.")
+    elif user.role == UserRole.FIELD_OFFICER:
+        advisory = system.farm_context.repo.get_advisory_case(rev["case_id"])
+        officer = system.farm_context.repo.get_field_officer(user.user_id)
+        if officer and officer.assigned_districts and advisory and advisory.district not in officer.assigned_districts:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Case is outside assigned territory.")
+
     return system.farm_context.repo.list_review_comments(review_id)
 
 
@@ -1720,6 +1786,15 @@ def get_farmer_verification_badge(
     user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.FIELD_OFFICER, UserRole.AGRONOMIST, UserRole.ADMINISTRATOR])),
 ):
     """Retrieve farmer verification badge, accredited provenance, and audio scripts."""
+    advisory = system.farm_context.repo.get_advisory_case(case_id)
+    if not advisory:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Advisory case not found.")
+
+    if user.role == UserRole.FARMER:
+        fmr_prof = system.farm_context.repo.get_farmer_profile_by_user_id(user.user_id)
+        if not fmr_prof or advisory.farmer_id != fmr_prof.farmer_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied: Cannot access another farmer's verification badge.")
+
     try:
         return system.expert_review_service.get_farmer_verification_badge(case_id)
     except ValueError as e:

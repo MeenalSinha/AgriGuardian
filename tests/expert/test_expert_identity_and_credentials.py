@@ -106,3 +106,4 @@ def test_expert_profile_lifecycle_and_credentials(expert_repo):
     by_user = expert_repo.get_expert_profile_by_user_id("usr_agro_01")
     assert by_user is not None
     assert by_user.expert_id == "exp_01"
+

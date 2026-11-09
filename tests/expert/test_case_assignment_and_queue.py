@@ -183,3 +183,4 @@ def test_case_claiming_lifecycle(assignment_setup):
 
     updated_exp = repo.get_expert_profile("exp_wheat")
     assert updated_exp.active_caseload == initial_load + 1
+

@@ -13,15 +13,18 @@ from backend.app.main import (
     claim_case,
     get_case_dossier,
     get_current_user_auth,
+    get_farmer_verification_badge,
     get_my_expert_profile,
     list_experts,
     list_review_cases,
     require_roles,
     submit_expert_decision,
+    submit_secondary_review,
     system,
 )
 from backend.app.repositories.farm_db import FarmDatabaseRepository
 from backend.app.schemas.expert import (
+    CaseReviewStatus,
     ExpertAccountStatus,
     ExpertDecisionSubmission,
     ExpertProfile,
@@ -31,6 +34,7 @@ from backend.app.schemas.expert import (
     ExpertVerificationAction,
     DiagnosisDecision,
     RecommendationDecision,
+    SecondaryReviewSubmission,
 )
 from backend.app.schemas.farm import UserRecord, UserRegistrationRequest, UserRole
 
@@ -193,3 +197,159 @@ def test_agronomist_retrieves_own_profile(rbac_fixture):
     profile = get_my_expert_profile(user=expert)
     assert profile.full_name == "Dr. Security Expert"
     assert profile.institution == "ICAR-IARI"
+
+
+def test_farmer_cannot_access_another_farmer_badge(rbac_fixture):
+    """Verify object-level authorization prevents Farmer A from accessing Farmer B's case badge."""
+    repo = rbac_fixture["repo"]
+    farmer = rbac_fixture["farmer"]
+
+    # Create case belonging to a different farmer
+    other_case = repo.create_advisory_case(
+        farmer_name="Other Farmer",
+        crop="Wheat",
+        farmer_id="fmr_different_999",
+        advisory_en="Test advisory",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_farmer_verification_badge(case_id=other_case.case_id, user=farmer)
+    assert exc_info.value.status_code == 403
+    assert "Cannot access another farmer's verification badge" in exc_info.value.detail
+
+
+def test_agronomist_cannot_access_other_agronomist_assigned_dossier(rbac_fixture):
+    """Verify agronomist cannot inspect cases assigned to another expert."""
+    repo = rbac_fixture["repo"]
+    expert = rbac_fixture["expert"]
+
+    # Provision another expert user and profile
+    u_other, _ = auth_service.provision_privileged_user("expert_other_sec", "Pass123!", UserRole.AGRONOMIST)
+    other_prof = ExpertProfile(
+        expert_id="exp_other_agronomist",
+        user_id=u_other.user_id,
+        full_name="Dr. Other Agronomist",
+        institution="ICAR-CSSRI",
+        designation="Scientist",
+        specializations=ExpertSpecializationItem(
+            crop_types=["Wheat"],
+            domains=[ExpertSpecializationDomain.PLANT_PATHOLOGY],
+            states=["Haryana"],
+        ),
+        verification_status=ExpertAccountStatus.ACTIVE_VERIFIED,
+    )
+    repo.create_expert_profile(other_prof)
+
+    # Create advisory case and assign it to someone else
+    case = repo.create_advisory_case(
+        farmer_name="Ramesh Kumar",
+        crop="Wheat",
+        advisory_en="Test advisory",
+    )
+    repo.create_review_case(
+        case_id=case.case_id,
+        priority="high",
+        eligibility="eligible",
+        assigned_expert_id=other_prof.expert_id,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_case_dossier(case_id=case.case_id, user=expert)
+    assert exc_info.value.status_code == 403
+    assert "Case is assigned to another expert" in exc_info.value.detail
+
+
+def test_secondary_review_assignment_bypass_prevented(rbac_fixture):
+    """Verify agronomist cannot submit secondary review without assignment or if self-reviewing."""
+    repo = rbac_fixture["repo"]
+    expert_prof = rbac_fixture["expert_profile"]
+
+    case = repo.create_advisory_case(
+        farmer_name="Ramesh Kumar",
+        crop="Wheat",
+        advisory_en="Test advisory",
+    )
+    rev_id = repo.create_review_case(
+        case_id=case.case_id,
+        priority="high",
+        eligibility="eligible",
+        requires_dual_review=True,
+        assigned_expert_id=expert_prof.expert_id,
+    )
+    repo.update_review_case(rev_id, {"status": CaseReviewStatus.SECONDARY_REVIEW_REQUIRED.value})
+
+    sec_sub = SecondaryReviewSubmission(
+        review_id=rev_id,
+        approved=True,
+        secondary_notes="Attempted bypass approval",
+    )
+
+    # 1. Fails when secondary reviewer is not yet assigned
+    with pytest.raises(ValueError) as exc1:
+        system.expert_review_service.submit_secondary_review(sec_sub, expert_prof.expert_id)
+    assert "Secondary expert has not been assigned" in str(exc1.value)
+
+    # 2. Fails when primary reviewer tries to review their own case
+    repo.update_review_case(rev_id, {"secondary_expert_id": expert_prof.expert_id})
+    with pytest.raises(PermissionError) as exc2:
+        system.expert_review_service.submit_secondary_review(sec_sub, expert_prof.expert_id)
+    assert "Primary reviewer cannot perform their own secondary review" in str(exc2.value)
+
+
+def test_atomic_case_claiming_prevents_double_claim(rbac_fixture):
+    """Verify that multiple agronomists claiming the same review case is atomic."""
+    repo = rbac_fixture["repo"]
+
+    for exp_id in ["exp_first", "exp_second"]:
+        u, _ = auth_service.provision_privileged_user(f"usr_{exp_id}", "Pass123!", UserRole.AGRONOMIST)
+        repo.create_expert_profile(
+            ExpertProfile(
+                expert_id=exp_id,
+                user_id=u.user_id,
+                full_name=f"Expert {exp_id}",
+                institution="ICAR",
+                designation="Agronomist",
+                specializations=ExpertSpecializationItem(
+                    crop_types=["Rice"],
+                    domains=[ExpertSpecializationDomain.AGRONOMY],
+                    states=["Punjab"],
+                ),
+                verification_status=ExpertAccountStatus.ACTIVE_VERIFIED,
+            )
+        )
+
+    case = repo.create_advisory_case(
+        farmer_name="Sita Devi",
+        crop="Rice",
+        advisory_en="Initial advice",
+    )
+    rev_id = repo.create_review_case(
+        case_id=case.case_id,
+        priority="medium",
+        eligibility="eligible",
+    )
+
+    # First claim succeeds
+    claimed_1 = repo.claim_review_case(rev_id, "exp_first")
+    assert claimed_1 is True
+
+    # Second claim fails atomically
+    claimed_2 = repo.claim_review_case(rev_id, "exp_second")
+    assert claimed_2 is False
+
+
+def test_dossier_no_fabricated_fallback_values(rbac_fixture):
+    """Verify case dossier does not inject fake AI disease, confidence, weather, or dummy facts."""
+    repo = rbac_fixture["repo"]
+    case = repo.create_advisory_case(
+        farmer_name="Kisan Singh",
+        crop="Mustard",
+        advisory_en="General scouting recommended.",
+        # image_analysis and weather_summary intentionally omitted
+    )
+
+    dossier = system.expert_review_service.build_case_dossier(case.case_id)
+    assert dossier.ai_primary_disease is None
+    assert dossier.ai_confidence is None
+    assert dossier.weather_summary == "Weather data not recorded for this case."
+    assert "Suspected Blight" not in str(dossier.original_ai_recommendation)

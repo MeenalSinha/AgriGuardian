@@ -2181,7 +2181,7 @@ class FarmDatabaseRepository:
         case_id: str,
         priority: str,
         eligibility: str,
-        trigger_reasons: List[str],
+        trigger_reasons: Optional[List[str]] = None,
         requires_dual_review: bool = False,
         sla_deadline: Optional[str] = None,
         assigned_expert_id: Optional[str] = None,
@@ -2189,7 +2189,7 @@ class FarmDatabaseRepository:
         """Route an advisory case to the expert review queue."""
         review_id = f"rev_{uuid.uuid4().hex[:12]}"
         now_str = datetime.now().isoformat()
-        triggers_json = json.dumps(trigger_reasons)
+        triggers_json = json.dumps(trigger_reasons or [])
 
         with self.get_connection() as conn:
             conn.execute(
@@ -2298,7 +2298,7 @@ class FarmDatabaseRepository:
                 """
                 UPDATE expert_review_cases
                 SET assigned_expert_id = ?, status = 'claimed', claimed_at = ?, updated_at = ?
-                WHERE review_id = ? AND (assigned_expert_id IS NULL OR status = 'queued');
+                WHERE review_id = ? AND assigned_expert_id IS NULL AND status = 'queued';
                 """,
                 (expert_id, now_str, now_str, review_id),
             )

@@ -230,3 +230,4 @@ def test_high_risk_chemical_routes_to_secondary_dual_review(workflow_setup):
     # Finalized badge
     badge = service.get_farmer_verification_badge(case_id)
     assert badge.badge == FarmerBadgeStatus.EXPERT_VERIFIED
+

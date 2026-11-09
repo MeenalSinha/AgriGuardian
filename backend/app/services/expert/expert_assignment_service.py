@@ -98,3 +98,4 @@ class ExpertAssignmentService:
         score *= (expert.accuracy_rating / 5.0)
 
         return max(score, 0.0)
+

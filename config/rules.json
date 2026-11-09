@@ -1,0 +1,73 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-11-09T12:25:39.504511",
+  "rules": [
+    {
+      "id": "FUNGAL_001",
+      "name": "Fungal Risk - Yellowing + Rain",
+      "category": "disease",
+      "risk_level": "High",
+      "conditions": {
+        "symptoms_keywords": [
+          "yellow",
+          "yellowing"
+        ],
+        "weather_conditions": {
+          "rain_recent": true
+        }
+      },
+      "suggestion": "Possible fungal infection due to moisture. Apply fungicide and improve drainage.",
+      "active": true
+    },
+    {
+      "id": "WATER_001",
+      "name": "Water Stress - Wilting + High Temp",
+      "category": "environmental",
+      "risk_level": "High",
+      "conditions": {
+        "symptoms_keywords": [
+          "wilt",
+          "drooping"
+        ],
+        "weather_conditions": {
+          "temp_high": true
+        }
+      },
+      "suggestion": "Water stress detected. Increase irrigation immediately and add mulch.",
+      "active": true
+    },
+    {
+      "id": "DISEASE_001",
+      "name": "Leaf Spot Disease",
+      "category": "disease",
+      "risk_level": "Medium",
+      "conditions": {
+        "symptoms_keywords": [
+          "spot",
+          "spots"
+        ],
+        "symptoms_keywords_additional": [
+          "brown",
+          "black"
+        ]
+      },
+      "suggestion": "Leaf spot disease suspected. Remove affected leaves and monitor closely.",
+      "active": true
+    },
+    {
+      "id": "PEST_001",
+      "name": "Pest Infestation",
+      "category": "pest",
+      "risk_level": "Medium",
+      "conditions": {
+        "symptoms_keywords": [
+          "pest",
+          "insect",
+          "holes"
+        ]
+      },
+      "suggestion": "Pest infestation detected. Apply neem oil or appropriate bio-pesticide.",
+      "active": true
+    }
+  ]
+}

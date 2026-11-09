@@ -1,0 +1,109 @@
+{
+  "version": "1.0",
+  "source": "ICAR & State Agricultural Universities Benchmark Guidelines",
+  "crops": {
+    "wheat": {
+      "name": "Wheat (गेहूं)",
+      "season": "Rabi",
+      "sowing_window": "November 1 - November 25",
+      "soil_type": "Well-drained fertile loamy soil (pH 6.0-7.5)",
+      "critical_irrigation_stages": [
+        "Crown Root Initiation (CRI) - 20-25 days after sowing",
+        "Tillering stage - 40-45 days after sowing",
+        "Jointing stage - 60-65 days after sowing",
+        "Flowering stage - 80-85 days after sowing",
+        "Milking / Grain filling stage - 100-105 days after sowing"
+      ],
+      "common_diseases": [
+        {
+          "name": "Yellow Rust (Puccinia striiformis)",
+          "symptoms": "Yellow stripes on leaf blades forming powdery pustules",
+          "favorable_weather": "Cool humid weather, temperatures 10-15°C with dew or intermittent rain",
+          "remedy": "Foliar spray of Propiconazole 25 EC @ 1ml/L or bio-agent Trichoderma harzianum."
+        },
+        {
+          "name": "Karnal Bunt",
+          "symptoms": "Black powdery grains with fishy odor",
+          "favorable_weather": "Cloudy weather and light rainfall at flowering stage",
+          "remedy": "Use certified disease-free seeds; seed treatment with Thiram @ 2.5g/kg."
+        }
+      ]
+    },
+    "rice": {
+      "name": "Rice / Paddy (धान)",
+      "season": "Kharif",
+      "sowing_window": "May - July (Nursery), June - July (Transplanting)",
+      "soil_type": "Clayey loam, alluvial with good water holding capacity",
+      "critical_irrigation_stages": [
+        "Panicle Initiation",
+        "Booting stage",
+        "Flowering stage",
+        "Grain filling stage"
+      ],
+      "common_diseases": [
+        {
+          "name": "Bacterial Leaf Blight (Xanthomonas oryzae)",
+          "symptoms": "Water-soaked lesions on leaf margins turning yellow-white with wavy edges",
+          "favorable_weather": "Temperatures 25-34°C with relative humidity > 70% and gusty winds",
+          "remedy": "Drain excess water; spray copper hydroxide + agrimycin or Pseudomonas fluorescens @ 5g/L."
+        },
+        {
+          "name": "Blast (Magnaporthe oryzae)",
+          "symptoms": "Spindle-shaped spots with grey-white center and brown margins on leaves and neck",
+          "favorable_weather": "Night temperature 20-22°C with high relative humidity (>90%)",
+          "remedy": "Avoid excess nitrogen fertilizer; foliar spray of Tricyclazole 75 WP @ 0.6g/L."
+        }
+      ]
+    },
+    "tomato": {
+      "name": "Tomato (टमाटर)",
+      "season": "Kharif, Rabi, and Summer",
+      "sowing_window": "Year-round depending on region (June-July, Oct-Nov, Jan-Feb)",
+      "soil_type": "Well-drained sandy loam rich in organic matter (pH 6.0-7.0)",
+      "critical_irrigation_stages": [
+        "Vegetative growth stage",
+        "Flowering stage",
+        "Fruit setting and enlargement stage"
+      ],
+      "common_diseases": [
+        {
+          "name": "Early Blight (Alternaria solani)",
+          "symptoms": "Target-like concentric brown spots on older lower leaves, leaf yellowing and drop",
+          "favorable_weather": "Warm humid conditions (24-29°C) with alternating wet and dry periods",
+          "remedy": "Remove infected lower leaves; spray Mancozeb 75 WP @ 2g/L or copper oxychloride."
+        },
+        {
+          "name": "Leaf Curl Virus (ToLCV)",
+          "symptoms": "Severe curling, puckering, reduction of leaf size and stunted bushy growth",
+          "favorable_weather": "Hot and dry conditions favoring whitefly (Bemisia tabaci) vector propagation",
+          "remedy": "Install yellow sticky traps (15-20 traps/acre); spray neem oil 1500 ppm @ 3ml/L to manage whiteflies."
+        }
+      ]
+    },
+    "cotton": {
+      "name": "Cotton (कपास)",
+      "season": "Kharif",
+      "sowing_window": "April - May (North India), June - July (Central/South India)",
+      "soil_type": "Deep black cotton soils (regur) with good water retention (pH 7.0-8.5)",
+      "critical_irrigation_stages": [
+        "Squaring stage",
+        "Flowering stage",
+        "Boll development stage"
+      ],
+      "common_diseases": [
+        {
+          "name": "Bacterial Blight / Angular Leaf Spot (Xanthomonas citri pv. malvacearum)",
+          "symptoms": "Angular water-soaked spots bounded by veins on leaves, turning reddish-brown",
+          "favorable_weather": "Temperatures 30-35°C with high humidity and rainstorms",
+          "remedy": "Seed treatment with Streptocycline; foliar spray with Copper Oxychloride 50 WP @ 2.5g/L."
+        },
+        {
+          "name": "Pink Bollworm Infestation",
+          "symptoms": "Rosetted flowers, bored bolls with stained lint and premature dropping",
+          "favorable_weather": "Late season humid conditions",
+          "remedy": "Deploy pheromone traps (5/acre for monitoring, 15/acre for mass trapping); release Trichogramma chilonis."
+        }
+      ]
+    }
+  }
+}

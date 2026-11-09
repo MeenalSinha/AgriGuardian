@@ -1,0 +1,199 @@
+"""Voice & Text Conversation Engine orchestrating Gnani AI and Agricultural Intelligence."""
+
+import os
+import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+from backend.app.core.config import Settings, get_settings, SUPPORTED_LANGUAGES
+from backend.app.core.exceptions import (
+    GnaniAPIError,
+    GnaniAuthError,
+    GnaniSpeechSynthesisError,
+    GnaniTranscriptionError,
+)
+from backend.app.core.logging import get_logger
+from backend.app.integrations.gnani.prisma_stt import GnaniPrismaClient
+from backend.app.integrations.gnani.timbre_tts import GnaniTimbreClient
+from backend.app.schemas.conversation import ConversationSession, ConversationTurn
+from backend.app.schemas.speech import TranscriptionResult, SpeechSynthesisResult
+from backend.app.services.advisory.orchestrator import AgriGuardianSystem
+
+logger = get_logger("ConversationEngine")
+
+
+class ConversationEngine:
+    """Orchestrates end-to-end voice conversations: Prisma STT -> Contextual Reasoning -> Timbre TTS."""
+
+    def __init__(
+        self,
+        system: Optional[AgriGuardianSystem] = None,
+        settings: Optional[Settings] = None,
+    ):
+        self.settings = settings or get_settings()
+        self.system = system or AgriGuardianSystem(settings=self.settings)
+
+        # Initialize Gnani clients
+        self.prisma_client = GnaniPrismaClient(settings=self.settings)
+        self.timbre_client = GnaniTimbreClient(settings=self.settings)
+
+    def transcribe_audio(
+        self,
+        audio_file_path: str,
+        language_code: Optional[str] = None,
+    ) -> TranscriptionResult:
+        """Transcribe farmer audio question using Gnani Prisma v2.5."""
+        lang = language_code or self.settings.gnani_prisma_default_language
+        logger.info(f"Submitting audio ({audio_file_path}) to Gnani Prisma v2.5 in language {lang}")
+        return self.prisma_client.transcribe(audio_file_path=audio_file_path, language_code=lang)
+
+    def classify_intent(self, query: str) -> str:
+        """Classify farmer query intent to route context appropriately."""
+        q = query.lower()
+
+        disease_keywords = [
+            "spot", "spots", "yellow", "yellowing", "wilt", "wilting", "disease", "insect", "insects",
+            "pest", "pests", "rot", "blight", "fungus", "caterpillar", "bug", "bugs",
+            "कीड़ा", "कीड़े", "कीट", "रोग", "बीमारी", "पीला", "पीले", "पीली", "धब्बा", "धब्बे",
+            "पत्ती", "पत्ते", "पत्तों", "सड़न", "झुलसा", "फफूंद"
+        ]
+        weather_keywords = [
+            "weather", "rain", "rainfall", "temperature", "forecast", "humidity", "irrigate", "irrigation",
+            "मौसम", "बारिश", "तापमान", "वर्षा", "पानी", "सिंचाई", "ओले", "कोहरा"
+        ]
+        market_keywords = [
+            "price", "market", "mandi", "rate", "cost", "sell", "selling", "bhav",
+            "भाव", "दाम", "मंडी", "कीमत", "बिक्री", "रुपये", "खरीद"
+        ]
+
+        if any(w in q for w in disease_keywords):
+            return "disease"
+        if any(w in q for w in weather_keywords):
+            return "weather"
+        if any(w in q for w in market_keywords):
+            return "market"
+        return "general_agronomy"
+
+    def process_turn(
+        self,
+        session: ConversationSession,
+        user_query: str,
+        input_type: str = "voice",
+        original_transcript: Optional[str] = None,
+        crop: Optional[str] = None,
+        location: Optional[str] = None,
+        lat: Optional[float] = None,
+        lon: Optional[float] = None,
+        synthesize_voice: bool = True,
+    ) -> Tuple[ConversationTurn, Optional[SpeechSynthesisResult]]:
+        """Process a confirmed farmer turn, invoke agricultural reasoning, and synthesize speech.
+
+        Args:
+            session: Active multi-turn conversation session.
+            user_query: Confirmed farmer question text.
+            input_type: 'voice' or 'text'.
+            original_transcript: Pre-edited transcript (if voice input).
+            crop: Mentioned crop name (e.g. 'Tomato').
+            location: Mentioned location (e.g. 'Meerut').
+            lat: Farm latitude.
+            lon: Farm longitude.
+            synthesize_voice: Whether to generate spoken audio via Gnani Timbre.
+
+        Returns:
+            Tuple of (ConversationTurn, SpeechSynthesisResult or None).
+        """
+        turn_id = str(uuid.uuid4())
+        lang = session.language or self.settings.gnani_timbre_default_language
+        intent = self.classify_intent(user_query)
+
+        effective_crop = crop or session.crop or "Crop"
+        effective_location = location or session.location or self.settings.default_location_name
+
+        logger.info(f"Processing turn #{len(session.turns) + 1} for session {session.session_id} (Intent: {intent}, Lang: {lang})")
+
+        # 1. Fetch relevant environmental context
+        weather = self.system.weather_service.get_weather(lat=lat, lon=lon, location_name=effective_location)
+        market = self.system.market_service.get_market_data(crop=effective_crop)
+        rule_eval = self.system.rule_engine.evaluate(user_query, weather.model_dump())
+
+        # 2. Generate agricultural guidance using LLMAdvisor with conversation context
+        history = session.get_conversation_history(limit=4)
+        advisory = self.system.llm_advisor.generate_advisory(
+            crop=effective_crop,
+            symptoms=user_query,
+            weather=weather.model_dump(),
+            market=market.model_dump(),
+            rule_results=rule_eval,
+            farmer_name=session.farmer_name,
+            conversation_history=history,
+        )
+
+        # 3. Select response text matching farmer's preferred language
+        is_hindi = lang.startswith("hi")
+        response_text = advisory.get("advisory_hi" if is_hindi else "advisory_en")
+        if not response_text:
+            response_text = advisory.get("advisory_en") or advisory.get("advisory_hi", "Advisory provided.")
+
+        # Append action plan steps to spoken/written output for completeness
+        steps = advisory.get("three_step_plan", [])
+        if steps:
+            steps_text = "\n".join([f"{i}. {s}" for i, s in enumerate(steps, 1)])
+            full_response_text = f"{response_text}\n\n**Action Plan:**\n{steps_text}"
+        else:
+            full_response_text = response_text
+
+        # 4. Generate speech using Gnani Timbre v2.5 if requested
+        tts_result: Optional[SpeechSynthesisResult] = None
+        audio_path: Optional[str] = None
+
+        if synthesize_voice and self.settings.is_gnani_configured:
+            try:
+                # Synthesize the core advice text (avoiding markdown asterisks in spoken voice)
+                tts_result = self.timbre_client.synthesize(
+                    text=response_text,
+                    language_code=lang,
+                )
+                if tts_result.success and tts_result.audio_file_path:
+                    audio_path = tts_result.audio_file_path
+            except Exception as e:
+                logger.warning(f"Timbre speech synthesis failed ({e}). Text response remains available.")
+                tts_result = SpeechSynthesisResult(
+                    success=False,
+                    voice=self.timbre_client.get_recommended_voice(lang),
+                    language_code=lang,
+                    model=self.settings.gnani_timbre_model,
+                    error=str(e),
+                )
+        elif synthesize_voice and not self.settings.is_gnani_configured:
+            logger.info("Gnani credentials not configured. Skipping Timbre speech synthesis.")
+            tts_result = SpeechSynthesisResult(
+                success=False,
+                voice=self.timbre_client.get_recommended_voice(lang),
+                language_code=lang,
+                model=self.settings.gnani_timbre_model,
+                error="Gnani API key not configured. Spoken audio generation is unavailable.",
+            )
+
+        # 5. Create structured Turn record
+        turn = ConversationTurn(
+            turn_id=turn_id,
+            role="user",
+            input_type="voice" if input_type == "voice" else "text",
+            original_transcript=original_transcript,
+            confirmed_text=user_query,
+            response_text=full_response_text,
+            language=lang,
+            intent=intent,
+            speech_provider="Gnani Timbre" if audio_path else None,
+            speech_model=self.settings.gnani_timbre_model if audio_path else None,
+            audio_available=bool(audio_path),
+            audio_file_path=audio_path,
+            context_used={
+                "risk": advisory.get("risk"),
+                "weather": weather.summary,
+                "market": market.summary,
+                "field_visit_required": advisory.get("field_visit_required", False),
+            },
+        )
+
+        session.add_turn(turn)
+        return turn, tts_result

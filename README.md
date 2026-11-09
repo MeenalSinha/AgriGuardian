@@ -1,181 +1,126 @@
-# 🌾 AgriGuardian – AI-Powered Agricultural Intelligence System
+# 🌾 AgriGuardian — Intelligent Agricultural Companion
 
-**AgriGuardian** is an AI-powered agricultural assistant designed to empower farmers with early crop disease detection, real-time health monitoring, and multilingual voice-based recommendations.  
-Built using **Streamlit, OpenAI, Firebase, TensorFlow, and gTTS**, it bridges the gap between cutting-edge AI and accessible farming technology for sustainable agriculture.
+**AgriGuardian** is an AI-powered agricultural intelligence platform designed to help Indian farmers make better agronomic decisions through accessible, multilingual, voice-first AI assistance.
 
----
-
-## 🚀 Overview
-
-Modern farming faces unpredictable challenges — from climate variability to late disease detection.  
-AgriGuardian helps farmers make **data-driven decisions** by analyzing crop images, predicting disease risks, and providing **personalized treatment guidance** in their **local language** through an intuitive web dashboard.
+Built with **Streamlit, Gnani AI (Prisma v2.5 STT & Timbre v2.5 TTS), Open-Meteo, Dynamic Rule Engines, and ReportLab**, AgriGuardian unites crop health diagnostics, real-time meteorological conditions, mandi price benchmarks, and conversational AI into a unified platform.
 
 ---
 
-## 🧠 Core Features
+## 🌟 Core Product Features
 
-- 🖼️ **AI-Based Crop Disease Detection**  
-  Upload crop images to detect potential diseases using a trained CNN model (PlantVillage dataset + custom field data).
+### 🎙️ Multilingual Voice Assistant (Phase 1 Powered by Gnani AI)
+* **Voice-to-Voice Interaction:** Farmers can speak their agricultural questions in their native language and receive spoken guidance.
+* **Speech-to-Text (STT):** Powered by **Gnani Prisma v2.5** (`prisma-v2.5`), converting spoken queries in regional Indic languages into accurate text.
+* **Text-to-Speech (TTS):** Powered by **Gnani Timbre v2.5** (`timbre-v2.5`), synthesizing natural speech responses in verified regional voices (such as *Nalini*, *Deepak*, *Kaveri*).
+* **10 Supported Indian Languages:** Hindi, English, Tamil, Telugu, Kannada, Malayalam, Marathi, Punjabi, Bengali, and Gujarati.
+* **Transcript Review & Correction:** Farmers can inspect, edit, or re-record transcribed questions before submission.
+* **Multi-Turn Conversation Memory:** Maintains dialog context across multiple follow-up turns.
 
-- 🔍 **Severity Analysis**  
-  Calculates disease severity scores using environmental and image-based metrics.
+### 🌿 Context-Aware Farm Advisory
+* **Micro-Climate Weather Awareness:** Integrates live forecasts from Open-Meteo (temperature, relative humidity, precipitation).
+* **Dynamic Agricultural Rule Engine:** Evaluates environmental risk factors (e.g., high humidity + yellowing = fungal risk) via configurable JSON rules.
+* **Responsible Agricultural Safety:** Avoids hallucinatory pesticide dosages; prioritizes cultural management and Krishi Vigyan Kendra (KVK) referrals.
 
-- 🌦️ **Weather-Aware Insights**  
-  Integrates real-time weather data for contextual recommendations.
+### 🔬 Crop Disease Diagnostics & Explainability
+* **Symptom & Vision Assessment:** Identifies foliar pathogens and provides actionable management steps.
+* **Salience Visualization (Grad-CAM):** Highlights critical leaf regions under diagnostic focus.
+* **Compound Severity Scoring:** Factors ambient weather into diagnostic risk assessments.
 
-- 🔊 **Multilingual Voice Output**  
-  Uses gTTS to deliver spoken recommendations in multiple regional languages.
-
-- 📊 **Interactive Dashboard**  
-  Real-time visualization of health metrics, risk heatmaps, and crop condition analytics via Streamlit.
-
-- ☁️ **Firebase Integration**  
-  Stores prediction data, logs user inputs, and enables potential future multi-user access.
-
----
-
-## 🧩 Tech Stack
-
-| Layer | Technology |
-|--------|-------------|
-| **Frontend / UI** | Streamlit |
-| **Backend / Logic** | Python, TensorFlow, OpenAI |
-| **Database** | Firebase Firestore |
-| **Voice Interface** | Google Text-to-Speech (gTTS) |
-| **Visualization** | Plotly, Folium |
-| **Data Handling** | Pandas, NumPy |
+### 📊 Field Officer Dashboard & PDF Exports
+* **Regional Outbreak Analytics:** Tracks crop health queries, risk distributions, and peak advisory hours.
+* **Case Management:** Review and update advisory statuses and agronomist field feedback.
+* **Authentic PDF Generation:** Exports complete diagnostic reports compiled via ReportLab.
 
 ---
 
-## 🏗️ System Architecture
+## 🧩 Architecture & Tech Stack
 
+```text
+AgriGuardian/
+├── backend/
+│   └── app/
+│       ├── core/               # Centralized config, structured logging, custom exceptions
+│       ├── schemas/            # Pydantic models for speech, conversations, and advisories
+│       ├── integrations/       # Provider integrations: Gnani (Prisma/Timbre), Weather, Market, LLM
+│       ├── services/           # Rule engine, disease detector, conversation engine, orchestrator
+│       └── repositories/       # CSV persistence and case history
+├── frontend/
+│   ├── components/             # Reusable UI widgets, alerts, and Folium maps
+│   └── views/                  # Voice Assistant, Farm Advisory, Dashboard, Demo Cases, About
+├── docs/                       # Project audit, architecture, configuration, and API guides
+├── tests/                      # Pytest unit and integration test suite
+├── app.py                      # Main Streamlit application entrypoint
+├── requirements.txt            # Dependency declarations
+└── .env.example                # Configuration template
 ```
-Farmer → Streamlit Interface → Preprocessing → CNN Model → Prediction & Severity Scoring
-                                     ↘ Weather API + Firebase ↙
-                          → Voice Output (gTTS) → Dashboard Visualization
-```
 
-### Architecture Layers:
-1. **Input Layer** – Handles image and data input with validation  
-2. **AI Engine** – Performs disease prediction and severity analysis  
-3. **Recommendation Engine** – Generates treatment and prevention guidance  
-4. **Visualization Layer** – Displays insights and risk maps  
-5. **Accessibility Layer** – Converts insights into audio for inclusive access  
+| Layer | Component | Description |
+|---|---|---|
+| **Presentation** | Streamlit 1.66 | Responsive, mobile-accessible farmer dashboard |
+| **Speech Recognition (STT)** | Gnani Prisma v2.5 | Automatic Speech Recognition for Indic languages |
+| **Speech Synthesis (TTS)** | Gnani Timbre v2.5 | Natural Text-to-Speech synthesis |
+| **Core Architecture** | Python 3.14 + Pydantic v2 | Typed configuration and modular services |
+| **Weather Integration** | Open-Meteo REST API | Live meteorological data and precipitation forecasts |
+| **Market Intelligence** | Agmarknet Benchmark Model | Mandi pricing trends with source transparency |
+| **Document Archival** | ReportLab 4.4 | Authentic PDF advisory report generation |
 
 ---
 
-## ⚙️ Installation & Setup
+## ⚙️ Installation & Quickstart
 
-### **1. Clone Repository**
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/username/AgriGuardian.git
 cd AgriGuardian
 ```
 
-### **2. Create Virtual Environment (optional)**
+### 2. Configure Environment Variables
+Copy `.env.example` to `.env` and set your credentials:
 ```bash
-python -m venv venv
-source venv/bin/activate      # For Linux/Mac
-venv\Scripts\activate         # For Windows
+cp .env.example .env
+```
+Key variables in `.env`:
+```env
+GNANI_API_BASE_URL=https://api.vachana.ai
+GNANI_API_KEY=your_gnani_api_key_here
+GNANI_PRISMA_MODEL=prisma-v2.5
+GNANI_TIMBRE_MODEL=timbre-v2.5
+OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-### **3. Install Dependencies**
+### 3. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### **4. Run Application**
+### 4. Run AgriGuardian
 ```bash
 streamlit run app.py
 ```
+Open your browser at `http://localhost:8501`.
 
 ---
 
-## 🧮 Key Functions
+## 🧪 Testing
 
-```python
-def predict(image):
-    img = preprocess(image)
-    result = model.predict(img)
-    return np.argmax(result)
+Execute the comprehensive test suite with `pytest`:
+```bash
+# Run all unit and pipeline tests
+python -m pytest tests -v
 
-def _calculate_severity(prob):
-    return "High" if prob > 0.7 else "Moderate" if prob > 0.4 else "Low"
-
-def multilingual_voice_player(text, lang='hi'):
-    from gtts import gTTS
-    tts = gTTS(text, lang=lang)
-    tts.save("output.mp3")
-    return "output.mp3"
+# Run with integration tests against live Gnani APIs (requires GNANI_API_KEY)
+python -m pytest tests/integration/test_gnani_live.py -v
 ```
 
 ---
 
-## 🌦️ Example Weather API Integration
-
-```python
-import requests
-
-def get_weather(lat, lon):
-    api_key = "YOUR_API_KEY"
-    url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}"
-    response = requests.get(url)
-    return response.json()
-```
-
----
-
-## ☁️ Firebase Example
-
-```python
-import firebase_admin
-from firebase_admin import credentials, firestore
-
-cred = credentials.Certificate("firebase_config.json")
-firebase_admin.initialize_app(cred)
-db = firestore.client()
-
-def save_result(crop, disease, risk):
-    db.collection("predictions").add({
-        "crop": crop,
-        "disease": disease,
-        "risk": risk
-    })
-```
-
----
-
-## 🧪 Model Details
-
-- **Dataset**: PlantVillage + field data (Punjab Agricultural Stations)
-- **Architecture**: CNN (ResNet50 pretrained)
-- **Accuracy**: 92% on validation set
-- **Average Inference Time**: ~1.2 seconds per image
-
----
-
-## 💡 Future Enhancements
-
-- 🌱 Integration of soil sensor & satellite data
-- 📱 Mobile companion app with offline voice mode
-- 🧬 Transfer learning for region-specific crop types
-- 🌍 Expanded language support
-- ✅ AI verification layer for treatment authenticity
-
----
-
-## 👩‍💻 Contributors
-
-- **Meenal Sinha** – AI Integration & Interface Design
+## 📚 Documentation Links
+* [Comprehensive Codebase Audit (`docs/PROJECT_AUDIT.md`)](file:///docs/PROJECT_AUDIT.md)
+* [System Architecture (`docs/ARCHITECTURE.md`)](file:///docs/ARCHITECTURE.md)
+* [Configuration Guide (`docs/CONFIGURATION.md`)](file:///docs/CONFIGURATION.md)
+* [API Integrations (`docs/API_INTEGRATIONS.md`)](file:///docs/API_INTEGRATIONS.md)
 
 ---
 
 ## 🪴 License
-
 This project is licensed under the MIT License.
-
----
-
-## 🌍 Vision
-
-> "AgriGuardian bridges the gap between intelligence and accessibility — bringing the power of AI to every farm, in every language."

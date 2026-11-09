@@ -1,1 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
+# Environments & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+firebase_config.json
+
+# Audio and temporary media files
+audio/
+temp/
+*.mp3
+*.wav
+*.ogg
+*.flac
+*.m4a
+
+# Reports and generated data
+reports/
+logs/
+data/*.csv
+!data/README.md
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

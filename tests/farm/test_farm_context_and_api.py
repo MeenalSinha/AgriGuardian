@@ -228,3 +228,4 @@ def test_fastapi_phase6_route_direct_invocation():
     assert ctx.is_authenticated is True
     assert ctx.active_farm.farm_id == farm.farm_id
     assert ctx.current_cycle.cycle_id == cycle.cycle_id
+

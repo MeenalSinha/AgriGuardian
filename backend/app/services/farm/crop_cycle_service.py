@@ -303,3 +303,4 @@ class CropCycleService:
         cycle.days_since_sowing = days_elapsed
         cycle.estimated_stage = estimated_stage
         return cycle
+

@@ -678,3 +678,4 @@ def render_calendar_activities_tab(farmer, farm_srv: FarmService, cycle_srv: Cro
                     )
                     st.success(f"Task '{t_title}' scheduled!")
                     st.rerun()
+

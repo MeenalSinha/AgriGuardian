@@ -68,3 +68,4 @@ class FarmerProfileService:
 
         profile.profile_completion_pct = min(100.0, round(score, 1))
         return profile
+

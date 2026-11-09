@@ -379,3 +379,4 @@ class CropCalendarService:
 
         logger.info(f"Generated {len(created_tasks)} stage tasks for cycle {cycle.cycle_id} ({cycle.current_stage.value})")
         return created_tasks
+

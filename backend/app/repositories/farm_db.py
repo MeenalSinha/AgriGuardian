@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import threading
+import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +34,11 @@ from backend.app.schemas.farm import (
     UserRecord,
     UserRole,
     WaterAvailability,
+)
+from backend.app.schemas.analytics import (
+    AdvisoryCase,
+    CaseFollowUpRecord,
+    OfficerTerritoryScope,
 )
 
 logger = get_logger("FarmDBRepository")
@@ -245,6 +251,58 @@ class FarmDatabaseRepository:
             );
             """)
 
+            # 9. Advisory Cases (Relational persistence replacing legacy CSV row indexes)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS advisory_cases (
+                case_id TEXT PRIMARY KEY,
+                farmer_id TEXT,
+                farmer_name TEXT NOT NULL,
+                farm_id TEXT,
+                crop TEXT NOT NULL,
+                location TEXT NOT NULL,
+                state TEXT,
+                district TEXT,
+                symptoms TEXT,
+                risk TEXT NOT NULL DEFAULT 'Low',
+                field_visit_required INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'pending',
+                advisory_hi TEXT,
+                advisory_en TEXT,
+                steps_json TEXT,
+                weather_summary TEXT,
+                market_summary TEXT,
+                image_analysis_json TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 10. Field Officer Territory Assignments
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS field_officer_assignments (
+                assignment_id TEXT PRIMARY KEY,
+                officer_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                state TEXT NOT NULL,
+                district TEXT NOT NULL,
+                block TEXT,
+                assigned_at TEXT NOT NULL
+            );
+            """)
+
+            # 11. Case Follow-Ups (Audit log for field visits and agronomist interactions)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS case_follow_ups (
+                follow_up_id TEXT PRIMARY KEY,
+                case_id TEXT NOT NULL REFERENCES advisory_cases(case_id) ON DELETE CASCADE,
+                officer_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                officer_name TEXT NOT NULL,
+                notes TEXT NOT NULL,
+                action_taken TEXT,
+                status_transition TEXT,
+                created_at TEXT NOT NULL
+            );
+            """)
+
             # Performance & Isolation Indexes
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_farms_farmer ON farms(farmer_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_plots_farm ON farm_plots(farm_id);")
@@ -254,6 +312,11 @@ class FarmDatabaseRepository:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cycles_farmer ON crop_cycles(farmer_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_activities_farm ON farm_activities(farm_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_activities_farmer ON farm_activities(farmer_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_cases_farmer ON advisory_cases(farmer_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_cases_dist ON advisory_cases(district);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_cases_created ON advisory_cases(created_at);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_officer_assign ON field_officer_assignments(officer_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_follow_ups_case ON case_follow_ups(case_id);")
 
         logger.info(f"Initialized FarmDatabaseRepository at {self.db_path}")
 
@@ -470,6 +533,8 @@ class FarmDatabaseRepository:
             ).fetchall()
             return [self._row_to_farm(r) for r in rows]
 
+    list_farms_by_farmer = get_farms_by_farmer
+
     def get_active_farm(self, farmer_id: str) -> Optional[Farm]:
         """Get the currently selected active farm for farmer context."""
         with self.get_connection() as conn:
@@ -633,6 +698,8 @@ class FarmDatabaseRepository:
                 (farm_id, farmer_id),
             ).fetchall()
             return [self._row_to_plot(r) for r in rows]
+
+    list_plots_by_farm = get_plots_by_farm
 
     def get_plots_by_farmer(self, farmer_id: str) -> List[Plot]:
         """List all plots across all farms owned by this farmer."""
@@ -1071,10 +1138,16 @@ class FarmDatabaseRepository:
         farm_id: str,
         farmer_id: str,
         status: Optional[str] = None,
+        pending_only: bool = False,
     ) -> List[FarmActivity]:
-        """List activities for a farm, optionally filtered by status."""
+        """List activities for a farm, optionally filtered by status or pending only."""
         with self.get_connection() as conn:
-            if status:
+            if pending_only:
+                rows = conn.execute(
+                    "SELECT * FROM farm_activities WHERE farm_id = ? AND farmer_id = ? AND status IN ('due', 'planned') ORDER BY scheduled_date ASC",
+                    (farm_id, farmer_id),
+                ).fetchall()
+            elif status:
                 rows = conn.execute(
                     "SELECT * FROM farm_activities WHERE farm_id = ? AND farmer_id = ? AND status = ? ORDER BY scheduled_date ASC",
                     (farm_id, farmer_id, status),
@@ -1085,6 +1158,8 @@ class FarmDatabaseRepository:
                     (farm_id, farmer_id),
                 ).fetchall()
             return [self._row_to_farm_activity(r) for r in rows]
+
+    list_activities_by_farm = get_activities_by_farm
 
     def get_activities_by_farmer(
         self,
@@ -1167,6 +1242,520 @@ class FarmDatabaseRepository:
             updated_at=row["updated_at"],
         )
 
+    # =========================================================================
+    # ADVISORY CASES & CASE REGISTER METHODS (Replacing Legacy CSV Row Indexes)
+    # =========================================================================
+
+    def create_advisory_case(
+        self,
+        case: Optional[AdvisoryCase] = None,
+        farmer_name: Optional[str] = None,
+        crop: Optional[str] = None,
+        location: Optional[str] = None,
+        farmer_id: Optional[str] = None,
+        farm_id: Optional[str] = None,
+        state: Optional[str] = None,
+        district: Optional[str] = None,
+        symptoms: str = "",
+        risk: str = "Low",
+        field_visit_required: bool = False,
+        status: str = "pending",
+        advisory_hi: str = "",
+        advisory_en: str = "",
+        steps: Optional[List[str]] = None,
+        weather_summary: str = "",
+        market_summary: str = "",
+        image_analysis: Optional[Dict[str, Any]] = None,
+        case_id: Optional[str] = None,
+    ) -> AdvisoryCase:
+        """Insert or replace relational advisory case with stable case_id."""
+        if case is None:
+            now_str = datetime.now().isoformat()
+            cid = case_id or f"cas_{uuid.uuid4().hex[:12]}"
+            case = AdvisoryCase(
+                case_id=cid,
+                farmer_id=farmer_id,
+                farmer_name=farmer_name or "Farmer",
+                farm_id=farm_id,
+                crop=crop or "General Crop",
+                location=location or "Territory",
+                state=state,
+                district=district,
+                symptoms=symptoms,
+                risk=risk,
+                field_visit_required=field_visit_required,
+                status=status,
+                advisory_hi=advisory_hi,
+                advisory_en=advisory_en,
+                steps=steps or [],
+                weather_summary=weather_summary,
+                market_summary=market_summary,
+                image_analysis=image_analysis,
+                created_at=now_str,
+                updated_at=now_str,
+            )
+
+        with self.get_connection() as conn:
+            steps_str = json.dumps(case.steps or [])
+            img_str = json.dumps(case.image_analysis or {})
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO advisory_cases (
+                    case_id, farmer_id, farmer_name, farm_id, crop, location,
+                    state, district, symptoms, risk, field_visit_required,
+                    status, advisory_hi, advisory_en, steps_json, weather_summary,
+                    market_summary, image_analysis_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    case.case_id,
+                    case.farmer_id,
+                    case.farmer_name,
+                    case.farm_id,
+                    case.crop,
+                    case.location,
+                    case.state,
+                    case.district,
+                    case.symptoms,
+                    case.risk,
+                    1 if case.field_visit_required else 0,
+                    case.status,
+                    case.advisory_hi,
+                    case.advisory_en,
+                    steps_str,
+                    case.weather_summary,
+                    case.market_summary,
+                    img_str,
+                    case.created_at,
+                    case.updated_at,
+                ),
+            )
+        return case
+
+    def get_advisory_case(self, case_id: str) -> Optional[AdvisoryCase]:
+        """Fetch advisory case by stable ID."""
+        with self.get_connection() as conn:
+            row = conn.execute("SELECT * FROM advisory_cases WHERE case_id = ?", (case_id,)).fetchone()
+            if not row:
+                return None
+            return self._row_to_advisory_case(row)
+
+    def list_advisory_cases_for_farmer(self, farmer_id: str, limit: int = 50) -> List[AdvisoryCase]:
+        """List advisory cases belonging to a specific farmer."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM advisory_cases WHERE farmer_id = ? ORDER BY created_at DESC LIMIT ?",
+                (farmer_id, limit),
+            ).fetchall()
+            return [self._row_to_advisory_case(r) for r in rows]
+
+    def list_advisory_cases_for_territory(
+        self,
+        districts: List[str],
+        crop: Optional[str] = None,
+        status: Optional[str] = None,
+        risk: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[AdvisoryCase]:
+        """List cases matching officer's assigned districts with optional filters."""
+        start = start_date or date_from
+        end = end_date or date_to
+        with self.get_connection() as conn:
+            query = "SELECT * FROM advisory_cases WHERE 1=1"
+            params: List[Any] = []
+
+            if districts:
+                dist_clauses = [f"LOWER(district) = ?" for _ in districts]
+                loc_clauses = [f"LOWER(location) LIKE ?" for _ in districts]
+                query += f" AND ({' OR '.join(dist_clauses + loc_clauses)})"
+                params.extend([d.lower() for d in districts])
+                params.extend([f"%{d.lower()}%" for d in districts])
+
+            if crop:
+                query += " AND LOWER(crop) = ?"
+                params.append(crop.lower())
+
+            if status:
+                query += " AND LOWER(status) = ?"
+                params.append(status.lower())
+
+            if risk:
+                query += " AND LOWER(risk) = ?"
+                params.append(risk.lower())
+
+            if start:
+                query += " AND created_at >= ?"
+                params.append(start)
+
+            if end:
+                query += " AND created_at <= ?"
+                params.append(end)
+
+            query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+
+            rows = conn.execute(query, params).fetchall()
+            return [self._row_to_advisory_case(r) for r in rows]
+
+    def count_advisory_cases_for_territory(
+        self,
+        districts: List[str],
+        crop: Optional[str] = None,
+        status: Optional[str] = None,
+        risk: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+    ) -> int:
+        """Count cases matching territory and criteria."""
+        start = start_date or date_from
+        end = end_date or date_to
+        with self.get_connection() as conn:
+            query = "SELECT COUNT(*) as cnt FROM advisory_cases WHERE 1=1"
+            params: List[Any] = []
+
+            if districts:
+                dist_clauses = [f"LOWER(district) = ?" for _ in districts]
+                loc_clauses = [f"LOWER(location) LIKE ?" for _ in districts]
+                query += f" AND ({' OR '.join(dist_clauses + loc_clauses)})"
+                params.extend([d.lower() for d in districts])
+                params.extend([f"%{d.lower()}%" for d in districts])
+
+            if crop:
+                query += " AND LOWER(crop) = ?"
+                params.append(crop.lower())
+
+            if status:
+                query += " AND LOWER(status) = ?"
+                params.append(status.lower())
+
+            if risk:
+                query += " AND LOWER(risk) = ?"
+                params.append(risk.lower())
+
+            if start:
+                query += " AND created_at >= ?"
+                params.append(start)
+
+            if end:
+                query += " AND created_at <= ?"
+                params.append(end)
+
+            row = conn.execute(query, params).fetchone()
+            return row["cnt"] if row else 0
+
+    def update_advisory_case_status(
+        self,
+        case_id: str,
+        status: Optional[str] = None,
+        new_status: Optional[str] = None,
+    ) -> bool:
+        """Update case workflow status."""
+        target_status = status or new_status
+        if not target_status:
+            raise ValueError("Must provide either status or new_status.")
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE advisory_cases SET status = ?, updated_at = ? WHERE case_id = ?",
+                (target_status, datetime.now().isoformat(), case_id),
+            )
+            return cursor.rowcount > 0
+
+    def create_case_follow_up(
+        self,
+        follow_up: Optional[CaseFollowUpRecord] = None,
+        case_id: Optional[str] = None,
+        officer_id: Optional[str] = None,
+        officer_name: Optional[str] = None,
+        notes: Optional[str] = None,
+        action_taken: Optional[str] = None,
+        status_transition: Optional[str] = None,
+    ) -> CaseFollowUpRecord:
+        """Add an audit log entry for a field officer follow-up visit."""
+        if follow_up is None:
+            if not case_id or not officer_id:
+                raise ValueError("Must provide either follow_up or case_id and officer_id.")
+            follow_up = CaseFollowUpRecord(
+                follow_up_id=f"flw_{uuid.uuid4().hex[:12]}",
+                case_id=case_id,
+                officer_id=officer_id,
+                officer_name=officer_name or "Field Officer",
+                notes=notes or "",
+                action_taken=action_taken,
+                status_transition=status_transition,
+                created_at=datetime.now().isoformat(),
+            )
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO case_follow_ups (
+                    follow_up_id, case_id, officer_id, officer_name, notes, action_taken, status_transition, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    follow_up.follow_up_id,
+                    follow_up.case_id,
+                    follow_up.officer_id,
+                    follow_up.officer_name,
+                    follow_up.notes,
+                    follow_up.action_taken,
+                    follow_up.status_transition,
+                    follow_up.created_at,
+                ),
+            )
+            if follow_up.status_transition:
+                conn.execute(
+                    "UPDATE advisory_cases SET status = ?, updated_at = ? WHERE case_id = ?",
+                    (follow_up.status_transition, datetime.now().isoformat(), follow_up.case_id),
+                )
+        return follow_up
+
+    def list_case_follow_ups(self, case_id: str) -> List[CaseFollowUpRecord]:
+        """List all follow-up notes and actions for a case."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM case_follow_ups WHERE case_id = ? ORDER BY created_at ASC",
+                (case_id,),
+            ).fetchall()
+            return [
+                CaseFollowUpRecord(
+                    follow_up_id=r["follow_up_id"],
+                    case_id=r["case_id"],
+                    officer_id=r["officer_id"],
+                    officer_name=r["officer_name"],
+                    notes=r["notes"],
+                    action_taken=r["action_taken"],
+                    status_transition=r["status_transition"],
+                    created_at=r["created_at"],
+                )
+                for r in rows
+            ]
+
+    # =========================================================================
+    # FIELD OFFICER ASSIGNMENT METHODS
+    # =========================================================================
+
+    def assign_field_officer_territory(
+        self,
+        assignment: Optional[OfficerTerritoryScope] = None,
+        officer_id: Optional[str] = None,
+        state: Optional[str] = None,
+        district: Optional[str] = None,
+        block: Optional[str] = None,
+    ) -> OfficerTerritoryScope:
+        """Assign an administrative territory to a field officer."""
+        if assignment is None:
+            if not officer_id or not state or not district:
+                raise ValueError("Must provide either assignment or officer_id, state, and district.")
+            assignment = OfficerTerritoryScope(
+                assignment_id=f"asg_{uuid.uuid4().hex[:12]}",
+                officer_id=officer_id,
+                state=state,
+                district=district,
+                block=block,
+                assigned_at=datetime.now().isoformat(),
+            )
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO field_officer_assignments (assignment_id, officer_id, state, district, block, assigned_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    assignment.assignment_id,
+                    assignment.officer_id,
+                    assignment.state,
+                    assignment.district,
+                    assignment.block,
+                    assignment.assigned_at,
+                ),
+            )
+        return assignment
+
+    def get_field_officer_territory(self, officer_id: str) -> List[OfficerTerritoryScope]:
+        """Fetch all assigned territories for a field officer."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM field_officer_assignments WHERE officer_id = ? ORDER BY assigned_at ASC",
+                (officer_id,),
+            ).fetchall()
+            return [
+                OfficerTerritoryScope(
+                    assignment_id=r["assignment_id"],
+                    officer_id=r["officer_id"],
+                    state=r["state"],
+                    district=r["district"],
+                    block=r["block"],
+                    assigned_at=r["assigned_at"],
+                )
+                for r in rows
+            ]
+
+    def remove_field_officer_territory(self, assignment_id: str) -> bool:
+        """Remove a territory assignment."""
+        with self.get_connection() as conn:
+            cursor = conn.execute("DELETE FROM field_officer_assignments WHERE assignment_id = ?", (assignment_id,))
+            return cursor.rowcount > 0
+
+    # =========================================================================
+    # PLATFORM OPERATIONAL AGGREGATIONS (Admin Dashboard)
+    # =========================================================================
+
+    def get_platform_user_counts(self) -> Dict[str, int]:
+        """Count users grouped by role."""
+        with self.get_connection() as conn:
+            rows = conn.execute("SELECT role, COUNT(*) as cnt FROM users GROUP BY role").fetchall()
+            result = {"total": 0, "farmer": 0, "field_officer": 0, "agronomist": 0, "administrator": 0}
+            total = 0
+            for r in rows:
+                role_val = r["role"]
+                cnt = r["cnt"]
+                total += cnt
+                if role_val in result:
+                    result[role_val] = cnt
+            result["total"] = total
+            return result
+
+    def get_active_users_count_30d(self) -> int:
+        """Count users who have logged in within the past 30 days."""
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(days=30)).isoformat()
+        with self.get_connection() as conn:
+            row = conn.execute("SELECT COUNT(*) as cnt FROM users WHERE last_login >= ?", (cutoff,)).fetchone()
+            return row["cnt"] if row else 0
+
+    def get_platform_total_farms(self) -> int:
+        """Total farms registered across all farmers."""
+        with self.get_connection() as conn:
+            row = conn.execute("SELECT COUNT(*) as cnt FROM farms").fetchone()
+            return row["cnt"] if row else 0
+
+    def get_platform_total_crops(self) -> int:
+        """Total active crop cycles across all farms."""
+        with self.get_connection() as conn:
+            row = conn.execute("SELECT COUNT(*) as cnt FROM crop_cycles WHERE status = 'active'").fetchone()
+            return row["cnt"] if row else 0
+
+    # =========================================================================
+    # HISTORICAL CSV ADVISORY MIGRATION
+    # =========================================================================
+
+    def migrate_csv_advisories_to_db(self, csv_path: str = "data/advisories.csv") -> int:
+        """Migrate legacy CSV advisories into relational advisory_cases table with stable IDs."""
+        if not os.path.exists(csv_path):
+            return 0
+
+        try:
+            import pandas as pd
+            df = pd.read_csv(csv_path)
+            if df.empty:
+                return 0
+
+            imported = 0
+            with self.get_connection() as conn:
+                for idx, row in df.iterrows():
+                    ts = str(row.get("timestamp", datetime.now().isoformat()))
+                    case_id = f"cas_legacy_{idx}_{ts.replace(':', '').replace('-', '')[:14]}"
+                    
+                    exists = conn.execute("SELECT 1 FROM advisory_cases WHERE case_id = ?", (case_id,)).fetchone()
+                    if exists:
+                        continue
+
+                    loc_raw = str(row.get("location", "India"))
+                    state_val = None
+                    district_val = None
+                    if "," in loc_raw:
+                        parts = [p.strip() for p in loc_raw.split(",")]
+                        district_val = parts[0]
+                        state_val = parts[1] if len(parts) > 1 else None
+                    else:
+                        district_val = loc_raw
+
+                    steps_raw = row.get("steps", "[]")
+                    img_raw = row.get("image_analysis", "{}")
+
+                    conn.execute(
+                        """
+                        INSERT INTO advisory_cases (
+                            case_id, farmer_name, crop, location, state, district,
+                            symptoms, risk, field_visit_required, status, advisory_hi,
+                            advisory_en, steps_json, weather_summary, market_summary,
+                            image_analysis_json, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            case_id,
+                            str(row.get("farmer_name", "Farmer")),
+                            str(row.get("crop", "General")),
+                            loc_raw,
+                            state_val,
+                            district_val,
+                            str(row.get("symptoms", "")),
+                            str(row.get("risk", "Low")),
+                            1 if bool(row.get("field_visit_required", False)) else 0,
+                            str(row.get("status", "pending")),
+                            str(row.get("advisory_hi", "")),
+                            str(row.get("advisory_en", "")),
+                            str(steps_raw),
+                            str(row.get("weather_summary", "")),
+                            str(row.get("market_summary", "")),
+                            str(img_raw),
+                            ts,
+                            ts,
+                        ),
+                    )
+                    imported += 1
+            if imported > 0:
+                logger.info(f"Migrated {imported} legacy CSV advisories into relational advisory_cases.")
+            return imported
+        except Exception as e:
+            logger.error(f"Error migrating legacy CSV advisories: {e}")
+            return 0
+
+    def _row_to_advisory_case(self, row: sqlite3.Row) -> AdvisoryCase:
+        steps_val = []
+        if row["steps_json"]:
+            try:
+                steps_val = json.loads(row["steps_json"])
+            except Exception:
+                pass
+
+        img_val = None
+        if row["image_analysis_json"]:
+            try:
+                img_val = json.loads(row["image_analysis_json"])
+            except Exception:
+                pass
+
+        return AdvisoryCase(
+            case_id=row["case_id"],
+            farmer_id=row["farmer_id"],
+            farmer_name=row["farmer_name"],
+            farm_id=row["farm_id"],
+            crop=row["crop"],
+            location=row["location"],
+            state=row["state"],
+            district=row["district"],
+            symptoms=row["symptoms"] or "",
+            risk=row["risk"] or "Low",
+            field_visit_required=bool(row["field_visit_required"]),
+            status=row["status"] or "pending",
+            advisory_hi=row["advisory_hi"] or "",
+            advisory_en=row["advisory_en"] or "",
+            steps=steps_val if isinstance(steps_val, list) else [],
+            weather_summary=row["weather_summary"] or "",
+            market_summary=row["market_summary"] or "",
+            image_analysis=img_val,
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
 
 # Global singleton instance helper
 _farm_repo: Optional[FarmDatabaseRepository] = None
@@ -1178,3 +1767,8 @@ def get_farm_repo(db_path: Optional[str] = None) -> FarmDatabaseRepository:
     if _farm_repo is None or db_path is not None:
         _farm_repo = FarmDatabaseRepository(db_path=db_path)
     return _farm_repo
+
+
+# Alias for backward and forward compatibility
+FarmDatabase = FarmDatabaseRepository
+

@@ -5,6 +5,7 @@ crop diagnostics, weather context, and agricultural advisory services.
 """
 
 import os
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -56,7 +57,19 @@ from backend.app.schemas.farm import (
     CropCycle,
     CropCycleCreate,
     CropStageTransitionRequest,
+    UserRole,
 )
+from backend.app.schemas.analytics import (
+    AdminDashboardOverview,
+    AdvisoryCase,
+    CaseFollowUpCreate,
+    CaseFollowUpRecord,
+    FarmerDashboardOverview,
+    FieldOfficerDashboardOverview,
+    OfficerTerritoryAssignRequest,
+    OfficerTerritoryScope,
+)
+from backend.app.services.analytics.metric_definitions import METRIC_CATALOG
 from backend.app.services.auth.auth_service import AuthService, AuthenticationError
 from backend.app.services.farm.crop_calendar_service import CropCalendarService
 from backend.app.services.farm.crop_cycle_service import CropCycleService
@@ -125,6 +138,33 @@ def get_current_farmer_auth(authorization: Optional[str] = Header(None)) -> Tupl
         return auth_service.get_current_farmer(token)
     except AuthenticationError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+
+def get_current_user_auth(authorization: Optional[str] = Header(None)) -> UserRecord:
+    """FastAPI dependency to extract and validate authenticated user record (any role)."""
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization bearer token required in headers.",
+        )
+    token = authorization.replace("Bearer ", "").strip()
+    try:
+        return auth_service.get_current_user(token)
+    except AuthenticationError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+
+def require_roles(allowed_roles: List[UserRole]):
+    """Factory dependency enforcing specific user roles."""
+    def dependency(user: UserRecord = Depends(get_current_user_auth)) -> UserRecord:
+        if user.role not in allowed_roles:
+            role_names = [r.value for r in allowed_roles]
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access forbidden: User '{user.username}' has role '{user.role.value}'. Requires one of: {role_names}",
+            )
+        return user
+    return dependency
 
 # In-memory sessions store (can be backed by Redis / PostgreSQL in Phase 2)
 sessions_store: Dict[str, ConversationSession] = {}
@@ -1176,6 +1216,183 @@ def get_resolved_farm_context(
         farm_id_override=farm_id,
         plot_id_override=plot_id,
     )
+
+
+# ==============================================================================
+# PHASE 7: ROLE-BASED DASHBOARDS & AGRICULTURAL ANALYTICS ENDPOINTS
+# ==============================================================================
+
+@app.get("/api/v1/dashboard/metrics/catalog", tags=["Role-Based Dashboards & Analytics"])
+def get_metrics_catalog():
+    """Retrieve complete catalog of defined dashboard metrics with formulas and data sources."""
+    return METRIC_CATALOG
+
+
+@app.get("/api/v1/dashboard/farmer/overview", response_model=FarmerDashboardOverview, tags=["Role-Based Dashboards & Analytics"])
+def get_farmer_dashboard_overview(
+    farm_id: Optional[str] = None,
+    force_refresh: bool = False,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.FIELD_OFFICER, UserRole.ADMINISTRATOR])),
+):
+    """Retrieve personalized agricultural dashboard overview for authenticated farmer."""
+    farmer_profile = auth_service.repo.get_farmer_profile_by_user_id(user.user_id)
+    if not farmer_profile:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"User '{user.username}' has no linked farmer profile to view farmer dashboard.",
+        )
+    try:
+        return system.analytics_orchestrator.get_farmer_dashboard(
+            farmer_id=farmer_profile.farmer_id,
+            farm_id=farm_id,
+            force_refresh=force_refresh,
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except Exception as e:
+        logger.error(f"Farmer dashboard error: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@app.get("/api/v1/dashboard/officer/overview", response_model=FieldOfficerDashboardOverview, tags=["Role-Based Dashboards & Analytics"])
+def get_field_officer_dashboard_overview(
+    crop: Optional[str] = None,
+    risk: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    date_range_days: int = 30,
+    force_refresh: bool = False,
+    user: UserRecord = Depends(require_roles([UserRole.FIELD_OFFICER, UserRole.ADMINISTRATOR])),
+):
+    """Retrieve regional agricultural intelligence dashboard for authorized field officers."""
+    try:
+        return system.analytics_orchestrator.get_field_officer_dashboard(
+            officer_id=user.user_id,
+            officer_name=user.username,
+            filter_crop=crop,
+            filter_risk=risk,
+            filter_status=status_filter,
+            date_range_days=date_range_days,
+            force_refresh=force_refresh,
+        )
+    except Exception as e:
+        logger.error(f"Field officer dashboard error: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@app.get("/api/v1/dashboard/officer/cases", response_model=List[AdvisoryCase], tags=["Role-Based Dashboards & Analytics"])
+def get_field_officer_cases(
+    crop: Optional[str] = None,
+    risk: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    date_range_days: int = 30,
+    user: UserRecord = Depends(require_roles([UserRole.FIELD_OFFICER, UserRole.ADMINISTRATOR])),
+):
+    """Query reported cases within assigned officer jurisdiction."""
+    territories = system.analytics_orchestrator.get_officer_territory(user.user_id)
+    if not territories and user.role != UserRole.ADMINISTRATOR:
+        return []
+
+    districts = [t.district for t in territories] if territories else None
+    date_from = None
+    if date_range_days > 0:
+        date_from = (datetime.now() - timedelta(days=date_range_days)).isoformat()
+
+    return system.analytics_orchestrator.db.list_advisory_cases_for_territory(
+        districts=districts,
+        crop=crop,
+        risk=risk,
+        status=status_filter,
+        date_from=date_from,
+        limit=100,
+    )
+
+
+@app.post("/api/v1/dashboard/officer/cases/{case_id}/follow-up", response_model=CaseFollowUpRecord, status_code=status.HTTP_201_CREATED, tags=["Role-Based Dashboards & Analytics"])
+def record_case_follow_up(
+    case_id: str,
+    req: CaseFollowUpCreate,
+    user: UserRecord = Depends(require_roles([UserRole.FIELD_OFFICER, UserRole.ADMINISTRATOR])),
+):
+    """Record an agronomist interaction, field visit note, or status update."""
+    try:
+        return system.analytics_orchestrator.record_case_follow_up(
+            case_id=case_id,
+            officer_id=user.user_id,
+            officer_name=user.username,
+            notes=req.notes,
+            action_taken=req.action_taken,
+            new_status=req.new_status,
+            is_admin=(user.role == UserRole.ADMINISTRATOR),
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        logger.error(f"Follow up error: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@app.get("/api/v1/dashboard/officer/cases/{case_id}/follow-ups", response_model=List[CaseFollowUpRecord], tags=["Role-Based Dashboards & Analytics"])
+def list_case_follow_ups(
+    case_id: str,
+    user: UserRecord = Depends(require_roles([UserRole.FIELD_OFFICER, UserRole.ADMINISTRATOR])),
+):
+    """Retrieve full chronological follow-up audit trail for a case."""
+    try:
+        return system.analytics_orchestrator.list_case_follow_ups(
+            case_id=case_id,
+            officer_id=user.user_id,
+            is_admin=(user.role == UserRole.ADMINISTRATOR),
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@app.get("/api/v1/dashboard/admin/overview", response_model=AdminDashboardOverview, tags=["Role-Based Dashboards & Analytics"])
+def get_admin_dashboard_overview(
+    force_refresh: bool = False,
+    user: UserRecord = Depends(require_roles([UserRole.ADMINISTRATOR])),
+):
+    """Retrieve platform observability, integration health, and user metrics for administrators."""
+    try:
+        return system.analytics_orchestrator.get_platform_admin_dashboard(
+            admin_id=user.user_id,
+            admin_name=user.username,
+            force_refresh=force_refresh,
+        )
+    except Exception as e:
+        logger.error(f"Admin dashboard error: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@app.post("/api/v1/dashboard/admin/territory/assign", response_model=OfficerTerritoryScope, status_code=status.HTTP_201_CREATED, tags=["Role-Based Dashboards & Analytics"])
+def assign_officer_territory(
+    req: OfficerTerritoryAssignRequest,
+    user: UserRecord = Depends(require_roles([UserRole.ADMINISTRATOR])),
+):
+    """Assign agricultural territory to a field officer account."""
+    try:
+        return system.analytics_orchestrator.assign_officer_territory(
+            officer_id=req.officer_id,
+            state=req.state,
+            district=req.district,
+            block=req.block,
+        )
+    except Exception as e:
+        logger.error(f"Territory assign error: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get("/api/v1/dashboard/officer/territory", response_model=List[OfficerTerritoryScope], tags=["Role-Based Dashboards & Analytics"])
+def get_my_officer_territory(
+    user: UserRecord = Depends(require_roles([UserRole.FIELD_OFFICER, UserRole.ADMINISTRATOR])),
+):
+    """Retrieve geographic territory assigned to current field officer."""
+    return system.analytics_orchestrator.get_officer_territory(user.user_id)
+
 
 
 

@@ -176,3 +176,4 @@ class SoilIrrigationService:
     def get_irrigation_profile(self, plot_id: str, farmer_id: str) -> Optional[IrrigationProfile]:
         """Fetch irrigation profile for a plot verifying tenant ownership."""
         return self.repo.get_irrigation_profile_by_plot(plot_id=plot_id, farmer_id=farmer_id)
+

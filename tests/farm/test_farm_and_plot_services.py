@@ -186,3 +186,4 @@ def test_progressive_profile_completion_scoring(farm_fixture):
     p3 = profile_srv.get_profile(farmer_id)
     assert p3.profile_completion_pct > p2.profile_completion_pct
     assert p3.profile_completion_pct >= 80.0
+

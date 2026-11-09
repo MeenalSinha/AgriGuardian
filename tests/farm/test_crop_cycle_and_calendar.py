@@ -264,3 +264,4 @@ def test_crop_calendar_and_stage_tasks(cycle_calendar_fixture):
     task_titles = [t.activity_title.lower() for t in tasks]
     assert any("cri" in title or "crown root" in title for title in task_titles)
     assert any("urea" in title or "top dressing" in title for title in task_titles)
+

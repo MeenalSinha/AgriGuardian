@@ -68,14 +68,14 @@ class AuthService:
     # TOKEN LIFECYCLE (HMAC-SHA256 Cryptographic Bearer Token)
     # =========================================================================
 
-    def create_access_token(self, user: UserRecord, farmer: FarmerProfile) -> str:
+    def create_access_token(self, user: UserRecord, farmer: Optional[FarmerProfile] = None) -> str:
         """Generate a cryptographically signed URL-safe bearer token."""
         payload = {
             "sub": user.user_id,
-            "farmer_id": farmer.farmer_id,
+            "farmer_id": farmer.farmer_id if farmer else None,
             "username": user.username,
             "role": user.role.value,
-            "lang": farmer.preferred_language,
+            "lang": farmer.preferred_language if farmer else "en",
             "iat": int(time.time()),
             "exp": int(time.time()) + self.token_expire_seconds,
             "jti": uuid.uuid4().hex,
@@ -198,6 +198,26 @@ class AuthService:
             profile_completion_pct=profile.profile_completion_pct,
         )
 
+    def get_current_user(self, token: str) -> UserRecord:
+        """Resolve current authenticated user record from token without requiring farmer profile."""
+        payload = self.decode_and_validate_token(token)
+        user_id = payload.get("sub")
+        user = self.repo.get_user_by_id(user_id)
+        if not user:
+            raise AuthenticationError("User account not found.")
+        return user
+
+    def require_role(self, token: str, allowed_roles: list[UserRole]) -> UserRecord:
+        """Enforce role-based access control (RBAC) on token."""
+        user = self.get_current_user(token)
+        if user.role not in allowed_roles:
+            role_names = [r.value for r in allowed_roles]
+            raise PermissionError(
+                f"Forbidden: User '{user.username}' with role '{user.role.value}' lacks required permissions. "
+                f"Requires one of: {role_names}"
+            )
+        return user
+
     def get_current_farmer(self, token: str) -> Tuple[UserRecord, FarmerProfile]:
         """Resolve current farmer identity from token."""
         payload = self.decode_and_validate_token(token)
@@ -213,3 +233,4 @@ class AuthService:
             raise AuthenticationError("Farmer profile not found.")
 
         return user, profile
+

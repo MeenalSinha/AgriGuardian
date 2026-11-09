@@ -38,6 +38,7 @@ class FarmContextService:
         calendar_service: Optional[CropCalendarService] = None,
     ):
         self.repo = repo or get_farm_repo()
+        self.farm_db = self.repo
         self.profile_service = profile_service or FarmerProfileService(self.repo)
         self.farm_service = farm_service or FarmService(self.repo)
         self.plot_service = plot_service or PlotService(self.repo)
@@ -215,3 +216,4 @@ class FarmContextService:
 
         payload["due_tasks_count"] = len(ctx.due_activities)
         return payload
+

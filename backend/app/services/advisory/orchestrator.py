@@ -13,6 +13,7 @@ from backend.app.services.agriculture.disease_detector import PlantDiseaseDetect
 from backend.app.services.agriculture.recommendation_engine import RecommendationEngine
 from backend.app.services.agriculture.rule_engine import DynamicRuleEngine
 from backend.app.services.analytics.dashboard import EnhancedDashboardAnalytics
+from backend.app.services.analytics.analytics_orchestrator import AnalyticsOrchestrator
 from backend.app.services.farm.farm_context_service import FarmContextService
 from backend.app.services.reporting.pdf_generator import PDFReportGenerator
 from backend.app.services.weather.weather_intelligence import WeatherIntelligenceService
@@ -36,6 +37,11 @@ class AgriGuardianSystem:
         self.pdf_generator = PDFReportGenerator(settings=self.settings)
         self.analytics = EnhancedDashboardAnalytics(self.data_manager)
         self.farm_context = FarmContextService()
+        self.analytics_orchestrator = AnalyticsOrchestrator(
+            farm_db=self.farm_context.repo,
+            weather_service=self.weather_intel,
+            market_service=self.market_service,
+        )
         logger.info("AgriGuardianSystem initialized successfully.")
 
     def process_request(
@@ -215,8 +221,53 @@ class AgriGuardianSystem:
             "timing": timing,
         }
 
-        # Step 6: Save to CSV repository
+        # Step 6: Save to CSV repository and relational Advisory Cases
         self.data_manager.save_advisory(result)
+
+        # Determine geographic attributes for regional intelligence
+        case_state = None
+        case_district = None
+        if farm_ctx and farm_ctx.active_farm:
+            case_state = farm_ctx.active_farm.state
+            case_district = farm_ctx.active_farm.district
+        elif loc:
+            case_state = getattr(loc, "state", None)
+            case_district = getattr(loc, "district", None)
+        elif location:
+            parts = [p.strip() for p in location.split(",")]
+            if len(parts) >= 2:
+                case_district = parts[0]
+                case_state = parts[1]
+            else:
+                case_district = location.strip()
+
+        case_farm_id = farm_ctx.active_farm.id if (farm_ctx and farm_ctx.active_farm) else None
+
+        try:
+            advisory_case = self.farm_context.repo.create_advisory_case(
+                farmer_name=farmer_name,
+                crop=crop,
+                location=location,
+                farmer_id=farmer_id,
+                farm_id=case_farm_id,
+                state=case_state,
+                district=case_district,
+                symptoms=symptoms,
+                risk=result.get("risk", "Medium"),
+                field_visit_required=result.get("field_visit_required", False),
+                status="pending",
+                advisory_hi=result.get("advisory_hi", ""),
+                advisory_en=result.get("advisory_en", ""),
+                steps=result.get("three_step_plan", []),
+                weather_summary=weather.summary,
+                market_summary=market.summary,
+                image_analysis=image_analysis,
+            )
+            result["case_id"] = advisory_case.case_id
+        except Exception as e:
+            logger.warning(f"Could not persist advisory case to relational DB: {e}")
+            result["case_id"] = None
+
         logger.info(f"Advisory completed for {farmer_name} with risk: {result['risk']} in {timing['total']:.2f}s")
         return result
 

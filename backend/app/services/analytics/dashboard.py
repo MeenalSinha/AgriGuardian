@@ -71,13 +71,31 @@ class EnhancedDashboardAnalytics:
         }
 
     def get_growth_metrics(self, period: str = "week") -> Dict[str, Any]:
-        """Calculate volume growth metrics."""
+        """Calculate genuine volume growth metrics without hardcoded numbers."""
         df = self.data_manager.get_advisories()
         total_count = len(df) if not df.empty else 0
+
+        growth_rate_str = "0.0%"
+        if not df.empty and "timestamp" in df.columns:
+            try:
+                df["dt"] = pd.to_datetime(df["timestamp"])
+                now = datetime.now()
+                current_window = df[df["dt"] >= (now - timedelta(days=7))]
+                prior_window = df[(df["dt"] < (now - timedelta(days=7))) & (df["dt"] >= (now - timedelta(days=14)))]
+                curr_c = len(current_window)
+                prior_c = len(prior_window)
+                if prior_c > 0:
+                    pct = round(((curr_c - prior_c) / prior_c) * 100, 1)
+                    growth_rate_str = f"{'+' if pct >= 0 else ''}{pct}%"
+                elif curr_c > 0:
+                    growth_rate_str = "+100.0%"
+            except Exception:
+                growth_rate_str = "0.0%"
+
         return {
             "period": period,
             "total_count": total_count,
-            "growth_rate": "+12.5%",
+            "growth_rate": growth_rate_str,
             "high_risk_ratio": (
                 round(len(df[df["risk"] == "High"]) / total_count * 100, 1)
                 if total_count > 0 and "risk" in df.columns

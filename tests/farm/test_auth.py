@@ -142,3 +142,4 @@ def test_token_validation_and_expiration(auth_fixture):
     expired_token = auth_srv.create_access_token(user, profile)
     with pytest.raises(AuthenticationError, match="expired"):
         auth_srv.decode_and_validate_token(expired_token)
+

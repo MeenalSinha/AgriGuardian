@@ -238,3 +238,4 @@ def build_bulletins():
 
 if __name__ == "__main__":
     build_bulletins()
+

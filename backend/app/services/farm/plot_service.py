@@ -90,3 +90,4 @@ class PlotService:
     def delete_plot(self, plot_id: str, farmer_id: str) -> bool:
         """Delete plot verifying tenant ownership."""
         return self.repo.delete_plot(plot_id=plot_id, farmer_id=farmer_id)
+

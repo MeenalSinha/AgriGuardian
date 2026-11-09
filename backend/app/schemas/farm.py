@@ -187,6 +187,11 @@ class FarmerProfile(FarmerProfileBase):
     created_at: str
     updated_at: str
 
+    @property
+    def farmer_name(self) -> str:
+        """Convenience alias for full_name."""
+        return self.full_name
+
 
 # --- Farm & Multi-Farm Schemas ---
 
@@ -231,6 +236,14 @@ class Farm(FarmBase):
     created_at: str
     updated_at: str
 
+    @property
+    def id(self) -> str:
+        return self.farm_id
+
+    @property
+    def total_acres(self) -> float:
+        return self.total_area_acres
+
 
 # --- Plot / Field Schemas ---
 
@@ -267,6 +280,10 @@ class Plot(PlotBase):
     area_acres: float = Field(..., description="Standardized area in acres")
     created_at: str
     updated_at: str
+
+    @property
+    def id(self) -> str:
+        return self.plot_id
 
 
 # --- Crop Cycle Schemas ---
@@ -460,3 +477,4 @@ class FarmContext(BaseModel):
     @property
     def has_active_crop(self) -> bool:
         return self.current_cycle is not None
+

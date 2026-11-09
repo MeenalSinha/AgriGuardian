@@ -77,9 +77,16 @@ Built with **Streamlit, Gnani AI (Prisma v2.5 STT & Timbre v2.5 TTS), Open-Meteo
 * **Unified Farm Context Resolution Service:** Central `FarmContextService` injecting active farm context into Weather, Market, Disease Diagnosis, Recommendation Engine, and Voice Assistant.
 * **Streamlit Farm Management View:** Complete visual dashboard (`🌾 My Farms & Crops`) for authentication, farm management, active crop tracking, soil health, and farm calendar.
 
-### 📊 Field Officer Dashboard & PDF Exports
-* **Regional Outbreak Analytics:** Tracks crop health queries, risk distributions, and peak advisory hours.
-* **Case Management:** Review and update advisory statuses and agronomist field feedback.
+### 📊 Personalized Dashboards, Field Officer Intelligence & Platform Analytics (Phase 7)
+* **Zero Simulated Metrics & Transparent Attribution:** Replaced legacy mock metrics (such as hardcoded `+12.5%` growth) with an authoritative Metric Catalog of 16 core metrics with explicit formulas, provenance, and honest `is_available=False` missing-data explanations.
+* **Relational Relational Case Register:** Migrated from fragile CSV row indexes (`data/advisories.csv`) to durable SQLite relational tables (`advisory_cases`, `field_officer_assignments`, `case_follow_ups`) with permanent UUID primary keys (`cas_...`).
+* **Three Dedicated Role-Based Dashboard Surfaces:**
+  * **Farmer Dashboard:** Displays active farms, total acres, active crops, due calendar tasks, empirical phenology progress (e.g. Wheat Crown Root Initiation at 21d), farm-specific weather risk index, and local APMC mandi price benchmarks.
+  * **Field Officer Dashboard:** Scopes view strictly to assigned geographic territories (districts/states), provides case register with follow-up audit trail, crop/risk distribution charts, and small-cohort privacy masking.
+  * **Platform Administrator Dashboard:** Full system observability, role distribution, 30d active users, live service health checks (Gnani AI STT/TTS, PyTorch MobileNetV3, Open-Meteo, AGMARKNET, ICAR Knowledge Base), inference latency telemetry, and officer territory provisioning.
+* **Small-Cohort Privacy Protection ($k < 3$):** Anonymizes individual farmer identities to `"Confidential Farmer"` in village clusters with fewer than 3 reported cases to prevent re-identification.
+* **Territory Jurisdiction Guardrail:** Enforces that field officers cannot inspect or record follow-up actions outside their assigned administrative districts (HTTP 403 Forbidden), while preserving platform administrator global override capabilities.
+* **FastAPI RBAC Security & REST Endpoints:** Programmatic dashboard access protected by JWT/bearer authentication with strict role enforcement (`GET /api/v1/dashboard/farmer/overview`, `GET /api/v1/dashboard/officer/overview`, `POST .../follow-up`, `GET /api/v1/dashboard/admin/overview`, `POST .../territory/assign`).
 * **Authentic PDF Generation:** Exports complete diagnostic reports compiled via ReportLab.
 
 ---

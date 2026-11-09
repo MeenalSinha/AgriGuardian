@@ -336,3 +336,4 @@ def test_farm_context_isolation(multi_tenant_fixture):
     assert ctx_b_hack.active_farm is None
     assert ctx_b_hack.is_ambiguous is True
     assert "not found or not owned" in ctx_b_hack.ambiguity_reason
+

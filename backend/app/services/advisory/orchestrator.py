@@ -13,6 +13,7 @@ from backend.app.services.agriculture.disease_detector import PlantDiseaseDetect
 from backend.app.services.agriculture.recommendation_engine import RecommendationEngine
 from backend.app.services.agriculture.rule_engine import DynamicRuleEngine
 from backend.app.services.analytics.dashboard import EnhancedDashboardAnalytics
+from backend.app.services.farm.farm_context_service import FarmContextService
 from backend.app.services.reporting.pdf_generator import PDFReportGenerator
 from backend.app.services.weather.weather_intelligence import WeatherIntelligenceService
 
@@ -34,6 +35,7 @@ class AgriGuardianSystem:
         self.data_manager = DataManager(settings=self.settings)
         self.pdf_generator = PDFReportGenerator(settings=self.settings)
         self.analytics = EnhancedDashboardAnalytics(self.data_manager)
+        self.farm_context = FarmContextService()
         logger.info("AgriGuardianSystem initialized successfully.")
 
     def process_request(
@@ -48,8 +50,21 @@ class AgriGuardianSystem:
         language: str = "hi",
         phone_number: Optional[str] = None,
         confidence_threshold: float = 0.3,
+        farmer_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Process complete advisory request combining multi-source intelligence."""
+        # Auto-enrich from farm context if farmer_id is provided
+        farm_ctx = None
+        if farmer_id:
+            farm_ctx = self.farm_context.resolve_context(farmer_id=farmer_id)
+            if farm_ctx and farm_ctx.active_farm:
+                lat = lat or farm_ctx.active_farm.latitude
+                lon = lon or farm_ctx.active_farm.longitude
+                if not location or location == "Delhi, India":
+                    location = f"{farm_ctx.active_farm.district}, {farm_ctx.active_farm.state}"
+            if farm_ctx and farm_ctx.current_cycle:
+                crop = crop or farm_ctx.current_cycle.crop_name
+
         logger.info(f"Processing request for farmer '{farmer_name}' (Crop: {crop}, Location: {location})")
 
         timing = {}

@@ -25,6 +25,9 @@ temp/
 reports/
 logs/
 data/*.csv
+data/*.db
+data/*.db-wal
+data/*.db-shm
 !data/README.md
 
 # Testing & Coverage

@@ -27,6 +27,27 @@ from backend.app.schemas.source import SourceRecord
 from backend.app.schemas.evidence import EvidenceExcerpt
 from backend.app.schemas.knowledge import AtomicFact
 from backend.app.schemas.recommendation import ActionItem, PersonalizedRecommendation
+from backend.app.schemas.farm import (
+    UserRole,
+    AreaUnit,
+    OwnershipType,
+    SoilType,
+    IrrigationMethod,
+    WaterAvailability,
+    CropSeason,
+    CropGrowthStage,
+    CropCycleStatus,
+    ActivityType,
+    ActivityStatus,
+    FarmerProfile,
+    Farm,
+    Plot,
+    CropCycle,
+    SoilProfile,
+    IrrigationProfile,
+    FarmActivity,
+    FarmContext,
+)
 
 __all__ = [
     "AudioValidationResult",
@@ -52,5 +73,24 @@ __all__ = [
     "AtomicFact",
     "ActionItem",
     "PersonalizedRecommendation",
+    "UserRole",
+    "AreaUnit",
+    "OwnershipType",
+    "SoilType",
+    "IrrigationMethod",
+    "WaterAvailability",
+    "CropSeason",
+    "CropGrowthStage",
+    "CropCycleStatus",
+    "ActivityType",
+    "ActivityStatus",
+    "FarmerProfile",
+    "Farm",
+    "Plot",
+    "CropCycle",
+    "SoilProfile",
+    "IrrigationProfile",
+    "FarmActivity",
+    "FarmContext",
 ]
 

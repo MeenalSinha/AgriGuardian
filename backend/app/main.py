@@ -5,8 +5,8 @@ crop diagnostics, weather context, and agricultural advisory services.
 """
 
 import os
-from typing import Any, Dict, List, Optional
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status
+from typing import Any, Dict, List, Optional, Tuple
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -33,6 +33,38 @@ from backend.app.services.market.market_analytics import MarketAnalyticsService
 from backend.app.services.market.market_intelligence import MarketIntelligenceService
 from backend.app.services.market.net_realization_calculator import NetRealizationCalculator
 from backend.app.services.market.price_forecaster import PriceForecaster
+from backend.app.schemas.farm import (
+    Farm,
+    FarmActivity,
+    FarmActivityCreate,
+    FarmContext,
+    FarmCreate,
+    FarmerProfile,
+    FarmerProfileUpdate,
+    FarmUpdate,
+    IrrigationProfile,
+    IrrigationProfileCreate,
+    Plot,
+    PlotCreate,
+    PlotUpdate,
+    SoilProfile,
+    SoilProfileCreate,
+    UserLoginRequest,
+    UserLoginResponse,
+    UserRecord,
+    UserRegistrationRequest,
+    CropCycle,
+    CropCycleCreate,
+    CropStageTransitionRequest,
+)
+from backend.app.services.auth.auth_service import AuthService, AuthenticationError
+from backend.app.services.farm.crop_calendar_service import CropCalendarService
+from backend.app.services.farm.crop_cycle_service import CropCycleService
+from backend.app.services.farm.farm_context_service import FarmContextService
+from backend.app.services.farm.farm_service import FarmService
+from backend.app.services.farm.farmer_profile_service import FarmerProfileService
+from backend.app.services.farm.plot_service import PlotService
+from backend.app.services.farm.soil_irrigation_service import SoilIrrigationService
 
 # Initialize settings and structured logging
 settings = get_settings()
@@ -62,6 +94,37 @@ system = AgriGuardianSystem(settings=settings)
 conversation_engine = ConversationEngine(system=system, settings=settings)
 knowledge_service = KnowledgeService(settings=settings)
 market_intel = MarketIntelligenceService()
+
+# Phase 6 Farm & Identity Singletons
+auth_service = AuthService(settings=settings)
+farmer_profile_service = FarmerProfileService()
+farm_service = FarmService()
+plot_service = PlotService()
+crop_cycle_service = CropCycleService()
+soil_irrigation_service = SoilIrrigationService()
+crop_calendar_service = CropCalendarService()
+farm_context_service = FarmContextService(
+    profile_service=farmer_profile_service,
+    farm_service=farm_service,
+    plot_service=plot_service,
+    cycle_service=crop_cycle_service,
+    soil_service=soil_irrigation_service,
+    calendar_service=crop_calendar_service,
+)
+
+
+def get_current_farmer_auth(authorization: Optional[str] = Header(None)) -> Tuple[UserRecord, FarmerProfile]:
+    """FastAPI dependency to extract and validate authenticated farmer bearer token."""
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authorization bearer token required in headers.",
+        )
+    token = authorization.replace("Bearer ", "").strip()
+    try:
+        return auth_service.get_current_farmer(token)
+    except AuthenticationError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
 # In-memory sessions store (can be backed by Redis / PostgreSQL in Phase 2)
 sessions_store: Dict[str, ConversationSession] = {}
@@ -700,6 +763,420 @@ def dismiss_market_alert(alert_id: str):
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Market alert '{alert_id}' not found.")
     return {"status": "dismissed", "alert_id": alert_id}
+
+
+# ==============================================================================
+# PHASE 6: FARMER IDENTITY & AUTHENTICATION ENDPOINTS
+# ==============================================================================
+
+@app.post("/api/v1/auth/register", response_model=UserLoginResponse, status_code=status.HTTP_201_CREATED, tags=["Farmer Identity & Multi-Farm"])
+def register_farmer(req: UserRegistrationRequest):
+    """Register a new farmer account and initialize their personalized profile."""
+    try:
+        user, profile, token = auth_service.register_farmer(req)
+        return UserLoginResponse(
+            access_token=token,
+            token_type="bearer",
+            user_id=user.user_id,
+            farmer_id=profile.farmer_id,
+            username=user.username,
+            full_name=profile.full_name,
+            role=user.role,
+            preferred_language=profile.preferred_language,
+            profile_completion_pct=profile.profile_completion_pct,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error(f"Farmer registration error: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Registration failed.")
+
+
+@app.post("/api/v1/auth/login", response_model=UserLoginResponse, tags=["Farmer Identity & Multi-Farm"])
+def login_farmer(req: UserLoginRequest):
+    """Authenticate farmer with password and receive signed bearer token."""
+    try:
+        return auth_service.authenticate_user(req)
+    except AuthenticationError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+
+@app.get("/api/v1/auth/me", response_model=FarmerProfile, tags=["Farmer Identity & Multi-Farm"])
+def get_current_user_profile(auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth)):
+    """Fetch profile of currently authenticated farmer."""
+    _, profile = auth
+    enriched = farmer_profile_service.get_profile(profile.farmer_id)
+    return enriched or profile
+
+
+# ==============================================================================
+# FARMER PROFILE ENDPOINTS
+# ==============================================================================
+
+@app.get("/api/v1/farmers/profile", response_model=FarmerProfile, tags=["Farmer Identity & Multi-Farm"])
+def get_farmer_profile(auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth)):
+    """Retrieve full profile with progressive onboarding completion percentage."""
+    _, profile = auth
+    p = farmer_profile_service.get_profile(profile.farmer_id)
+    if not p:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found.")
+    return p
+
+
+@app.put("/api/v1/farmers/profile", response_model=FarmerProfile, tags=["Farmer Identity & Multi-Farm"])
+def update_farmer_profile(
+    req: FarmerProfileUpdate,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Update profile attributes and recalculate completion score."""
+    _, profile = auth
+    updated = farmer_profile_service.update_profile(profile.farmer_id, req)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Failed to update profile.")
+    return updated
+
+
+# ==============================================================================
+# MULTI-FARM MANAGEMENT ENDPOINTS (Strict Multi-User Tenancy)
+# ==============================================================================
+
+@app.get("/api/v1/farms", response_model=List[Farm], tags=["Farmer Identity & Multi-Farm"])
+def list_farmer_farms(auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth)):
+    """List all farms owned by authenticated farmer."""
+    _, profile = auth
+    return farm_service.list_farms(profile.farmer_id)
+
+
+@app.post("/api/v1/farms", response_model=Farm, status_code=status.HTTP_201_CREATED, tags=["Farmer Identity & Multi-Farm"])
+def create_farm(
+    req: FarmCreate,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Create a new farm under the authenticated farmer's ownership."""
+    _, profile = auth
+    try:
+        return farm_service.create_farm(profile.farmer_id, req)
+    except Exception as e:
+        logger.error(f"Create farm error: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get("/api/v1/farms/{farm_id}", response_model=Farm, tags=["Farmer Identity & Multi-Farm"])
+def get_farm(
+    farm_id: str,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Retrieve specific farm enforcing tenant isolation."""
+    _, profile = auth
+    farm = farm_service.get_farm(farm_id=farm_id, farmer_id=profile.farmer_id)
+    if not farm:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or unauthorized.")
+    return farm
+
+
+@app.put("/api/v1/farms/{farm_id}", response_model=Farm, tags=["Farmer Identity & Multi-Farm"])
+def update_farm(
+    farm_id: str,
+    req: FarmUpdate,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Update farm details enforcing tenant ownership."""
+    _, profile = auth
+    updated = farm_service.update_farm(farm_id=farm_id, farmer_id=profile.farmer_id, update_data=req)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or unauthorized.")
+    return updated
+
+
+@app.delete("/api/v1/farms/{farm_id}", tags=["Farmer Identity & Multi-Farm"])
+def delete_farm(
+    farm_id: str,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Delete a farm and associated plots/cycles enforcing tenant ownership."""
+    _, profile = auth
+    success = farm_service.delete_farm(farm_id=farm_id, farmer_id=profile.farmer_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or unauthorized.")
+    return {"status": "deleted", "farm_id": farm_id}
+
+
+@app.post("/api/v1/farms/{farm_id}/activate", response_model=Farm, tags=["Farmer Identity & Multi-Farm"])
+def activate_farm(
+    farm_id: str,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Set specified farm as active context for weather, advisory, and market discovery."""
+    _, profile = auth
+    activated = farm_service.set_active_farm(farm_id=farm_id, farmer_id=profile.farmer_id)
+    if not activated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found or unauthorized.")
+    return activated
+
+
+# ==============================================================================
+# PLOT / FIELD ENDPOINTS
+# ==============================================================================
+
+@app.get("/api/v1/farms/{farm_id}/plots", response_model=List[Plot], tags=["Farmer Identity & Multi-Farm"])
+def list_farm_plots(
+    farm_id: str,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """List all plots on a farm verifying tenant ownership."""
+    _, profile = auth
+    return plot_service.list_plots_by_farm(farm_id=farm_id, farmer_id=profile.farmer_id)
+
+
+@app.post("/api/v1/farms/{farm_id}/plots", response_model=Plot, status_code=status.HTTP_201_CREATED, tags=["Farmer Identity & Multi-Farm"])
+def create_plot(
+    farm_id: str,
+    req: PlotCreate,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Add a plot/field inside a farm."""
+    _, profile = auth
+    try:
+        return plot_service.create_plot(farm_id=farm_id, farmer_id=profile.farmer_id, plot_data=req)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get("/api/v1/plots/{plot_id}", response_model=Plot, tags=["Farmer Identity & Multi-Farm"])
+def get_plot(
+    plot_id: str,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Retrieve plot details verifying tenant ownership."""
+    _, profile = auth
+    plot = plot_service.get_plot(plot_id=plot_id, farmer_id=profile.farmer_id)
+    if not plot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plot not found or unauthorized.")
+    return plot
+
+
+@app.put("/api/v1/plots/{plot_id}", response_model=Plot, tags=["Farmer Identity & Multi-Farm"])
+def update_plot(
+    plot_id: str,
+    req: PlotUpdate,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Update plot specifications verifying tenant ownership."""
+    _, profile = auth
+    updated = plot_service.update_plot(plot_id=plot_id, farmer_id=profile.farmer_id, update_data=req)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plot not found or unauthorized.")
+    return updated
+
+
+@app.delete("/api/v1/plots/{plot_id}", tags=["Farmer Identity & Multi-Farm"])
+def delete_plot(
+    plot_id: str,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Delete a plot verifying tenant ownership."""
+    _, profile = auth
+    success = plot_service.delete_plot(plot_id=plot_id, farmer_id=profile.farmer_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plot not found or unauthorized.")
+    return {"status": "deleted", "plot_id": plot_id}
+
+
+# ==============================================================================
+# CROP LIFECYCLE & STAGE ENDPOINTS
+# ==============================================================================
+
+@app.get("/api/v1/farms/{farm_id}/crop-cycles", response_model=List[CropCycle], tags=["Farmer Identity & Multi-Farm"])
+def list_farm_active_cycles(
+    farm_id: str,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """List active crop cycles on specified farm."""
+    _, profile = auth
+    return crop_cycle_service.get_active_cycles_by_farm(farm_id=farm_id, farmer_id=profile.farmer_id)
+
+
+@app.post("/api/v1/plots/{plot_id}/crop-cycles", response_model=CropCycle, status_code=status.HTTP_201_CREATED, tags=["Farmer Identity & Multi-Farm"])
+def create_crop_cycle(
+    plot_id: str,
+    req: CropCycleCreate,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Start a new crop cycle on a plot."""
+    _, profile = auth
+    try:
+        return crop_cycle_service.create_crop_cycle(plot_id=plot_id, farmer_id=profile.farmer_id, cycle_data=req)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get("/api/v1/crop-cycles/{cycle_id}", response_model=CropCycle, tags=["Farmer Identity & Multi-Farm"])
+def get_crop_cycle(
+    cycle_id: str,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Get crop cycle with real-time days elapsed and estimated growth stage."""
+    _, profile = auth
+    cycle = crop_cycle_service.get_crop_cycle(cycle_id=cycle_id, farmer_id=profile.farmer_id)
+    if not cycle:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crop cycle not found or unauthorized.")
+    return cycle
+
+
+@app.post("/api/v1/crop-cycles/{cycle_id}/transition", response_model=CropCycle, tags=["Farmer Identity & Multi-Farm"])
+def transition_crop_stage(
+    cycle_id: str,
+    req: CropStageTransitionRequest,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Transition crop growth stage (e.g., Vegetative -> Flowering -> Harvested) preserving history."""
+    _, profile = auth
+    updated = crop_cycle_service.transition_stage(cycle_id=cycle_id, farmer_id=profile.farmer_id, req=req)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crop cycle not found or unauthorized.")
+    return updated
+
+
+# ==============================================================================
+# SOIL & IRRIGATION PROFILE ENDPOINTS
+# ==============================================================================
+
+@app.get("/api/v1/plots/{plot_id}/soil", response_model=Optional[SoilProfile], tags=["Farmer Identity & Multi-Farm"])
+def get_plot_soil(
+    plot_id: str,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Fetch soil fertility and NPK profile for plot."""
+    _, profile = auth
+    return soil_irrigation_service.get_soil_profile(plot_id=plot_id, farmer_id=profile.farmer_id)
+
+
+@app.post("/api/v1/plots/{plot_id}/soil", response_model=SoilProfile, tags=["Farmer Identity & Multi-Farm"])
+def save_plot_soil(
+    plot_id: str,
+    req: SoilProfileCreate,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Save or update soil test and NPK record for plot."""
+    _, profile = auth
+    try:
+        return soil_irrigation_service.save_soil_profile(plot_id=plot_id, farmer_id=profile.farmer_id, profile_data=req)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get("/api/v1/plots/{plot_id}/irrigation", response_model=Optional[IrrigationProfile], tags=["Farmer Identity & Multi-Farm"])
+def get_plot_irrigation(
+    plot_id: str,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Fetch irrigation system details for plot."""
+    _, profile = auth
+    return soil_irrigation_service.get_irrigation_profile(plot_id=plot_id, farmer_id=profile.farmer_id)
+
+
+@app.post("/api/v1/plots/{plot_id}/irrigation", response_model=IrrigationProfile, tags=["Farmer Identity & Multi-Farm"])
+def save_plot_irrigation(
+    plot_id: str,
+    req: IrrigationProfileCreate,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Save or update irrigation system specifications for plot."""
+    _, profile = auth
+    try:
+        return soil_irrigation_service.save_irrigation_profile(plot_id=plot_id, farmer_id=profile.farmer_id, profile_data=req)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# ==============================================================================
+# FARM ACTIVITIES & CALENDAR ENDPOINTS
+# ==============================================================================
+
+@app.get("/api/v1/farms/{farm_id}/activities", response_model=List[FarmActivity], tags=["Farmer Identity & Multi-Farm"])
+def list_farm_activities(
+    farm_id: str,
+    status: Optional[str] = None,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """List farm activities synchronized with current due status."""
+    _, profile = auth
+    return crop_calendar_service.list_activities(farmer_id=profile.farmer_id, farm_id=farm_id, status=status)
+
+
+@app.post("/api/v1/farms/{farm_id}/activities", response_model=FarmActivity, status_code=status.HTTP_201_CREATED, tags=["Farmer Identity & Multi-Farm"])
+def schedule_farm_activity(
+    farm_id: str,
+    req: FarmActivityCreate,
+    plot_id: Optional[str] = None,
+    cycle_id: Optional[str] = None,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Schedule an agronomic activity on the farm."""
+    _, profile = auth
+    try:
+        return crop_calendar_service.create_activity(
+            farm_id=farm_id,
+            farmer_id=profile.farmer_id,
+            activity_data=req,
+            plot_id=plot_id,
+            cycle_id=cycle_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.post("/api/v1/activities/{activity_id}/complete", response_model=FarmActivity, tags=["Farmer Identity & Multi-Farm"])
+def mark_activity_completed(
+    activity_id: str,
+    cost: Optional[float] = None,
+    notes: Optional[str] = None,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Mark a farm activity as completed."""
+    _, profile = auth
+    completed = crop_calendar_service.complete_activity(
+        activity_id=activity_id,
+        farmer_id=profile.farmer_id,
+        cost_incurred=cost,
+        notes=notes,
+    )
+    if not completed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Activity not found or unauthorized.")
+    return completed
+
+
+@app.post("/api/v1/crop-cycles/{cycle_id}/generate-tasks", response_model=List[FarmActivity], tags=["Farmer Identity & Multi-Farm"])
+def generate_stage_tasks(
+    cycle_id: str,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Generate agronomic task recommendations grounded in current crop growth stage."""
+    _, profile = auth
+    cycle = crop_cycle_service.get_crop_cycle(cycle_id=cycle_id, farmer_id=profile.farmer_id)
+    if not cycle:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crop cycle not found or unauthorized.")
+    return crop_calendar_service.generate_grounded_stage_activities(cycle=cycle, farmer_id=profile.farmer_id)
+
+
+# ==============================================================================
+# UNIFIED FARM CONTEXT RESOLUTION ENDPOINT
+# ==============================================================================
+
+@app.get("/api/v1/farm/context", response_model=FarmContext, tags=["Farmer Identity & Multi-Farm"])
+def get_resolved_farm_context(
+    farm_id: Optional[str] = None,
+    plot_id: Optional[str] = None,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Resolve active farm, plot, crop stage, soil, and due tasks for authenticated farmer."""
+    _, profile = auth
+    return farm_context_service.resolve_context(
+        farmer_id=profile.farmer_id,
+        farm_id_override=farm_id,
+        plot_id_override=plot_id,
+    )
+
 
 
 

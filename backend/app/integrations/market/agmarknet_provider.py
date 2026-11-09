@@ -47,15 +47,49 @@ def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) ->
 class AgmarknetProvider(BaseMarketProvider):
     """AGMARKNET integration reading official market bulletins with historical repository and online fallback."""
 
-    def __init__(self, data_file: str = "data/market/historical_prices.json"):
+    def __init__(self, data_file: str = "data/market/official_bulletins.json"):
         self.settings = get_settings()
+        # Fallback to historical_prices.json if official_bulletins.json does not exist
+        if not os.path.exists(data_file) and os.path.exists("data/market/historical_prices.json"):
+            data_file = "data/market/historical_prices.json"
         self.data_file = data_file
         self._loaded_observations: List[MarketPriceObservation] = []
         self._load_local_repository()
+        self._ogd_api_base = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
 
     @property
     def provider_name(self) -> str:
         return MarketDataSource.AGMARKNET.value
+
+    def _fetch_ogd_online(self, commodity_name: str, state: Optional[str] = None) -> List[MarketPriceObservation]:
+        """Fetch live mandi observations from data.gov.in OGD API when api_key is configured."""
+        api_key = getattr(self.settings, "data_gov_in_api_key", None)
+        if not api_key:
+            return []
+
+        try:
+            params: Dict[str, Any] = {
+                "api-key": api_key,
+                "format": "json",
+                "filters[commodity]": commodity_name,
+                "limit": 50,
+            }
+            if state:
+                params["filters[state]"] = state
+
+            resp = requests.get(self._ogd_api_base, params=params, timeout=self.settings.market_timeout_seconds)
+            if resp.status_code == 200:
+                data = resp.json()
+                records = data.get("records", [])
+                observations: List[MarketPriceObservation] = []
+                for rec in records:
+                    obs = MarketNormalizer.normalize_agmarknet_record(rec)
+                    if obs:
+                        observations.append(obs)
+                return observations
+        except Exception as e:
+            logger.warning(f"Live OGD API fetch failed: {e}. Falling back to official bulletin repository.")
+        return []
 
     def _load_local_repository(self) -> None:
         """Load and cache validated market observations from durable JSON storage."""

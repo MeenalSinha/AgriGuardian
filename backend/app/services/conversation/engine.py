@@ -109,8 +109,23 @@ class ConversationEngine:
         if image_path:
             intent = "disease"
 
+        # Establish baseline crop and location
         effective_crop = crop or session.crop or "Tomato"
         effective_location = location or session.location or self.settings.default_location_name
+
+        # Auto-enrich from authenticated farm context if available
+        farm_ctx = None
+        if getattr(session, "farmer_id", None):
+            farm_ctx = self.system.farm_context.resolve_context(farmer_id=session.farmer_id)
+            if farm_ctx and farm_ctx.active_farm:
+                if not lat and not lon and farm_ctx.active_farm.latitude and farm_ctx.active_farm.longitude:
+                    lat = farm_ctx.active_farm.latitude
+                    lon = farm_ctx.active_farm.longitude
+                if not location or location == self.settings.default_location_name:
+                    effective_location = f"{farm_ctx.active_farm.district}, {farm_ctx.active_farm.state}"
+            if farm_ctx and farm_ctx.current_cycle:
+                if not crop or crop == "Tomato":
+                    effective_crop = farm_ctx.current_cycle.crop_name
 
         logger.info(f"Processing turn #{len(session.turns) + 1} for session {session.session_id} (Intent: {intent}, Lang: {lang}, Image: {bool(image_path)})")
 

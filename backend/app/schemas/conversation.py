@@ -27,6 +27,8 @@ class ConversationTurn(BaseModel):
 class ConversationSession(BaseModel):
     """Session container maintaining multi-turn agricultural context."""
     session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    farmer_id: Optional[str] = None
+    farm_id: Optional[str] = None
     farmer_name: str = "Farmer"
     crop: Optional[str] = None
     location: Optional[str] = None

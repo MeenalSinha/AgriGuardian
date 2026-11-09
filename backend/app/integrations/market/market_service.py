@@ -38,7 +38,29 @@ class MarketService:
         Returns:
             MarketContext with verified prices, trends, and authoritative source attribution.
         """
-        location_query = location or state or "Meerut"
+        # Never silently attribute missing location to a hardcoded city like 'Meerut'
+        if not location and not state and (latitude is None or longitude is None):
+            logger.info(f"Market data requested without location for crop='{crop}'")
+            return MarketContext(
+                crop=crop.capitalize() if crop else "General",
+                current_price=None,
+                trend="location_required",
+                min_price=None,
+                max_price=None,
+                last_week_price=None,
+                price_change=None,
+                change_percent=None,
+                forecast=None,
+                demand=None,
+                insight="Location required for local APMC mandi price discovery. Please select or specify your district/state.",
+                summary="Farmer location is required to discover local APMC mandi prices and transportation logistics.",
+                source="AGMARKNET / e-NAM",
+                is_live=False,
+                is_available=False,
+                timestamp=datetime.now().isoformat(),
+            )
+
+        location_query = location or state or ""
         market_ctx = self.intelligence_service.get_market_context_for_advisory(
             crop_name=crop,
             location_query=location_query,

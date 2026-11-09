@@ -65,6 +65,18 @@ Built with **Streamlit, Gnani AI (Prisma v2.5 STT & Timbre v2.5 TTS), Open-Meteo
 * **Durable Market Alert Lifecycle:** File-backed persistent alerts (`data/market/market_alerts.json`) tracking price crashes ($> 10\%$ drop), price surges ($> 12\%$ rise), and below-MSP warning conditions.
 * **Interactive Streamlit Market View:** Visual dashboard with real-time rate cards, MSP status badges, historical line charts, forecast intervals, nearby mandi tables, and interactive realization calculators.
 
+### 🌾 Farmer Identity, Multi-Farm Management & Intelligent Farm Context (Phase 6)
+* **Cryptographic Farmer Authentication:** Secure salted **PBKDF2-HMAC-SHA256** password hashing (100,000 iterations) and cryptographically signed URL-safe HMAC-SHA256 session tokens with expiration timestamps.
+* **Strict Multi-User Tenancy & Data Isolation:** Server-side relational database guarantees that Farmer A cannot access, query, modify, or delete Farmer B's farms, plots, crops, soil, or calendar tasks.
+* **Multi-Farm Management & Regional Area Normalization:** Supports multiple farms across states/districts with native area unit conversion (Acre, Hectare, Bigha, Guntha) and auto-coordinate resolution via district presets.
+* **Plot & Field Architecture:** Divides farms into distinct plots with soil type, drainage capacity, topography, and irrigation methods.
+* **Crop Lifecycle & Empirical Phenology Progression:** Models developmental biology across days elapsed since sowing (e.g. Wheat Crown Root Initiation at 21d, Rice Tillering, Tomato Breaker Stage), tracking both estimated and farmer-confirmed stages.
+* **Historical Crop Rotation Preservation:** Completing a harvest archives the cycle permanently with actual harvest date and yield metrics without ever deleting historical records.
+* **Soil Health & ICAR NPK Diagnostics:** Evaluates available N, P, K, pH, and Organic Carbon against ICAR Soil Health Card benchmarks, categorizing fertility and generating scientifically backed soil amendments.
+* **In-App Crop Calendar & Grounded Task Generation:** Dynamically generates stage-grounded agronomic task recommendations (basal NPK, split top-dressing, irrigation timing, disease scouting).
+* **Unified Farm Context Resolution Service:** Central `FarmContextService` injecting active farm context into Weather, Market, Disease Diagnosis, Recommendation Engine, and Voice Assistant.
+* **Streamlit Farm Management View:** Complete visual dashboard (`🌾 My Farms & Crops`) for authentication, farm management, active crop tracking, soil health, and farm calendar.
+
 ### 📊 Field Officer Dashboard & PDF Exports
 * **Regional Outbreak Analytics:** Tracks crop health queries, risk distributions, and peak advisory hours.
 * **Case Management:** Review and update advisory statuses and agronomist field feedback.

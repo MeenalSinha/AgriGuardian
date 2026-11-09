@@ -1,7 +1,8 @@
-"""Generate comprehensive, validated historical APMC mandi price observations.
+"""Generate synthetic calibration fixtures for offline testing and algorithm benchmarks.
 
-Produces data/market/historical_prices.json with realistic daily observations
-adhering to MarketPriceObservation schema for 12 major commodities across 25+ mandis.
+WARNING: This script produces synthetic calibration fixtures for testing and demo purposes ONLY.
+Synthetic fixtures must NEVER be presented as actual official market transactions in production.
+Authoritative official bulletins reside in data/market/official_bulletins.json.
 """
 
 import json
@@ -163,8 +164,8 @@ COMMODITY_PROFILES = {
 }
 
 
-def generate_market_dataset(days_back: int = 120, output_path: str = "data/market/historical_prices.json"):
-    """Generate daily time-series observations covering `days_back` days."""
+def generate_market_dataset(days_back: int = 120, output_path: str = "data/fixtures/market/synthetic_demo_prices.json"):
+    """Generate calibration/demo time-series fixtures covering `days_back` days."""
     end_date = date.today()
     start_date = end_date - timedelta(days=days_back)
     
@@ -181,7 +182,6 @@ def generate_market_dataset(days_back: int = 120, output_path: str = "data/marke
                 continue
             
             # Mandi-specific fixed price differential (basis spread)
-            # e.g. primary producing region has slight discount, consuming urban has slight premium
             random_offset = (hash(market_id + cmd_id) % 21 - 10) * 4.0
             current_modal = profile["base_price"] + random_offset
             
@@ -197,14 +197,12 @@ def generate_market_dataset(days_back: int = 120, output_path: str = "data/marke
                 # Daily walk with mean-reversion and seasonal component
                 seasonal = 0.0
                 if "seasonal_amplitude" in profile:
-                    # Sinusoidal cycle across year
                     seasonal = profile["seasonal_amplitude"] * math.sin(2 * math.pi * day_offset / 60.0)
                 
                 shock = random.gauss(0, profile["price_volatility"])
                 drift = profile.get("trend_drift", 0.0)
                 
                 current_modal += drift + shock * 0.4
-                # Prevent falling below 40% of base or shooting beyond 250%
                 current_modal = max(profile["base_price"] * 0.4, min(profile["base_price"] * 2.5, current_modal))
                 
                 effective_modal = round(current_modal + seasonal, 2)
@@ -220,14 +218,7 @@ def generate_market_dataset(days_back: int = 120, output_path: str = "data/marke
                 daily_arrivals = max(5.0, round(profile["base_arrivals"] + arrivals_noise, 1))
                 daily_traded = round(daily_arrivals * random.uniform(0.82, 0.98), 1)
                 
-                obs_id = f"OBS-{mandi_rec.market_id}-{cmd_id}-{date_str}"
-                
-                # Alternate official sources (85% AGMARKNET, 15% e-NAM for connected APMCs)
-                source = (
-                    MarketDataSource.ENAM.value
-                    if (day_offset % 7 == 0)
-                    else MarketDataSource.AGMARKNET.value
-                )
+                obs_id = f"FIXTURE-{mandi_rec.market_id}-{cmd_id}-{date_str}"
                 
                 obs = MarketPriceObservation(
                     observation_id=obs_id,
@@ -246,10 +237,10 @@ def generate_market_dataset(days_back: int = 120, output_path: str = "data/marke
                     unit="₹/quintal",
                     arrivals_tonnes=daily_arrivals,
                     traded_quantity_tonnes=daily_traded,
-                    source=source,
+                    source="SYNTHETIC_SIMULATION_FIXTURE (Calibration / Demo Benchmark)",
                     retrieval_timestamp=datetime.now(timezone.utc).isoformat(),
                     is_live=False,
-                    data_quality_status="verified",
+                    data_quality_status="synthetic_demo_fixture",
                 )
                 observations.append(obs.model_dump())
 
@@ -257,7 +248,7 @@ def generate_market_dataset(days_back: int = 120, output_path: str = "data/marke
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(observations, f, indent=2, ensure_ascii=False)
     
-    print(f"Successfully generated {len(observations)} verified market observations -> {output_path}")
+    print(f"Successfully generated {len(observations)} synthetic calibration fixture records -> {output_path}")
 
 
 if __name__ == "__main__":

@@ -39,5 +39,45 @@
     "acknowledged": false,
     "location_district": null,
     "location_state": null
+  },
+  {
+    "alert_id": "ALT-DRY-GEN-BEN",
+    "hazard_type": "dry_spell",
+    "risk_level": "moderate",
+    "title": "Agricultural Dry Spell Advisory: Root-Zone Moisture Stress",
+    "summary": "7 consecutive rainless days coupled with high evapotranspiration (4.9 mm/day) depleting soil moisture.",
+    "crop": "tomato",
+    "crop_stage": "any",
+    "triggered_conditions": {
+      "consecutive_dry_days": 7,
+      "et0_mm_day": 4.934285714285714
+    },
+    "forecast_window": {
+      "period": "Ongoing (7+ days dry)"
+    },
+    "evidence_ids": [
+      "FCT-GEN-DRYSPELL-IMD-01"
+    ],
+    "source_ids": [
+      "SRC-IMD-AGROMET-2024"
+    ],
+    "explanation": "A prolonged dry spell during active crop growth creates acute moisture stress, stomatal closure, reduced photosynthetic rate, and yield loss in rainfed tracts.",
+    "recommended_actions": [
+      "Provide life-saving protective irrigation during critical phenological stages (e.g. CRI in wheat, flowering in vegetables).",
+      "Apply organic straw, crop residue, or plastic mulch to suppress soil evaporation.",
+      "Adopt drip or alternate-furrow irrigation to maximize water-use efficiency."
+    ],
+    "prohibited_actions": [
+      "Avoid applying high-dose chemical nitrogen fertilizer without adequate soil moisture."
+    ],
+    "status": "active",
+    "is_official_warning": false,
+    "official_bulletin_source": null,
+    "created_at": "2026-11-09T12:12:56.563358+00:00",
+    "updated_at": null,
+    "expires_at": null,
+    "acknowledged": false,
+    "location_district": null,
+    "location_state": null
   }
 ]

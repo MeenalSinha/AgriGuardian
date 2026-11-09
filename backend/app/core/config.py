@@ -180,6 +180,14 @@ class Settings(BaseSettings):
     # --- Market Intelligence Settings ---
     market_cache_ttl_seconds: int = 1800
     market_timeout_seconds: float = 5.0
+    data_gov_in_api_key: Optional[str] = Field(default=None, description="OGD India data.gov.in API Key")
+    enam_api_key: Optional[str] = Field(default=None, description="Institutional e-NAM APMC API Key")
+
+    # --- Phase 6: Farmer Authentication & Security Settings ---
+    jwt_secret_key: str = "agri-guardian-secure-phase6-secret-key-3848201"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 1440  # 24 hours
+    farm_db_path: str = "data/farm_guardian.db"
 
     # --- Storage and File System Paths ---
     data_dir: str = "data"

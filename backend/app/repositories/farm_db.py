@@ -55,6 +55,26 @@ from backend.app.schemas.expert import (
     BiologicalControlItem,
     ChemicalInterventionItem,
 )
+from backend.app.schemas.notification import (
+    ChannelHealthInfo,
+    FarmReminderCreate,
+    FarmReminderRecord,
+    NotificationCategory,
+    NotificationChannel,
+    NotificationChannelConsent,
+    NotificationDeliveryAttempt,
+    NotificationEvent,
+    NotificationOutboxItem,
+    NotificationPreference,
+    NotificationPriority,
+    NotificationRecord,
+    NotificationStatus,
+    NotificationTemplate,
+    OutboxProcessResult,
+    OutboxStatus,
+    ReminderActivityType,
+    ReminderStatus,
+)
 
 logger = get_logger("FarmDBRepository")
 
@@ -450,6 +470,243 @@ class FarmDatabaseRepository:
             );
             """)
 
+            # 19. Phase 9 Notification Events
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notification_events (
+                event_id TEXT PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                category TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                farmer_id TEXT NOT NULL REFERENCES farmer_profiles(farmer_id) ON DELETE CASCADE,
+                farm_id TEXT REFERENCES farms(farm_id),
+                crop_cycle_id TEXT REFERENCES crop_cycles(cycle_id),
+                related_entity_id TEXT,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                dedup_key TEXT,
+                created_at TEXT NOT NULL
+            );
+            """)
+
+            # 20. Phase 9 Notifications (In-App Store)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                notification_id TEXT PRIMARY KEY,
+                farmer_id TEXT NOT NULL REFERENCES farmer_profiles(farmer_id) ON DELETE CASCADE,
+                category TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                title_en TEXT NOT NULL,
+                title_hi TEXT NOT NULL,
+                body_en TEXT NOT NULL,
+                body_hi TEXT NOT NULL,
+                action_url TEXT,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'unread',
+                read_at TEXT,
+                dismissed_at TEXT,
+                created_at TEXT NOT NULL,
+                expires_at TEXT
+            );
+            """)
+
+            # 21. Phase 9 Notification Preferences
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notification_preferences (
+                farmer_id TEXT PRIMARY KEY REFERENCES farmer_profiles(farmer_id) ON DELETE CASCADE,
+                channels_json TEXT NOT NULL DEFAULT '["in_app", "sms"]',
+                categories_json TEXT NOT NULL DEFAULT '["weather_alert", "market_intelligence", "expert_review", "crop_reminder"]',
+                quiet_hours_enabled INTEGER NOT NULL DEFAULT 1,
+                quiet_hours_start TEXT NOT NULL DEFAULT '21:00',
+                quiet_hours_end TEXT NOT NULL DEFAULT '06:00',
+                emergency_override INTEGER NOT NULL DEFAULT 1,
+                preferred_language TEXT NOT NULL DEFAULT 'hi-IN',
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 22. Phase 9 Notification Channel Consents
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notification_channel_consents (
+                consent_id TEXT PRIMARY KEY,
+                farmer_id TEXT NOT NULL REFERENCES farmer_profiles(farmer_id) ON DELETE CASCADE,
+                channel TEXT NOT NULL,
+                is_granted INTEGER NOT NULL DEFAULT 1,
+                granted_at TEXT NOT NULL,
+                revoked_at TEXT,
+                ip_or_source TEXT NOT NULL DEFAULT 'web_portal'
+            );
+            """)
+
+            # 23. Phase 9 Transactional Outbox
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notification_outbox (
+                outbox_id TEXT PRIMARY KEY,
+                notification_id TEXT NOT NULL REFERENCES notifications(notification_id) ON DELETE CASCADE,
+                farmer_id TEXT NOT NULL REFERENCES farmer_profiles(farmer_id) ON DELETE CASCADE,
+                channel TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                max_retries INTEGER NOT NULL DEFAULT 3,
+                next_retry_at TEXT,
+                lease_expires_at TEXT,
+                last_error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 24. Phase 9 Delivery Attempts Audit
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notification_delivery_attempts (
+                attempt_id TEXT PRIMARY KEY,
+                outbox_id TEXT NOT NULL REFERENCES notification_outbox(outbox_id) ON DELETE CASCADE,
+                channel TEXT NOT NULL,
+                provider_name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                latency_ms REAL NOT NULL DEFAULT 0.0,
+                error_message TEXT,
+                provider_response_code TEXT,
+                attempted_at TEXT NOT NULL
+            );
+            """)
+
+            # 25. Phase 9 Bilingual Notification Templates
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notification_templates (
+                template_id TEXT PRIMARY KEY,
+                category TEXT NOT NULL,
+                event_type TEXT NOT NULL UNIQUE,
+                title_template_en TEXT NOT NULL,
+                title_template_hi TEXT NOT NULL,
+                body_template_en TEXT NOT NULL,
+                body_template_hi TEXT NOT NULL,
+                action_url_template TEXT,
+                default_priority TEXT NOT NULL DEFAULT 'medium'
+            );
+            """)
+
+            # 26. Phase 9 Smart Farm Reminders
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS farm_reminders (
+                reminder_id TEXT PRIMARY KEY,
+                farmer_id TEXT NOT NULL REFERENCES farmer_profiles(farmer_id) ON DELETE CASCADE,
+                farm_id TEXT REFERENCES farms(farm_id),
+                crop_cycle_id TEXT REFERENCES crop_cycles(cycle_id),
+                activity_type TEXT NOT NULL,
+                title_en TEXT NOT NULL,
+                title_hi TEXT NOT NULL,
+                description_en TEXT,
+                description_hi TEXT,
+                scheduled_date TEXT NOT NULL,
+                due_time TEXT DEFAULT '08:00',
+                status TEXT NOT NULL DEFAULT 'scheduled',
+                snooze_until TEXT,
+                completed_at TEXT,
+                weather_risk_flag INTEGER NOT NULL DEFAULT 0,
+                weather_risk_reason_en TEXT,
+                weather_risk_reason_hi TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # Default bilingual templates
+            default_templates = [
+                (
+                    "tpl_weather_extreme",
+                    "weather_alert",
+                    "weather_alert_extreme",
+                    "⚠️ Severe Weather Warning: {{hazard_type}}",
+                    "⚠️ गंभीर मौसम चेतावनी: {{hazard_type}}",
+                    "Alert for {{village_or_district}}: {{summary}}. Protect your crops and livestock immediately.",
+                    "{{village_or_district}} के लिए चेतावनी: {{summary}}। अपनी फसलों और पशुधन की तुरंत सुरक्षा करें।",
+                    "/weather",
+                    "emergency",
+                ),
+                (
+                    "tpl_weather_spray_risk",
+                    "weather_alert",
+                    "weather_risk_rain_during_spray",
+                    "🌧️ Weather Spray Warning: Rain Forecasted",
+                    "🌧️ कीटनाशक छिड़काव चेतावनी: बारिश की संभावना",
+                    "Rainfall of {{expected_rain_mm}}mm is predicted within {{hours_window}}h at {{farm_name}}. Postpone spraying {{chemical_name}} to prevent chemical runoff.",
+                    "{{farm_name}} में अगले {{hours_window}} घंटों में {{expected_rain_mm}}मिमी बारिश की संभावना है। दवा बहने से रोकने के लिए {{chemical_name}} का छिड़काव स्थगित करें।",
+                    "/reminders",
+                    "high",
+                ),
+                (
+                    "tpl_market_surge",
+                    "market_intelligence",
+                    "market_price_surge",
+                    "📈 Mandi Price Surge: {{crop_name}} up {{price_change_pct}}%",
+                    "📈 मंडी भाव उछाल: {{crop_name}} में {{price_change_pct}}% की वृद्धि",
+                    "Modal price for {{crop_name}} at {{mandi_name}} reached ₹{{current_price}}/qtl (up from ₹{{previous_price}}). Favorable selling window.",
+                    "{{mandi_name}} में {{crop_name}} का मॉडल भाव ₹{{current_price}}/क्विंटल तक पहुंच गया (पहले ₹{{previous_price}} था)। फसल बेचने का अनुकूल समय।",
+                    "/market",
+                    "medium",
+                ),
+                (
+                    "tpl_market_drop",
+                    "market_intelligence",
+                    "market_price_drop",
+                    "📉 Mandi Price Alert: {{crop_name}} declined {{price_change_pct}}%",
+                    "📉 मंडी भाव चेतावनी: {{crop_name}} में {{price_change_pct}}% की गिरावट",
+                    "Modal price for {{crop_name}} at {{mandi_name}} dropped to ₹{{current_price}}/qtl. Consider holding stock or exploring alternative APMCs.",
+                    "{{mandi_name}} में {{crop_name}} का भाव गिरकर ₹{{current_price}}/क्विंटल हो गया। स्टॉक रोकने या अन्य नजदीकी मंडी में बेचने पर विचार करें।",
+                    "/market",
+                    "medium",
+                ),
+                (
+                    "tpl_expert_verified",
+                    "expert_review",
+                    "expert_review_completed",
+                    "✅ Expert Review Completed: {{crop_name}}",
+                    "✅ कृषि विशेषज्ञ समीक्षा पूर्ण: {{crop_name}}",
+                    "Agronomist {{expert_name}} from {{institution}} has verified your prescription for {{crop_name}}. Verified dosage and safety protocols are ready.",
+                    "{{institution}} के कृषि विशेषज्ञ {{expert_name}} ने {{crop_name}} के उपचार की पुष्टि कर दी है। सत्यापित खुराक और सुरक्षा निर्देश उपलब्ध हैं।",
+                    "/expert-review",
+                    "high",
+                ),
+                (
+                    "tpl_expert_secondary_approved",
+                    "expert_review",
+                    "expert_review_secondary_approved",
+                    "🛡️ Dual-Review Approved: Safe Chemical Protocol",
+                    "🛡️ दोहरी विशेषज्ञ समीक्षा स्वीकृत: सुरक्षित रासायनिक उपचार",
+                    "Your high-risk chemical treatment has been approved by secondary independent agronomist. Pre-harvest interval: {{phi_days}} days.",
+                    "आपके रासायनिक उपचार को स्वतंत्र द्वितीय विशेषज्ञ ने स्वीकृति दे दी है। कटाई से पहले प्रतीक्षा अवधि (PHI): {{phi_days}} दिन।",
+                    "/expert-review",
+                    "high",
+                ),
+                (
+                    "tpl_crop_activity_due",
+                    "crop_reminder",
+                    "crop_reminder_activity_due",
+                    "🚜 Farm Activity Due: {{activity_title}}",
+                    "🚜 कृषि कार्य सूचना: {{activity_title}}",
+                    "Scheduled activity {{activity_title}} for {{crop_name}} at {{farm_name}} is due on {{scheduled_date}}.",
+                    "{{farm_name}} में {{crop_name}} के लिए निर्धारित कार्य '{{activity_title}}' {{scheduled_date}} को देय है।",
+                    "/reminders",
+                    "medium",
+                ),
+                (
+                    "tpl_crop_weather_warning",
+                    "crop_reminder",
+                    "crop_reminder_weather_warning",
+                    "⚠️ Weather Conflict with Scheduled Activity",
+                    "⚠️ निर्धारित कार्य में मौसम संबंधी बाधा",
+                    "Scheduled {{activity_title}} on {{scheduled_date}} conflicts with weather risk: {{weather_risk_reason}}.",
+                    "{{scheduled_date}} को निर्धारित '{{activity_title}}' में मौसम बाधा: {{weather_risk_reason}}। कार्य पुनर्निर्धारित करने की सलाह दी जाती है।",
+                    "/reminders",
+                    "high",
+                ),
+            ]
+            cursor.executemany("""
+            INSERT OR IGNORE INTO notification_templates (
+                template_id, category, event_type, title_template_en, title_template_hi,
+                body_template_en, body_template_hi, action_url_template, default_priority
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, default_templates)
+
             # Performance & Isolation Indexes
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_farms_farmer ON farms(farmer_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_plots_farm ON farm_plots(farm_id);")
@@ -474,6 +731,12 @@ class FarmDatabaseRepository:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_rec_ver_review ON expert_recommendation_versions(review_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_comments_review ON expert_review_comments(review_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_proposals_status ON knowledge_improvement_proposals(status);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_notif_farmer_status ON notifications(farmer_id, status);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_notif_created ON notifications(created_at DESC);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_outbox_status_retry ON notification_outbox(status, next_retry_at);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_outbox_lease ON notification_outbox(lease_expires_at);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_reminders_farmer ON farm_reminders(farmer_id, scheduled_date, status);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_dedup ON notification_events(dedup_key, created_at);")
 
         logger.info(f"Initialized FarmDatabaseRepository at {self.db_path}")
 
@@ -2573,6 +2836,737 @@ class FarmDatabaseRepository:
                 (status, admin_id, proposal_id),
             )
             return cursor.rowcount > 0
+
+    # =========================================================================
+    # PHASE 9: PROACTIVE NOTIFICATIONS, OUTBOX & REMINDERS
+    # =========================================================================
+
+    def save_notification_event(self, event: NotificationEvent) -> str:
+        """Record an incoming notification event."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO notification_events (
+                    event_id, event_type, category, priority, farmer_id,
+                    farm_id, crop_cycle_id, related_entity_id, payload_json,
+                    dedup_key, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    event.event_id,
+                    event.event_type,
+                    event.category.value,
+                    event.priority.value,
+                    event.farmer_id,
+                    event.farm_id,
+                    event.crop_cycle_id,
+                    event.related_entity_id,
+                    json.dumps(event.payload),
+                    event.dedup_key,
+                    event.created_at,
+                ),
+            )
+        return event.event_id
+
+    def find_recent_event_by_dedup_key(
+        self,
+        dedup_key: str,
+        window_minutes: int = 60,
+        exclude_event_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Find if a duplicate event was logged within the specified sliding window."""
+        with self.get_connection() as conn:
+            query = """
+                SELECT event_id, event_type, category, priority, farmer_id, created_at
+                FROM notification_events
+                WHERE dedup_key = ?
+            """
+            params = [dedup_key]
+            if exclude_event_id:
+                query += " AND event_id != ?"
+                params.append(exclude_event_id)
+            query += " ORDER BY created_at DESC LIMIT 1;"
+
+            cursor = conn.execute(query, tuple(params))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            created_at_str = row["created_at"]
+            try:
+                created_dt = datetime.fromisoformat(created_at_str)
+                age_seconds = (datetime.now() - created_dt).total_seconds()
+                if age_seconds <= (window_minutes * 60):
+                    return dict(row)
+            except Exception:
+                pass
+            return None
+
+    def create_notification(self, n: NotificationRecord) -> str:
+        """Persist a notification into the farmer's inbox."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO notifications (
+                    notification_id, farmer_id, category, priority,
+                    title_en, title_hi, body_en, body_hi, action_url,
+                    metadata_json, status, read_at, dismissed_at,
+                    created_at, expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    n.notification_id,
+                    n.farmer_id,
+                    n.category.value,
+                    n.priority.value,
+                    n.title_en,
+                    n.title_hi,
+                    n.body_en,
+                    n.body_hi,
+                    n.action_url,
+                    json.dumps(n.metadata),
+                    n.status.value,
+                    n.read_at,
+                    n.dismissed_at,
+                    n.created_at,
+                    n.expires_at,
+                ),
+            )
+        return n.notification_id
+
+    def get_notification(self, notification_id: str) -> Optional[NotificationRecord]:
+        """Retrieve a notification by ID."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM notifications WHERE notification_id = ?;",
+                (notification_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return self._row_to_notification(row)
+
+    def list_notifications_for_farmer(
+        self,
+        farmer_id: str,
+        status: Optional[str] = None,
+        category: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[NotificationRecord]:
+        """Query farmer notifications with pagination and filtering."""
+        query = "SELECT * FROM notifications WHERE farmer_id = ?"
+        params: List[Any] = [farmer_id]
+
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+
+        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?;"
+        params.extend([limit, offset])
+
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return [self._row_to_notification(r) for r in cursor.fetchall()]
+
+    def get_unread_notification_count(self, farmer_id: str) -> int:
+        """Fast count of unread notifications for badge icon."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM notifications WHERE farmer_id = ? AND status = 'unread';",
+                (farmer_id,),
+            )
+            row = cursor.fetchone()
+            return row[0] if row else 0
+
+    def mark_notification_as_read(self, notification_id: str, farmer_id: Optional[str] = None) -> bool:
+        """Mark single notification as read with ownership isolation."""
+        now_str = datetime.now().isoformat()
+        query = "UPDATE notifications SET status = 'read', read_at = ? WHERE notification_id = ?"
+        params: List[Any] = [now_str, notification_id]
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return cursor.rowcount > 0
+
+    def mark_all_notifications_as_read(self, farmer_id: str) -> int:
+        """Mark all unread notifications for a farmer as read."""
+        now_str = datetime.now().isoformat()
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE notifications SET status = 'read', read_at = ? WHERE farmer_id = ? AND status = 'unread';",
+                (now_str, farmer_id),
+            )
+            return cursor.rowcount
+
+    def dismiss_notification(self, notification_id: str, farmer_id: Optional[str] = None) -> bool:
+        """Dismiss a notification from view with ownership isolation."""
+        now_str = datetime.now().isoformat()
+        query = "UPDATE notifications SET status = 'dismissed', dismissed_at = ? WHERE notification_id = ?"
+        params: List[Any] = [now_str, notification_id]
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return cursor.rowcount > 0
+
+    def _row_to_notification(self, row: sqlite3.Row) -> NotificationRecord:
+        """Helper to map database row to NotificationRecord."""
+        meta = {}
+        if row["metadata_json"]:
+            try:
+                meta = json.loads(row["metadata_json"])
+            except Exception:
+                pass
+        return NotificationRecord(
+            notification_id=row["notification_id"],
+            farmer_id=row["farmer_id"],
+            category=NotificationCategory(row["category"]),
+            priority=NotificationPriority(row["priority"]),
+            title_en=row["title_en"],
+            title_hi=row["title_hi"],
+            body_en=row["body_en"],
+            body_hi=row["body_hi"],
+            action_url=row["action_url"],
+            metadata=meta,
+            status=NotificationStatus(row["status"]),
+            read_at=row["read_at"],
+            dismissed_at=row["dismissed_at"],
+            created_at=row["created_at"],
+            expires_at=row["expires_at"],
+        )
+
+    # Preferences & Consents
+    def get_notification_preference(self, farmer_id: str) -> NotificationPreference:
+        """Get farmer notification preferences or return defaults."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM notification_preferences WHERE farmer_id = ?;",
+                (farmer_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                default_pref = NotificationPreference(farmer_id=farmer_id)
+                self.save_notification_preference(default_pref)
+                return default_pref
+
+            channels = [NotificationChannel(c) for c in json.loads(row["channels_json"])]
+            categories = [NotificationCategory(c) for c in json.loads(row["categories_json"])]
+            return NotificationPreference(
+                farmer_id=row["farmer_id"],
+                channels_enabled=channels,
+                categories_enabled=categories,
+                quiet_hours_enabled=bool(row["quiet_hours_enabled"]),
+                quiet_hours_start=row["quiet_hours_start"],
+                quiet_hours_end=row["quiet_hours_end"],
+                emergency_override=bool(row["emergency_override"]),
+                preferred_language=row["preferred_language"],
+                updated_at=row["updated_at"],
+            )
+
+    def save_notification_preference(self, pref: NotificationPreference) -> None:
+        """Upsert notification preferences."""
+        now_str = datetime.now().isoformat()
+        chan_json = json.dumps([c.value for c in pref.channels_enabled])
+        cat_json = json.dumps([c.value for c in pref.categories_enabled])
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO notification_preferences (
+                    farmer_id, channels_json, categories_json,
+                    quiet_hours_enabled, quiet_hours_start, quiet_hours_end,
+                    emergency_override, preferred_language, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(farmer_id) DO UPDATE SET
+                    channels_json = excluded.channels_json,
+                    categories_json = excluded.categories_json,
+                    quiet_hours_enabled = excluded.quiet_hours_enabled,
+                    quiet_hours_start = excluded.quiet_hours_start,
+                    quiet_hours_end = excluded.quiet_hours_end,
+                    emergency_override = excluded.emergency_override,
+                    preferred_language = excluded.preferred_language,
+                    updated_at = excluded.updated_at;
+                """,
+                (
+                    pref.farmer_id,
+                    chan_json,
+                    cat_json,
+                    1 if pref.quiet_hours_enabled else 0,
+                    pref.quiet_hours_start,
+                    pref.quiet_hours_end,
+                    1 if pref.emergency_override else 0,
+                    pref.preferred_language,
+                    now_str,
+                ),
+            )
+
+    def get_channel_consents(self, farmer_id: str) -> List[NotificationChannelConsent]:
+        """List active and historical channel consents for farmer."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM notification_channel_consents WHERE farmer_id = ? ORDER BY granted_at DESC;",
+                (farmer_id,),
+            )
+            res = []
+            for r in cursor.fetchall():
+                res.append(
+                    NotificationChannelConsent(
+                        consent_id=r["consent_id"],
+                        farmer_id=r["farmer_id"],
+                        channel=NotificationChannel(r["channel"]),
+                        is_granted=bool(r["is_granted"]),
+                        granted_at=r["granted_at"],
+                        revoked_at=r["revoked_at"],
+                        ip_or_source=r["ip_or_source"],
+                    )
+                )
+            return res
+
+    def set_channel_consent(self, consent: NotificationChannelConsent) -> None:
+        """Record or update channel consent."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO notification_channel_consents (
+                    consent_id, farmer_id, channel, is_granted, granted_at, revoked_at, ip_or_source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    consent.consent_id,
+                    consent.farmer_id,
+                    consent.channel.value,
+                    1 if consent.is_granted else 0,
+                    consent.granted_at,
+                    consent.revoked_at,
+                    consent.ip_or_source,
+                ),
+            )
+
+    # Transactional Outbox
+    def enqueue_outbox_message(self, item: NotificationOutboxItem) -> str:
+        """Add a notification dispatch job to the transactional outbox."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO notification_outbox (
+                    outbox_id, notification_id, farmer_id, channel,
+                    status, retry_count, max_retries, next_retry_at,
+                    lease_expires_at, last_error, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    item.outbox_id,
+                    item.notification_id,
+                    item.farmer_id,
+                    item.channel.value,
+                    item.status.value,
+                    item.retry_count,
+                    item.max_retries,
+                    item.next_retry_at,
+                    item.lease_expires_at,
+                    item.last_error,
+                    item.created_at,
+                    item.updated_at,
+                ),
+            )
+        return item.outbox_id
+
+    def claim_pending_outbox_items(
+        self,
+        batch_size: int = 20,
+        lease_duration_seconds: int = 60,
+    ) -> List[Dict[str, Any]]:
+        """Atomically claim pending or expired outbox items for worker processing."""
+        now = datetime.now()
+        now_str = now.isoformat()
+        lease_expires = datetime.fromtimestamp(now.timestamp() + lease_duration_seconds).isoformat()
+
+        with self.get_connection() as conn:
+            # Find eligible outbox IDs
+            cursor = conn.execute(
+                """
+                SELECT o.outbox_id, o.notification_id, o.farmer_id, o.channel, o.retry_count, o.max_retries,
+                       n.category, n.priority, n.title_en, n.title_hi, n.body_en, n.body_hi, n.action_url, n.metadata_json,
+                       p.phone_number, p.full_name as farmer_name, p.preferred_language
+                FROM notification_outbox o
+                JOIN notifications n ON o.notification_id = n.notification_id
+                LEFT JOIN farmer_profiles p ON o.farmer_id = p.farmer_id
+                WHERE (o.status = 'pending' OR (o.status = 'processing' AND o.lease_expires_at < ?))
+                  AND (o.next_retry_at IS NULL OR o.next_retry_at <= ?)
+                ORDER BY CASE n.priority
+                    WHEN 'emergency' THEN 1
+                    WHEN 'high' THEN 2
+                    WHEN 'medium' THEN 3
+                    ELSE 4 END, o.created_at ASC
+                LIMIT ?;
+                """,
+                (now_str, now_str, batch_size),
+            )
+            rows = cursor.fetchall()
+            if not rows:
+                return []
+
+            claimed_ids = [r["outbox_id"] for r in rows]
+            placeholders = ",".join(["?"] * len(claimed_ids))
+            conn.execute(
+                f"""
+                UPDATE notification_outbox
+                SET status = 'processing', lease_expires_at = ?, updated_at = ?
+                WHERE outbox_id IN ({placeholders});
+                """,
+                [lease_expires, now_str] + claimed_ids,
+            )
+
+            result = []
+            for r in rows:
+                d = dict(r)
+                if d.get("metadata_json"):
+                    try:
+                        d["metadata"] = json.loads(d["metadata_json"])
+                    except Exception:
+                        d["metadata"] = {}
+                result.append(d)
+            return result
+
+    def update_outbox_status(
+        self,
+        outbox_id: str,
+        status: str,
+        next_retry_at: Optional[str] = None,
+        error_message: Optional[str] = None,
+        increment_retry: bool = False,
+    ) -> None:
+        """Update outbox delivery state after an attempt."""
+        now_str = datetime.now().isoformat()
+        with self.get_connection() as conn:
+            if increment_retry:
+                conn.execute(
+                    """
+                    UPDATE notification_outbox
+                    SET status = ?, retry_count = retry_count + 1, next_retry_at = ?,
+                        last_error = ?, lease_expires_at = NULL, updated_at = ?
+                    WHERE outbox_id = ?;
+                    """,
+                    (status, next_retry_at, error_message, now_str, outbox_id),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE notification_outbox
+                    SET status = ?, next_retry_at = ?, last_error = ?,
+                        lease_expires_at = NULL, updated_at = ?
+                    WHERE outbox_id = ?;
+                    """,
+                    (status, next_retry_at, error_message, now_str, outbox_id),
+                )
+
+    def record_delivery_attempt(self, attempt: NotificationDeliveryAttempt) -> None:
+        """Record physical delivery attempt in the audit log."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO notification_delivery_attempts (
+                    attempt_id, outbox_id, channel, provider_name, status,
+                    latency_ms, error_message, provider_response_code, attempted_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    attempt.attempt_id,
+                    attempt.outbox_id,
+                    attempt.channel.value,
+                    attempt.provider_name,
+                    attempt.status,
+                    attempt.latency_ms,
+                    attempt.error_message,
+                    attempt.provider_response_code,
+                    attempt.attempted_at,
+                ),
+            )
+
+    def get_outbox_metrics(self) -> Dict[str, int]:
+        """Aggregate outbox queue counts for administration and health checks."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT status, COUNT(*) as cnt
+                FROM notification_outbox
+                GROUP BY status;
+                """
+            )
+            counts = {r["status"]: r["cnt"] for r in cursor.fetchall()}
+            return {
+                "pending": counts.get("pending", 0),
+                "processing": counts.get("processing", 0),
+                "delivered": counts.get("delivered", 0),
+                "failed": counts.get("failed", 0),
+                "dead_letter": counts.get("dead_letter", 0),
+            }
+
+    def list_outbox_items(self, status: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """List outbox items for administration queue management."""
+        query = "SELECT * FROM notification_outbox"
+        params: List[Any] = []
+        if status:
+            query += " WHERE status = ?"
+            params.append(status)
+        query += " ORDER BY created_at DESC LIMIT ?;"
+        params.append(limit)
+
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return [dict(r) for r in cursor.fetchall()]
+
+    def retry_outbox_item(self, outbox_id: str) -> bool:
+        """Reset a failed or dead-letter message back to pending."""
+        now_str = datetime.now().isoformat()
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE notification_outbox
+                SET status = 'pending', retry_count = 0, next_retry_at = NULL,
+                    lease_expires_at = NULL, updated_at = ?
+                WHERE outbox_id = ?;
+                """,
+                (now_str, outbox_id),
+            )
+            return cursor.rowcount > 0
+
+    def get_channel_delivery_telemetry(self) -> List[Dict[str, Any]]:
+        """Generate genuine operational channel statistics from actual delivery attempts."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT channel,
+                       COUNT(*) as total_attempts,
+                       SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+                       SUM(CASE WHEN status != 'success' THEN 1 ELSE 0 END) as failed,
+                       AVG(latency_ms) as avg_latency_ms
+                FROM notification_delivery_attempts
+                GROUP BY channel;
+                """
+            )
+            return [dict(r) for r in cursor.fetchall()]
+
+    # Templates
+    def save_notification_template(self, t: NotificationTemplate) -> None:
+        """Upsert a bilingual notification template."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO notification_templates (
+                    template_id, category, event_type,
+                    title_template_en, title_template_hi,
+                    body_template_en, body_template_hi,
+                    action_url_template, default_priority
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(event_type) DO UPDATE SET
+                    title_template_en = excluded.title_template_en,
+                    title_template_hi = excluded.title_template_hi,
+                    body_template_en = excluded.body_template_en,
+                    body_template_hi = excluded.body_template_hi,
+                    action_url_template = excluded.action_url_template,
+                    default_priority = excluded.default_priority;
+                """,
+                (
+                    t.template_id,
+                    t.category.value,
+                    t.event_type,
+                    t.title_template_en,
+                    t.title_template_hi,
+                    t.body_template_en,
+                    t.body_template_hi,
+                    t.action_url_template,
+                    t.default_priority.value,
+                ),
+            )
+
+    def get_notification_template(self, event_type: str) -> Optional[NotificationTemplate]:
+        """Fetch template by event type."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM notification_templates WHERE event_type = ?;",
+                (event_type,),
+            )
+            r = cursor.fetchone()
+            if not r:
+                return None
+            return NotificationTemplate(
+                template_id=r["template_id"],
+                category=NotificationCategory(r["category"]),
+                event_type=r["event_type"],
+                title_template_en=r["title_template_en"],
+                title_template_hi=r["title_template_hi"],
+                body_template_en=r["body_template_en"],
+                body_template_hi=r["body_template_hi"],
+                action_url_template=r["action_url_template"],
+                default_priority=NotificationPriority(r["default_priority"]),
+            )
+
+    def list_notification_templates(self) -> List[NotificationTemplate]:
+        """List all available notification templates."""
+        with self.get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM notification_templates ORDER BY category, event_type;")
+            return [
+                NotificationTemplate(
+                    template_id=r["template_id"],
+                    category=NotificationCategory(r["category"]),
+                    event_type=r["event_type"],
+                    title_template_en=r["title_template_en"],
+                    title_template_hi=r["title_template_hi"],
+                    body_template_en=r["body_template_en"],
+                    body_template_hi=r["body_template_hi"],
+                    action_url_template=r["action_url_template"],
+                    default_priority=NotificationPriority(r["default_priority"]),
+                )
+                for r in cursor.fetchall()
+            ]
+
+    # Smart Farm Reminders
+    def create_farm_reminder(self, r: FarmReminderRecord) -> str:
+        """Create a new smart farm reminder."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO farm_reminders (
+                    reminder_id, farmer_id, farm_id, crop_cycle_id, activity_type,
+                    title_en, title_hi, description_en, description_hi,
+                    scheduled_date, due_time, status, snooze_until, completed_at,
+                    weather_risk_flag, weather_risk_reason_en, weather_risk_reason_hi,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    r.reminder_id,
+                    r.farmer_id,
+                    r.farm_id,
+                    r.crop_cycle_id,
+                    r.activity_type.value,
+                    r.title_en,
+                    r.title_hi,
+                    r.description_en,
+                    r.description_hi,
+                    r.scheduled_date,
+                    r.due_time,
+                    r.status.value,
+                    r.snooze_until,
+                    r.completed_at,
+                    1 if r.weather_risk_flag else 0,
+                    r.weather_risk_reason_en,
+                    r.weather_risk_reason_hi,
+                    r.created_at,
+                    r.updated_at,
+                ),
+            )
+        return r.reminder_id
+
+    def get_farm_reminder(self, reminder_id: str) -> Optional[FarmReminderRecord]:
+        """Fetch reminder by ID."""
+        with self.get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM farm_reminders WHERE reminder_id = ?;", (reminder_id,))
+            r = cursor.fetchone()
+            if not r:
+                return None
+            return self._row_to_farm_reminder(r)
+
+    def list_farm_reminders(
+        self,
+        farmer_id: str,
+        status: Optional[str] = None,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+    ) -> List[FarmReminderRecord]:
+        """List farm reminders for a farmer with date filtering."""
+        query = "SELECT * FROM farm_reminders WHERE farmer_id = ?"
+        params: List[Any] = [farmer_id]
+
+        if status:
+            query += " AND status = ?"
+            params.append(status)
+        if from_date:
+            query += " AND scheduled_date >= ?"
+            params.append(from_date)
+        if to_date:
+            query += " AND scheduled_date <= ?"
+            params.append(to_date)
+
+        query += " ORDER BY scheduled_date ASC, due_time ASC;"
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return [self._row_to_farm_reminder(r) for r in cursor.fetchall()]
+
+    def complete_farm_reminder(self, reminder_id: str, farmer_id: Optional[str] = None) -> bool:
+        """Mark reminder as completed with ownership check."""
+        now_str = datetime.now().isoformat()
+        query = "UPDATE farm_reminders SET status = 'completed', completed_at = ?, updated_at = ? WHERE reminder_id = ?"
+        params: List[Any] = [now_str, now_str, reminder_id]
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return cursor.rowcount > 0
+
+    def snooze_farm_reminder(self, reminder_id: str, snooze_until: str, farmer_id: Optional[str] = None) -> bool:
+        """Snooze a reminder to a new date."""
+        now_str = datetime.now().isoformat()
+        query = "UPDATE farm_reminders SET status = 'snoozed', snooze_until = ?, updated_at = ? WHERE reminder_id = ?"
+        params: List[Any] = [snooze_until, now_str, reminder_id]
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return cursor.rowcount > 0
+
+    def update_farm_reminder_weather_risk(
+        self,
+        reminder_id: str,
+        risk_flag: bool,
+        reason_en: Optional[str],
+        reason_hi: Optional[str],
+    ) -> bool:
+        """Attach or clear weather conflict warning on a scheduled reminder."""
+        now_str = datetime.now().isoformat()
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE farm_reminders
+                SET weather_risk_flag = ?, weather_risk_reason_en = ?,
+                    weather_risk_reason_hi = ?, updated_at = ?
+                WHERE reminder_id = ?;
+                """,
+                (1 if risk_flag else 0, reason_en, reason_hi, now_str, reminder_id),
+            )
+            return cursor.rowcount > 0
+
+    def _row_to_farm_reminder(self, r: sqlite3.Row) -> FarmReminderRecord:
+        """Helper to map database row to FarmReminderRecord."""
+        return FarmReminderRecord(
+            reminder_id=r["reminder_id"],
+            farmer_id=r["farmer_id"],
+            farm_id=r["farm_id"],
+            crop_cycle_id=r["crop_cycle_id"],
+            activity_type=ReminderActivityType(r["activity_type"]),
+            title_en=r["title_en"],
+            title_hi=r["title_hi"],
+            description_en=r["description_en"],
+            description_hi=r["description_hi"],
+            scheduled_date=r["scheduled_date"],
+            due_time=r["due_time"],
+            status=ReminderStatus(r["status"]),
+            snooze_until=r["snooze_until"],
+            completed_at=r["completed_at"],
+            weather_risk_flag=bool(r["weather_risk_flag"]),
+            weather_risk_reason_en=r["weather_risk_reason_en"],
+            weather_risk_reason_hi=r["weather_risk_reason_hi"],
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+        )
 
 
 

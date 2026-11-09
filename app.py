@@ -26,6 +26,7 @@ from frontend.views.farm_management_view import render_farm_management_view
 from frontend.views.home_view import render_home_view
 from frontend.views.knowledge_admin_view import render_knowledge_admin_view
 from frontend.views.market_intelligence_view import render_market_intelligence_view
+from frontend.views.notifications_view import render_notifications_view
 from frontend.views.voice_assistant_view import render_voice_assistant_view
 from frontend.views.weather_dashboard_view import render_weather_dashboard_view
 
@@ -92,6 +93,7 @@ with st.sidebar:
         "Navigation",
         [
             "🌾 My Farms & Crops",
+            "🔔 Alerts & Reminders",
             "🎙️ Voice Assistant",
             "🔬 Crop Disease Diagnosis",
             "🌦️ Weather Intelligence",
@@ -118,6 +120,7 @@ with st.sidebar:
     st.markdown(f"**LLM Reasoning:** {llm_status}")
     st.markdown("**Weather (Open-Meteo):** 🟢 Active")
     st.markdown("**Mandi Intelligence:** 🟢 Active")
+    st.markdown("**Proactive Outbox:** 🟢 Active (Zero Data Loss)")
 
     ui_divider(style="dotted")
 
@@ -145,6 +148,8 @@ with st.sidebar:
 
 if page == "🌾 My Farms & Crops":
     render_farm_management_view()
+elif page == "🔔 Alerts & Reminders":
+    render_notifications_view()
 elif page == "🎙️ Voice Assistant":
     render_voice_assistant_view()
 elif page == "🔬 Crop Disease Diagnosis":

@@ -89,6 +89,21 @@ from backend.app.schemas.expert import (
     ReviewPriority,
     SecondaryReviewSubmission,
 )
+from backend.app.schemas.notification import (
+    ChannelHealthInfo,
+    ConsentUpdateRequest,
+    FarmReminderCreate,
+    FarmReminderRecord,
+    FarmReminderSnooze,
+    NotificationCategory,
+    NotificationChannel,
+    NotificationChannelConsent,
+    NotificationPreference,
+    NotificationPriority,
+    NotificationRecord,
+    NotificationStatus,
+    OutboxProcessResult,
+)
 from backend.app.services.analytics.metric_definitions import METRIC_CATALOG
 from backend.app.services.auth.auth_service import AuthService, AuthenticationError
 from backend.app.services.farm.crop_calendar_service import CropCalendarService
@@ -1825,6 +1840,281 @@ def update_knowledge_proposal_status(
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proposal not found.")
     return {"message": f"Proposal '{proposal_id}' status updated to '{req.status}'."}
+
+
+# =============================================================================
+# PHASE 9: PROACTIVE NOTIFICATIONS, SMART REMINDERS & OUTBOX ORCHESTRATION
+# =============================================================================
+
+def _get_farmer_id_for_user(user: UserRecord) -> str:
+    """Helper to retrieve farmer_id from authenticated user record."""
+    if user.role == UserRole.FARMER:
+        profile = system.farm_context.repo.get_farmer_profile_by_user_id(user.user_id)
+        if not profile:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farmer profile not found for user.")
+        return profile.farmer_id
+    elif user.role == UserRole.ADMINISTRATOR:
+        return "fmr_admin"
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Role does not have associated farmer identity.")
+
+
+@app.get("/api/v1/notifications", response_model=List[NotificationRecord], tags=["Proactive Notifications & Alerts"])
+def list_farmer_notifications(
+    status: Optional[str] = None,
+    category: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """List proactive notifications in the farmer's inbox."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return system.notification_service.list_notifications(
+        farmer_id=farmer_id,
+        status=status,
+        category=category,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/api/v1/notifications/unread-count", tags=["Proactive Notifications & Alerts"])
+def get_unread_notification_count(
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Fast unread notification count for UI badge display."""
+    farmer_id = _get_farmer_id_for_user(user)
+    count = system.notification_service.get_unread_count(farmer_id)
+    return {"farmer_id": farmer_id, "unread_count": count}
+
+
+@app.post("/api/v1/notifications/{notification_id}/read", tags=["Proactive Notifications & Alerts"])
+def mark_notification_read(
+    notification_id: str,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Mark a notification as read with ownership isolation."""
+    farmer_id = _get_farmer_id_for_user(user) if user.role == UserRole.FARMER else None
+    notif = system.farm_context.repo.get_notification(notification_id)
+    if not notif:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found.")
+    if user.role == UserRole.FARMER and notif.farmer_id != farmer_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot access another farmer's notification.")
+
+    ok = system.notification_service.mark_read(notification_id, farmer_id=farmer_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not mark notification as read.")
+    return {"message": "Notification marked as read.", "notification_id": notification_id}
+
+
+@app.post("/api/v1/notifications/read-all", tags=["Proactive Notifications & Alerts"])
+def mark_all_notifications_read(
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Mark all unread notifications as read for current farmer."""
+    farmer_id = _get_farmer_id_for_user(user)
+    updated = system.notification_service.mark_all_read(farmer_id)
+    return {"message": f"{updated} notifications marked as read.", "farmer_id": farmer_id}
+
+
+@app.post("/api/v1/notifications/{notification_id}/dismiss", tags=["Proactive Notifications & Alerts"])
+def dismiss_notification(
+    notification_id: str,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Dismiss a notification from view with ownership isolation."""
+    farmer_id = _get_farmer_id_for_user(user) if user.role == UserRole.FARMER else None
+    notif = system.farm_context.repo.get_notification(notification_id)
+    if not notif:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found.")
+    if user.role == UserRole.FARMER and notif.farmer_id != farmer_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot access another farmer's notification.")
+
+    ok = system.notification_service.dismiss(notification_id, farmer_id=farmer_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not dismiss notification.")
+    return {"message": "Notification dismissed.", "notification_id": notification_id}
+
+
+@app.get("/api/v1/notifications/preferences", response_model=NotificationPreference, tags=["Notification Preferences & Consents"])
+def get_notification_preferences(
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Retrieve farmer notification preferences, channel opt-ins, and quiet hours."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return system.notification_service.get_preferences(farmer_id)
+
+
+@app.put("/api/v1/notifications/preferences", response_model=NotificationPreference, tags=["Notification Preferences & Consents"])
+def update_notification_preferences(
+    pref: NotificationPreference,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Update notification preferences with ownership isolation."""
+    farmer_id = _get_farmer_id_for_user(user)
+    if user.role == UserRole.FARMER and pref.farmer_id != farmer_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot alter preferences for another farmer.")
+    return system.notification_service.update_preferences(pref)
+
+
+@app.get("/api/v1/notifications/consents", response_model=List[NotificationChannelConsent], tags=["Notification Preferences & Consents"])
+def list_notification_consents(
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """List historical and active channel consent grants for the farmer."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return system.farm_context.repo.get_channel_consents(farmer_id)
+
+
+@app.post("/api/v1/notifications/consents", tags=["Notification Preferences & Consents"])
+def update_channel_consent(
+    req: ConsentUpdateRequest,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Record farmer consent or revocation for outbound notification channels."""
+    import uuid
+    farmer_id = _get_farmer_id_for_user(user)
+    now_str = datetime.now().isoformat()
+    consent = NotificationChannelConsent(
+        consent_id=f"cns_{uuid.uuid4().hex[:12]}",
+        farmer_id=farmer_id,
+        channel=req.channel,
+        is_granted=req.is_granted,
+        granted_at=now_str,
+        revoked_at=None if req.is_granted else now_str,
+        ip_or_source=req.source,
+    )
+    system.farm_context.repo.set_channel_consent(consent)
+    return {"message": "Channel consent successfully updated.", "channel": req.channel.value, "is_granted": req.is_granted}
+
+
+# =============================================================================
+# SMART FARM REMINDERS ENDPOINTS
+# =============================================================================
+
+@app.get("/api/v1/reminders", response_model=List[FarmReminderRecord], tags=["Smart Farm Reminders"])
+def list_farm_reminders(
+    status: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.FIELD_OFFICER, UserRole.ADMINISTRATOR])),
+):
+    """List smart agronomic reminders for the farmer."""
+    farmer_id = _get_farmer_id_for_user(user) if user.role == UserRole.FARMER else "fmr_admin"
+    return system.notification_service.list_reminders(
+        farmer_id=farmer_id,
+        status=status,
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+
+@app.post("/api/v1/reminders", response_model=FarmReminderRecord, status_code=status.HTTP_201_CREATED, tags=["Smart Farm Reminders"])
+def create_farm_reminder(
+    req: FarmReminderCreate,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Create a new smart agricultural reminder."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return system.notification_service.create_reminder(farmer_id, req)
+
+
+@app.post("/api/v1/reminders/generate", response_model=List[FarmReminderRecord], tags=["Smart Farm Reminders"])
+def generate_cycle_reminders(
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Auto-schedule smart reminders based on active crop cycles and agronomic milestones."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return system.notification_service.generate_crop_reminders(farmer_id)
+
+
+@app.post("/api/v1/reminders/{reminder_id}/complete", tags=["Smart Farm Reminders"])
+def complete_farm_reminder(
+    reminder_id: str,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Mark a farm activity reminder as completed."""
+    farmer_id = _get_farmer_id_for_user(user) if user.role == UserRole.FARMER else None
+    rem = system.farm_context.repo.get_farm_reminder(reminder_id)
+    if not rem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found.")
+    if user.role == UserRole.FARMER and rem.farmer_id != farmer_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify another farmer's reminder.")
+
+    ok = system.notification_service.complete_reminder(reminder_id, farmer_id=farmer_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not complete reminder.")
+    return {"message": "Reminder marked as completed.", "reminder_id": reminder_id}
+
+
+@app.post("/api/v1/reminders/{reminder_id}/snooze", tags=["Smart Farm Reminders"])
+def snooze_farm_reminder(
+    reminder_id: str,
+    req: FarmReminderSnooze,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.ADMINISTRATOR])),
+):
+    """Snooze a farm activity reminder to a future date."""
+    farmer_id = _get_farmer_id_for_user(user) if user.role == UserRole.FARMER else None
+    rem = system.farm_context.repo.get_farm_reminder(reminder_id)
+    if not rem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found.")
+    if user.role == UserRole.FARMER and rem.farmer_id != farmer_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify another farmer's reminder.")
+
+    ok = system.notification_service.snooze_reminder(
+        reminder_id=reminder_id,
+        snooze_days=req.snooze_days,
+        custom_date=req.custom_date,
+        farmer_id=farmer_id,
+    )
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not snooze reminder.")
+    return {"message": "Reminder snoozed successfully.", "reminder_id": reminder_id}
+
+
+# =============================================================================
+# ADMIN NOTIFICATION ORCHESTRATION & OUTBOX TELEMETRY
+# =============================================================================
+
+@app.get("/api/v1/admin/notifications/outbox", tags=["Admin Notification Orchestration"])
+def get_admin_outbox_queue(
+    status: Optional[str] = None,
+    limit: int = 50,
+    admin: UserRecord = Depends(require_roles([UserRole.ADMINISTRATOR])),
+):
+    """View outbox queue items and aggregation metrics."""
+    items = system.notification_service.list_outbox_items(status=status, limit=limit)
+    metrics = system.notification_service.get_outbox_metrics()
+    return {"metrics": metrics, "items": items}
+
+
+@app.post("/api/v1/admin/notifications/outbox/process", response_model=OutboxProcessResult, tags=["Admin Notification Orchestration"])
+def process_outbox_batch(
+    batch_size: int = 20,
+    admin: UserRecord = Depends(require_roles([UserRole.ADMINISTRATOR])),
+):
+    """Trigger worker execution cycle on pending outbox delivery queue."""
+    return system.notification_service.process_outbox(batch_size=batch_size)
+
+
+@app.post("/api/v1/admin/notifications/outbox/{outbox_id}/retry", tags=["Admin Notification Orchestration"])
+def retry_failed_outbox_item(
+    outbox_id: str,
+    admin: UserRecord = Depends(require_roles([UserRole.ADMINISTRATOR])),
+):
+    """Manually reset and retry a failed or dead-letter outbox message."""
+    ok = system.notification_service.retry_outbox_message(outbox_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Outbox message not found.")
+    return {"message": "Outbox item reset to pending for next dispatch cycle.", "outbox_id": outbox_id}
+
+
+@app.get("/api/v1/admin/notifications/telemetry", response_model=List[ChannelHealthInfo], tags=["Admin Notification Orchestration"])
+def get_notification_channels_telemetry(
+    admin: UserRecord = Depends(require_roles([UserRole.ADMINISTRATOR])),
+):
+    """Return genuine operational readiness and delivery telemetry across all notification channels."""
+    return system.notification_service.get_channel_health()
+
 
 
 

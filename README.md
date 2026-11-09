@@ -89,6 +89,21 @@ Built with **Streamlit, Gnani AI (Prisma v2.5 STT & Timbre v2.5 TTS), Open-Meteo
 * **FastAPI RBAC Security & REST Endpoints:** Programmatic dashboard access protected by JWT/bearer authentication with strict role enforcement (`GET /api/v1/dashboard/farmer/overview`, `GET /api/v1/dashboard/officer/overview`, `POST .../follow-up`, `GET /api/v1/dashboard/admin/overview`, `POST .../territory/assign`).
 * **Authentic PDF Generation:** Exports complete diagnostic reports compiled via ReportLab.
 
+### 👨‍⚕️ Agricultural Expert Verification & Human-in-the-Loop AI (Phase 8)
+* **Dual Review Escalation Architecture:** Bridges AI automated diagnostics with human agronomic oversight, routing low-confidence or high-severity cases to accredited ICAR experts.
+* **Immutable Case Dossiers:** Assembles unforgeable cryptographic review dossiers with leaf imagery, Grad-CAM heatmaps, soil test records, and genuine ICAR atomic facts.
+* **Secondary Consensus Reviews:** Supports peer agronomist verification with strict anti-bypass validation and self-review prohibition.
+* **Farmer Verification Badges:** Delivers authoritative digital verification seals indicating review status (`UNVERIFIED`, `PENDING_REVIEW`, `EXPERT_VERIFIED`, `AMENDED`).
+
+### 🔔 Proactive Notifications, Alert Orchestration & Smart Farm Reminders (Phase 9)
+* **Centralized Multilingual Notification Engine:** Standardized `NotificationEvent` bus connecting Weather Hazards, Mandi Price Surges, Crop Milestones, and Agronomist Reviews with bilingual (English & Hindi) rendering.
+* **Intelligent Policy Engine & Quiet Hours:** Sliding-window deduplication (60m window for market/reminders, 2h for weather hazards) preventing notification fatigue. Quiet-hours enforcement (22:00–06:00) with emergency weather hazard overrides.
+* **Smart Farm Reminders & Microclimate Conflict Analysis:** Synchronized with Phase 6 active crop cycles, proactively detecting rain and wind conflicts during pesticide sprays or fertilization windows.
+* **Zero Data Loss Transactional Outbox:** Guaranteed at-least-once delivery with atomic worker lease locking (`lease_token`, `lease_expires_at`), automatic lease recovery on worker failure, exponential backoff, and Dead-Letter Queue (DLQ).
+* **Multi-Channel Provider Architecture:** Pluggable adapters for In-App Center, SMS, WhatsApp Business, Voice Calls (Gnani Timbre TTS), and Email with truthful, zero-fabrication telemetry.
+* **DPDP Act Compliant Consent Tracking:** Explicit channel opt-in/opt-out management with immutable audit trails per India's Digital Personal Data Protection Act.
+* **Streamlit Notification Center:** Complete 4-tab interface for Notifications, Smart Reminders, Preferences/Consents, and Admin Outbox Telemetry.
+
 ---
 
 ## 🧩 Architecture & Tech Stack
@@ -178,6 +193,10 @@ python -m pytest tests/integration/test_gnani_live.py -v
 ---
 
 ## 📚 Documentation Links
+* [Phase 9 Final Engineering Report (`docs/PHASE_9_FINAL_REPORT.md`)](file:///docs/PHASE_9_FINAL_REPORT.md)
+* [Phase 9 REST API Documentation (`docs/PHASE_9_API_DOCUMENTATION.md`)](file:///docs/PHASE_9_API_DOCUMENTATION.md)
+* [Phase 9 Operations & Maintenance Guide (`docs/PHASE_9_OPERATIONS_GUIDE.md`)](file:///docs/PHASE_9_OPERATIONS_GUIDE.md)
+* [Phase 8 Verification & Security Hardening (`docs/PHASE_8_VERIFICATION.md`)](file:///docs/PHASE_8_VERIFICATION.md)
 * [Phase 4 Final Engineering Report (`docs/PHASE_4_FINAL_REPORT.md`)](file:///docs/PHASE_4_FINAL_REPORT.md)
 * [Weather Risk Evaluation & Calibration Report (`docs/WEATHER_RISK_EVALUATION.md`)](file:///docs/WEATHER_RISK_EVALUATION.md)
 * [Phase 3 Verification & Remediation Audit (`docs/PHASE_3_VERIFICATION.md`)](file:///docs/PHASE_3_VERIFICATION.md)

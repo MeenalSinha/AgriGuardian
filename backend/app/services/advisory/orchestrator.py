@@ -15,6 +15,7 @@ from backend.app.services.agriculture.rule_engine import DynamicRuleEngine
 from backend.app.services.analytics.dashboard import EnhancedDashboardAnalytics
 from backend.app.services.analytics.analytics_orchestrator import AnalyticsOrchestrator
 from backend.app.services.expert.expert_review_service import ExpertReviewService
+from backend.app.services.notifications.notification_service import NotificationService
 from backend.app.services.farm.farm_context_service import FarmContextService
 from backend.app.services.reporting.pdf_generator import PDFReportGenerator
 from backend.app.services.weather.weather_intelligence import WeatherIntelligenceService
@@ -44,6 +45,7 @@ class AgriGuardianSystem:
             market_service=self.market_service,
         )
         self.expert_review_service = ExpertReviewService(repo=self.farm_context.repo)
+        self.notification_service = NotificationService(repo=self.farm_context.repo)
         logger.info("AgriGuardianSystem initialized successfully.")
 
     def process_request(

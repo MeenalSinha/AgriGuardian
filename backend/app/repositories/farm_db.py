@@ -75,6 +75,18 @@ from backend.app.schemas.notification import (
     ReminderActivityType,
     ReminderStatus,
 )
+from backend.app.schemas.economics import (
+    BudgetItemRecord,
+    CropCycleBudgetRecord,
+    ExpenseCategory,
+    ExpenseCorrectionRecord,
+    FarmExpenseRecord,
+    FarmHarvestRecord,
+    FarmSaleRecord,
+    FinancialBenchmarkRecord,
+    PaymentStatus,
+    ScenarioType,
+)
 
 logger = get_logger("FarmDBRepository")
 
@@ -715,7 +727,10 @@ class FarmDatabaseRepository:
             """, default_templates)
 
             # Migration check: ensure version_number exists on key syncable entities
-            for table_name in ["farms", "farm_plots", "crop_cycles", "farm_activities", "farm_reminders"]:
+            for table_name in [
+                "farms", "farm_plots", "crop_cycles", "farm_activities", "farm_reminders",
+                "farm_expenses", "farm_harvest_records", "farm_sales"
+            ]:
                 try:
                     cursor.execute(f"PRAGMA table_info({table_name});")
                     cols = [r[1] for r in cursor.fetchall()]
@@ -851,6 +866,196 @@ class FarmDatabaseRepository:
             );
             """)
 
+            # 35. Phase 11 Farm Expenses
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS farm_expenses (
+                expense_id TEXT PRIMARY KEY,
+                farmer_id TEXT NOT NULL REFERENCES farmer_profiles(farmer_id) ON DELETE CASCADE,
+                farm_id TEXT NOT NULL REFERENCES farms(farm_id),
+                plot_id TEXT REFERENCES farm_plots(plot_id),
+                crop_cycle_id TEXT REFERENCES crop_cycles(cycle_id),
+                expense_category TEXT NOT NULL,
+                subcategory TEXT,
+                expense_description TEXT NOT NULL,
+                input_name TEXT,
+                quantity REAL,
+                quantity_unit TEXT,
+                unit_price REAL,
+                total_amount REAL NOT NULL,
+                currency TEXT NOT NULL DEFAULT 'INR',
+                purchase_date TEXT NOT NULL,
+                payment_date TEXT,
+                payment_status TEXT NOT NULL DEFAULT 'paid',
+                is_planned INTEGER NOT NULL DEFAULT 0,
+                supplier_vendor TEXT,
+                invoice_attachment_id TEXT,
+                notes TEXT,
+                entry_source TEXT NOT NULL DEFAULT 'manual',
+                version_number INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 36. Phase 11 Expense Corrections (Append-only Audit)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS farm_expense_corrections (
+                correction_id TEXT PRIMARY KEY,
+                original_expense_id TEXT NOT NULL REFERENCES farm_expenses(expense_id) ON DELETE CASCADE,
+                farmer_id TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                previous_amount REAL NOT NULL,
+                new_amount REAL NOT NULL,
+                corrected_by TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            """)
+
+            # 37. Phase 11 Farm Harvest Records
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS farm_harvest_records (
+                harvest_id TEXT PRIMARY KEY,
+                farmer_id TEXT NOT NULL REFERENCES farmer_profiles(farmer_id) ON DELETE CASCADE,
+                farm_id TEXT NOT NULL REFERENCES farms(farm_id),
+                plot_id TEXT REFERENCES farm_plots(plot_id),
+                crop_cycle_id TEXT NOT NULL REFERENCES crop_cycles(cycle_id),
+                harvest_date TEXT NOT NULL,
+                crop_name TEXT NOT NULL,
+                variety_name TEXT,
+                harvested_quantity REAL NOT NULL,
+                quantity_unit TEXT NOT NULL DEFAULT 'quintal',
+                quality_grade TEXT,
+                damaged_quantity REAL NOT NULL DEFAULT 0.0,
+                rejected_quantity REAL NOT NULL DEFAULT 0.0,
+                stored_quantity REAL NOT NULL DEFAULT 0.0,
+                sold_quantity REAL NOT NULL DEFAULT 0.0,
+                retained_quantity REAL NOT NULL DEFAULT 0.0,
+                moisture_percentage REAL,
+                notes TEXT,
+                attachment_id TEXT,
+                version_number INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 38. Phase 11 Farm Sales & Revenue
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS farm_sales (
+                sale_id TEXT PRIMARY KEY,
+                farmer_id TEXT NOT NULL REFERENCES farmer_profiles(farmer_id) ON DELETE CASCADE,
+                farm_id TEXT NOT NULL REFERENCES farms(farm_id),
+                plot_id TEXT REFERENCES farm_plots(plot_id),
+                crop_cycle_id TEXT NOT NULL REFERENCES crop_cycles(cycle_id),
+                harvest_id TEXT REFERENCES farm_harvest_records(harvest_id),
+                crop_name TEXT NOT NULL,
+                quantity_sold REAL NOT NULL,
+                quantity_unit TEXT NOT NULL DEFAULT 'quintal',
+                realized_price_per_unit REAL NOT NULL,
+                gross_amount REAL NOT NULL,
+                deductions_charges REAL NOT NULL DEFAULT 0.0,
+                net_amount_received REAL NOT NULL,
+                currency TEXT NOT NULL DEFAULT 'INR',
+                sale_date TEXT NOT NULL,
+                buyer_name TEXT,
+                mandi_id TEXT,
+                quality_grade TEXT,
+                payment_status TEXT NOT NULL DEFAULT 'paid',
+                payment_received_date TEXT,
+                transport_charges REAL NOT NULL DEFAULT 0.0,
+                commission_charges REAL NOT NULL DEFAULT 0.0,
+                attachment_id TEXT,
+                notes TEXT,
+                version_number INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 39. Phase 11 Crop Cycle Budgets
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS crop_cycle_budgets (
+                budget_id TEXT PRIMARY KEY,
+                farmer_id TEXT NOT NULL REFERENCES farmer_profiles(farmer_id) ON DELETE CASCADE,
+                farm_id TEXT NOT NULL REFERENCES farms(farm_id),
+                plot_id TEXT REFERENCES farm_plots(plot_id),
+                crop_cycle_id TEXT NOT NULL REFERENCES crop_cycles(cycle_id),
+                budget_name TEXT NOT NULL,
+                season TEXT,
+                total_budget_amount REAL NOT NULL,
+                currency TEXT NOT NULL DEFAULT 'INR',
+                version_number INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 40. Phase 11 Crop Cycle Budget Items
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS crop_cycle_budget_items (
+                item_id TEXT PRIMARY KEY,
+                budget_id TEXT NOT NULL REFERENCES crop_cycle_budgets(budget_id) ON DELETE CASCADE,
+                expense_category TEXT NOT NULL,
+                planned_amount REAL NOT NULL,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 41. Phase 11 Financial Scenarios
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS financial_scenarios (
+                scenario_id TEXT PRIMARY KEY,
+                farmer_id TEXT NOT NULL REFERENCES farmer_profiles(farmer_id) ON DELETE CASCADE,
+                farm_id TEXT REFERENCES farms(farm_id),
+                plot_id TEXT REFERENCES farm_plots(plot_id),
+                crop_cycle_id TEXT REFERENCES crop_cycles(cycle_id),
+                crop_name TEXT NOT NULL,
+                scenario_name TEXT NOT NULL,
+                scenario_type TEXT NOT NULL DEFAULT 'base',
+                assumptions_json TEXT NOT NULL,
+                results_json TEXT NOT NULL,
+                version_number INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 42. Phase 11 Financial Benchmarks
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS financial_benchmarks (
+                benchmark_id TEXT PRIMARY KEY,
+                crop_name TEXT NOT NULL,
+                state TEXT NOT NULL,
+                district TEXT,
+                reporting_period TEXT NOT NULL,
+                cost_per_acre REAL NOT NULL,
+                expected_yield_per_acre REAL NOT NULL,
+                yield_unit TEXT NOT NULL DEFAULT 'quintal',
+                source_name TEXT NOT NULL,
+                source_doc TEXT,
+                verification_status TEXT NOT NULL DEFAULT 'verified',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 43. Phase 11 Financial Audit Log
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS financial_audit_log (
+                audit_id TEXT PRIMARY KEY,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT NOT NULL,
+                farmer_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                changed_fields_json TEXT,
+                performed_by TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            );
+            """)
+
             # Performance & Isolation Indexes
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_farms_farmer ON farms(farmer_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_plots_farm ON farm_plots(farm_id);")
@@ -893,6 +1098,24 @@ class FarmDatabaseRepository:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_conflicts_farmer ON sync_conflicts(farmer_id, status);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_attachments_farmer ON sync_attachments(farmer_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_attachments_checksum ON sync_attachments(sha256_checksum);")
+
+            # Phase 11 Farm Economics Indexes
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_farmer ON farm_expenses(farmer_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_cycle ON farm_expenses(crop_cycle_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_farm ON farm_expenses(farm_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category ON farm_expenses(expense_category);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_date ON farm_expenses(purchase_date);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_corrections_orig ON farm_expense_corrections(original_expense_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_harvest_farmer ON farm_harvest_records(farmer_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_harvest_cycle ON farm_harvest_records(crop_cycle_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sales_farmer ON farm_sales(farmer_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sales_cycle ON farm_sales(crop_cycle_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_budgets_farmer ON crop_cycle_budgets(farmer_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_budgets_cycle ON crop_cycle_budgets(crop_cycle_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_budget_items_budget ON crop_cycle_budget_items(budget_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_scenarios_farmer ON financial_scenarios(farmer_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_benchmarks_crop_state ON financial_benchmarks(crop_name, state);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_fin_audit_entity ON financial_audit_log(entity_type, entity_id);")
 
         logger.info(f"Initialized FarmDatabaseRepository at {self.db_path}")
 
@@ -4368,6 +4591,989 @@ class FarmDatabaseRepository:
                 ),
             )
 
+    # =========================================================================
+    # PHASE 11: FARM ECONOMICS, EXPENSES, HARVESTS, SALES, BUDGETS & SCENARIOS
+    # =========================================================================
+
+    def _row_to_farm_expense(self, r: sqlite3.Row) -> FarmExpenseRecord:
+        """Map database row to FarmExpenseRecord."""
+        return FarmExpenseRecord(
+            expense_id=r["expense_id"],
+            farmer_id=r["farmer_id"],
+            farm_id=r["farm_id"],
+            plot_id=r["plot_id"],
+            crop_cycle_id=r["crop_cycle_id"],
+            expense_category=ExpenseCategory(r["expense_category"]),
+            subcategory=r["subcategory"],
+            expense_description=r["expense_description"],
+            input_name=r["input_name"],
+            quantity=r["quantity"],
+            quantity_unit=r["quantity_unit"],
+            unit_price=r["unit_price"],
+            total_amount=float(r["total_amount"]),
+            currency=r["currency"],
+            purchase_date=r["purchase_date"],
+            payment_date=r["payment_date"],
+            payment_status=PaymentStatus(r["payment_status"]),
+            is_planned=bool(r["is_planned"]),
+            supplier_vendor=r["supplier_vendor"],
+            invoice_attachment_id=r["invoice_attachment_id"],
+            notes=r["notes"],
+            entry_source=r["entry_source"],
+            version_number=r["version_number"] if "version_number" in r.keys() else 1,
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+        )
+
+    def _row_to_expense_correction(self, r: sqlite3.Row) -> ExpenseCorrectionRecord:
+        """Map database row to ExpenseCorrectionRecord."""
+        return ExpenseCorrectionRecord(
+            correction_id=r["correction_id"],
+            original_expense_id=r["original_expense_id"],
+            farmer_id=r["farmer_id"],
+            reason=r["reason"],
+            previous_amount=float(r["previous_amount"]),
+            new_amount=float(r["new_amount"]),
+            corrected_by=r["corrected_by"],
+            created_at=r["created_at"],
+        )
+
+    def _row_to_harvest_record(self, r: sqlite3.Row) -> FarmHarvestRecord:
+        """Map database row to FarmHarvestRecord."""
+        return FarmHarvestRecord(
+            harvest_id=r["harvest_id"],
+            farmer_id=r["farmer_id"],
+            farm_id=r["farm_id"],
+            plot_id=r["plot_id"],
+            crop_cycle_id=r["crop_cycle_id"],
+            harvest_date=r["harvest_date"],
+            crop_name=r["crop_name"],
+            variety_name=r["variety_name"],
+            harvested_quantity=float(r["harvested_quantity"]),
+            quantity_unit=r["quantity_unit"],
+            quality_grade=r["quality_grade"],
+            damaged_quantity=float(r["damaged_quantity"]),
+            rejected_quantity=float(r["rejected_quantity"]),
+            stored_quantity=float(r["stored_quantity"]),
+            sold_quantity=float(r["sold_quantity"]),
+            retained_quantity=float(r["retained_quantity"]),
+            moisture_percentage=r["moisture_percentage"],
+            notes=r["notes"],
+            attachment_id=r["attachment_id"],
+            version_number=r["version_number"] if "version_number" in r.keys() else 1,
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+        )
+
+    def _row_to_farm_sale(self, r: sqlite3.Row) -> FarmSaleRecord:
+        """Map database row to FarmSaleRecord."""
+        return FarmSaleRecord(
+            sale_id=r["sale_id"],
+            farmer_id=r["farmer_id"],
+            farm_id=r["farm_id"],
+            plot_id=r["plot_id"],
+            crop_cycle_id=r["crop_cycle_id"],
+            harvest_id=r["harvest_id"],
+            crop_name=r["crop_name"],
+            quantity_sold=float(r["quantity_sold"]),
+            quantity_unit=r["quantity_unit"],
+            realized_price_per_unit=float(r["realized_price_per_unit"]),
+            gross_amount=float(r["gross_amount"]),
+            deductions_charges=float(r["deductions_charges"]),
+            net_amount_received=float(r["net_amount_received"]),
+            currency=r["currency"],
+            sale_date=r["sale_date"],
+            buyer_name=r["buyer_name"],
+            mandi_id=r["mandi_id"],
+            quality_grade=r["quality_grade"],
+            payment_status=PaymentStatus(r["payment_status"]),
+            payment_received_date=r["payment_received_date"],
+            transport_charges=float(r["transport_charges"]),
+            commission_charges=float(r["commission_charges"]),
+            attachment_id=r["attachment_id"],
+            notes=r["notes"],
+            version_number=r["version_number"] if "version_number" in r.keys() else 1,
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+        )
+
+    def _row_to_crop_cycle_budget(self, r: sqlite3.Row, items: Optional[List[BudgetItemRecord]] = None) -> CropCycleBudgetRecord:
+        """Map database row to CropCycleBudgetRecord."""
+        return CropCycleBudgetRecord(
+            budget_id=r["budget_id"],
+            farmer_id=r["farmer_id"],
+            farm_id=r["farm_id"],
+            plot_id=r["plot_id"],
+            crop_cycle_id=r["crop_cycle_id"],
+            budget_name=r["budget_name"],
+            season=r["season"],
+            total_budget_amount=float(r["total_budget_amount"]),
+            currency=r["currency"],
+            version_number=r["version_number"] if "version_number" in r.keys() else 1,
+            status=r["status"],
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+            items=items or [],
+        )
+
+    def _row_to_budget_item(self, r: sqlite3.Row) -> BudgetItemRecord:
+        """Map database row to BudgetItemRecord."""
+        return BudgetItemRecord(
+            item_id=r["item_id"],
+            budget_id=r["budget_id"],
+            expense_category=ExpenseCategory(r["expense_category"]),
+            planned_amount=float(r["planned_amount"]),
+            notes=r["notes"],
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+        )
+
+    def _row_to_financial_benchmark(self, r: sqlite3.Row) -> FinancialBenchmarkRecord:
+        """Map database row to FinancialBenchmarkRecord."""
+        return FinancialBenchmarkRecord(
+            benchmark_id=r["benchmark_id"],
+            crop_name=r["crop_name"],
+            state=r["state"],
+            district=r["district"],
+            reporting_period=r["reporting_period"],
+            cost_per_acre=float(r["cost_per_acre"]),
+            expected_yield_per_acre=float(r["expected_yield_per_acre"]),
+            yield_unit=r["yield_unit"],
+            source_name=r["source_name"],
+            source_doc=r["source_doc"],
+            verification_status=r["verification_status"],
+            created_at=r["created_at"],
+            updated_at=r["updated_at"],
+        )
+
+    # --- Farm Expenses Repository Methods ---
+
+    def create_farm_expense(self, exp: FarmExpenseRecord) -> FarmExpenseRecord:
+        """Create a new farm expense entry with tenant isolation and sync change logging."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO farm_expenses (
+                    expense_id, farmer_id, farm_id, plot_id, crop_cycle_id,
+                    expense_category, subcategory, expense_description, input_name,
+                    quantity, quantity_unit, unit_price, total_amount, currency,
+                    purchase_date, payment_date, payment_status, is_planned,
+                    supplier_vendor, invoice_attachment_id, notes, entry_source,
+                    version_number, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    exp.expense_id,
+                    exp.farmer_id,
+                    exp.farm_id,
+                    exp.plot_id,
+                    exp.crop_cycle_id,
+                    exp.expense_category.value,
+                    exp.subcategory,
+                    exp.expense_description,
+                    exp.input_name,
+                    exp.quantity,
+                    exp.quantity_unit,
+                    exp.unit_price,
+                    exp.total_amount,
+                    exp.currency,
+                    exp.purchase_date,
+                    exp.payment_date,
+                    exp.payment_status.value,
+                    1 if exp.is_planned else 0,
+                    exp.supplier_vendor,
+                    exp.invoice_attachment_id,
+                    exp.notes,
+                    exp.entry_source,
+                    exp.version_number,
+                    exp.created_at,
+                    exp.updated_at,
+                ),
+            )
+            self._log_sync_change_conn(
+                conn,
+                "farm_expense",
+                exp.expense_id,
+                exp.farmer_id,
+                "INSERT",
+                exp.model_dump_json() if hasattr(exp, "model_dump_json") else json.dumps(exp.dict()),
+            )
+        return exp
+
+    def get_farm_expense(self, expense_id: str, farmer_id: Optional[str] = None) -> Optional[FarmExpenseRecord]:
+        """Fetch expense by ID verifying tenant ownership."""
+        query = "SELECT * FROM farm_expenses WHERE expense_id = ?"
+        params: List[Any] = [expense_id]
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+        with self.get_connection() as conn:
+            row = conn.execute(query, params).fetchone()
+            if not row:
+                return None
+            return self._row_to_farm_expense(row)
+
+    def list_farm_expenses(
+        self,
+        farmer_id: str,
+        farm_id: Optional[str] = None,
+        plot_id: Optional[str] = None,
+        crop_cycle_id: Optional[str] = None,
+        category: Optional[str] = None,
+        payment_status: Optional[str] = None,
+        is_planned: Optional[bool] = None,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+    ) -> List[FarmExpenseRecord]:
+        """List expense records with flexible multi-dimensional filtering."""
+        query = "SELECT * FROM farm_expenses WHERE farmer_id = ?"
+        params: List[Any] = [farmer_id]
+
+        if farm_id:
+            query += " AND farm_id = ?"
+            params.append(farm_id)
+        if plot_id:
+            query += " AND plot_id = ?"
+            params.append(plot_id)
+        if crop_cycle_id:
+            query += " AND crop_cycle_id = ?"
+            params.append(crop_cycle_id)
+        if category:
+            query += " AND expense_category = ?"
+            params.append(category)
+        if payment_status:
+            query += " AND payment_status = ?"
+            params.append(payment_status)
+        if is_planned is not None:
+            query += " AND is_planned = ?"
+            params.append(1 if is_planned else 0)
+        if from_date:
+            query += " AND purchase_date >= ?"
+            params.append(from_date)
+        if to_date:
+            query += " AND purchase_date <= ?"
+            params.append(to_date)
+
+        query += " ORDER BY purchase_date DESC, created_at DESC;"
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return [self._row_to_farm_expense(r) for r in cursor.fetchall()]
+
+    def update_farm_expense(
+        self,
+        expense_id: str,
+        farmer_id: str,
+        updates: Dict[str, Any],
+    ) -> bool:
+        """Update fields of an existing expense and log sync change."""
+        allowed = {
+            "expense_category", "subcategory", "expense_description", "input_name",
+            "quantity", "quantity_unit", "unit_price", "total_amount",
+            "purchase_date", "payment_date", "payment_status", "is_planned",
+            "supplier_vendor", "notes"
+        }
+        filtered = {k: v for k, v in updates.items() if k in allowed and v is not None}
+        if not filtered:
+            return False
+        filtered["updated_at"] = datetime.now().isoformat()
+
+        set_clauses = [f"{k} = ?" for k in filtered.keys()]
+        set_clauses.append("version_number = version_number + 1")
+        params = list(filtered.values())
+        params.extend([expense_id, farmer_id])
+
+        query = f"UPDATE farm_expenses SET {', '.join(set_clauses)} WHERE expense_id = ? AND farmer_id = ?"
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            if cursor.rowcount > 0:
+                row = conn.execute("SELECT * FROM farm_expenses WHERE expense_id = ?", (expense_id,)).fetchone()
+                payload = self._row_to_farm_expense(row).model_dump_json() if row else None
+                self._log_sync_change_conn(conn, "farm_expense", expense_id, farmer_id, "UPDATE", payload_json=payload)
+                return True
+            return False
+
+    def delete_farm_expense(self, expense_id: str, farmer_id: str) -> bool:
+        """Delete an expense record with tenant isolation."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM farm_expenses WHERE expense_id = ? AND farmer_id = ?",
+                (expense_id, farmer_id),
+            )
+            if cursor.rowcount > 0:
+                self._log_sync_change_conn(conn, "farm_expense", expense_id, farmer_id, "DELETE")
+                return True
+            return False
+
+    def create_expense_correction(self, corr: ExpenseCorrectionRecord) -> ExpenseCorrectionRecord:
+        """Record an immutable correction entry and adjust the base expense amount."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO farm_expense_corrections (
+                    correction_id, original_expense_id, farmer_id, reason,
+                    previous_amount, new_amount, corrected_by, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    corr.correction_id,
+                    corr.original_expense_id,
+                    corr.farmer_id,
+                    corr.reason,
+                    corr.previous_amount,
+                    corr.new_amount,
+                    corr.corrected_by,
+                    corr.created_at,
+                ),
+            )
+            now_str = datetime.now().isoformat()
+            conn.execute(
+                """
+                UPDATE farm_expenses
+                SET total_amount = ?, updated_at = ?, version_number = version_number + 1
+                WHERE expense_id = ? AND farmer_id = ?;
+                """,
+                (corr.new_amount, now_str, corr.original_expense_id, corr.farmer_id),
+            )
+            row = conn.execute("SELECT * FROM farm_expenses WHERE expense_id = ?", (corr.original_expense_id,)).fetchone()
+            payload = self._row_to_farm_expense(row).model_dump_json() if row else None
+            self._log_sync_change_conn(conn, "farm_expense", corr.original_expense_id, corr.farmer_id, "UPDATE", payload_json=payload)
+        return corr
+
+    def list_expense_corrections(self, original_expense_id: str, farmer_id: str) -> List[ExpenseCorrectionRecord]:
+        """List audit correction trail for an expense."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM farm_expense_corrections WHERE original_expense_id = ? AND farmer_id = ? ORDER BY created_at ASC;",
+                (original_expense_id, farmer_id),
+            )
+            return [self._row_to_expense_correction(r) for r in cursor.fetchall()]
+
+    # --- Farm Harvest Repository Methods ---
+
+    def create_harvest_record(self, h: FarmHarvestRecord) -> FarmHarvestRecord:
+        """Record an actual crop harvest event."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO farm_harvest_records (
+                    harvest_id, farmer_id, farm_id, plot_id, crop_cycle_id,
+                    harvest_date, crop_name, variety_name, harvested_quantity,
+                    quantity_unit, quality_grade, damaged_quantity, rejected_quantity,
+                    stored_quantity, sold_quantity, retained_quantity, moisture_percentage,
+                    notes, attachment_id, version_number, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    h.harvest_id,
+                    h.farmer_id,
+                    h.farm_id,
+                    h.plot_id,
+                    h.crop_cycle_id,
+                    h.harvest_date,
+                    h.crop_name,
+                    h.variety_name,
+                    h.harvested_quantity,
+                    h.quantity_unit,
+                    h.quality_grade,
+                    h.damaged_quantity,
+                    h.rejected_quantity,
+                    h.stored_quantity,
+                    h.sold_quantity,
+                    h.retained_quantity,
+                    h.moisture_percentage,
+                    h.notes,
+                    h.attachment_id,
+                    h.version_number,
+                    h.created_at,
+                    h.updated_at,
+                ),
+            )
+            self._log_sync_change_conn(
+                conn,
+                "farm_harvest",
+                h.harvest_id,
+                h.farmer_id,
+                "INSERT",
+                h.model_dump_json() if hasattr(h, "model_dump_json") else json.dumps(h.dict()),
+            )
+        return h
+
+    def get_harvest_record(self, harvest_id: str, farmer_id: Optional[str] = None) -> Optional[FarmHarvestRecord]:
+        """Fetch harvest record by ID."""
+        query = "SELECT * FROM farm_harvest_records WHERE harvest_id = ?"
+        params: List[Any] = [harvest_id]
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+        with self.get_connection() as conn:
+            row = conn.execute(query, params).fetchone()
+            if not row:
+                return None
+            return self._row_to_harvest_record(row)
+
+    def list_harvest_records(
+        self,
+        farmer_id: str,
+        farm_id: Optional[str] = None,
+        crop_cycle_id: Optional[str] = None,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+    ) -> List[FarmHarvestRecord]:
+        """List harvest events for farmer."""
+        query = "SELECT * FROM farm_harvest_records WHERE farmer_id = ?"
+        params: List[Any] = [farmer_id]
+
+        if farm_id:
+            query += " AND farm_id = ?"
+            params.append(farm_id)
+        if crop_cycle_id:
+            query += " AND crop_cycle_id = ?"
+            params.append(crop_cycle_id)
+        if from_date:
+            query += " AND harvest_date >= ?"
+            params.append(from_date)
+        if to_date:
+            query += " AND harvest_date <= ?"
+            params.append(to_date)
+
+        query += " ORDER BY harvest_date DESC, created_at DESC;"
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return [self._row_to_harvest_record(r) for r in cursor.fetchall()]
+
+    def update_harvest_record(
+        self,
+        harvest_id: str,
+        farmer_id: str,
+        updates: Dict[str, Any],
+    ) -> bool:
+        """Update fields of an existing harvest record."""
+        allowed = {
+            "harvest_date", "harvested_quantity", "quantity_unit", "quality_grade",
+            "damaged_quantity", "rejected_quantity", "stored_quantity",
+            "sold_quantity", "retained_quantity", "moisture_percentage", "notes"
+        }
+        filtered = {k: v for k, v in updates.items() if k in allowed and v is not None}
+        if not filtered:
+            return False
+        filtered["updated_at"] = datetime.now().isoformat()
+
+        set_clauses = [f"{k} = ?" for k in filtered.keys()]
+        set_clauses.append("version_number = version_number + 1")
+        params = list(filtered.values())
+        params.extend([harvest_id, farmer_id])
+
+        query = f"UPDATE farm_harvest_records SET {', '.join(set_clauses)} WHERE harvest_id = ? AND farmer_id = ?"
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            if cursor.rowcount > 0:
+                row = conn.execute("SELECT * FROM farm_harvest_records WHERE harvest_id = ?", (harvest_id,)).fetchone()
+                payload = self._row_to_harvest_record(row).model_dump_json() if row else None
+                self._log_sync_change_conn(conn, "farm_harvest", harvest_id, farmer_id, "UPDATE", payload_json=payload)
+                return True
+            return False
+
+    def delete_harvest_record(self, harvest_id: str, farmer_id: str) -> bool:
+        """Delete a harvest record."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM farm_harvest_records WHERE harvest_id = ? AND farmer_id = ?",
+                (harvest_id, farmer_id),
+            )
+            if cursor.rowcount > 0:
+                self._log_sync_change_conn(conn, "farm_harvest", harvest_id, farmer_id, "DELETE")
+                return True
+            return False
+
+    # --- Farm Sales Repository Methods ---
+
+    def create_farm_sale(self, sale: FarmSaleRecord) -> FarmSaleRecord:
+        """Record an actual sale event, optionally reconciling harvest sold quantity."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO farm_sales (
+                    sale_id, farmer_id, farm_id, plot_id, crop_cycle_id,
+                    harvest_id, crop_name, quantity_sold, quantity_unit,
+                    realized_price_per_unit, gross_amount, deductions_charges,
+                    net_amount_received, currency, sale_date, buyer_name,
+                    mandi_id, quality_grade, payment_status, payment_received_date,
+                    transport_charges, commission_charges, attachment_id, notes,
+                    version_number, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    sale.sale_id,
+                    sale.farmer_id,
+                    sale.farm_id,
+                    sale.plot_id,
+                    sale.crop_cycle_id,
+                    sale.harvest_id,
+                    sale.crop_name,
+                    sale.quantity_sold,
+                    sale.quantity_unit,
+                    sale.realized_price_per_unit,
+                    sale.gross_amount,
+                    sale.deductions_charges,
+                    sale.net_amount_received,
+                    sale.currency,
+                    sale.sale_date,
+                    sale.buyer_name,
+                    sale.mandi_id,
+                    sale.quality_grade,
+                    sale.payment_status.value,
+                    sale.payment_received_date,
+                    sale.transport_charges,
+                    sale.commission_charges,
+                    sale.attachment_id,
+                    sale.notes,
+                    sale.version_number,
+                    sale.created_at,
+                    sale.updated_at,
+                ),
+            )
+            # Reconcile harvest record if harvest_id provided
+            if sale.harvest_id:
+                conn.execute(
+                    """
+                    UPDATE farm_harvest_records
+                    SET sold_quantity = sold_quantity + ?, updated_at = ?
+                    WHERE harvest_id = ? AND farmer_id = ?;
+                    """,
+                    (sale.quantity_sold, datetime.now().isoformat(), sale.harvest_id, sale.farmer_id),
+                )
+            self._log_sync_change_conn(
+                conn,
+                "farm_sale",
+                sale.sale_id,
+                sale.farmer_id,
+                "INSERT",
+                sale.model_dump_json() if hasattr(sale, "model_dump_json") else json.dumps(sale.dict()),
+            )
+        return sale
+
+    def get_farm_sale(self, sale_id: str, farmer_id: Optional[str] = None) -> Optional[FarmSaleRecord]:
+        """Fetch sale record by ID."""
+        query = "SELECT * FROM farm_sales WHERE sale_id = ?"
+        params: List[Any] = [sale_id]
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+        with self.get_connection() as conn:
+            row = conn.execute(query, params).fetchone()
+            if not row:
+                return None
+            return self._row_to_farm_sale(row)
+
+    def list_farm_sales(
+        self,
+        farmer_id: str,
+        farm_id: Optional[str] = None,
+        crop_cycle_id: Optional[str] = None,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+    ) -> List[FarmSaleRecord]:
+        """List sales records for farmer."""
+        query = "SELECT * FROM farm_sales WHERE farmer_id = ?"
+        params: List[Any] = [farmer_id]
+
+        if farm_id:
+            query += " AND farm_id = ?"
+            params.append(farm_id)
+        if crop_cycle_id:
+            query += " AND crop_cycle_id = ?"
+            params.append(crop_cycle_id)
+        if from_date:
+            query += " AND sale_date >= ?"
+            params.append(from_date)
+        if to_date:
+            query += " AND sale_date <= ?"
+            params.append(to_date)
+
+        query += " ORDER BY sale_date DESC, created_at DESC;"
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return [self._row_to_farm_sale(r) for r in cursor.fetchall()]
+
+    def update_farm_sale(
+        self,
+        sale_id: str,
+        farmer_id: str,
+        updates: Dict[str, Any],
+    ) -> bool:
+        """Update fields of an existing sale record."""
+        allowed = {
+            "quantity_sold", "realized_price_per_unit", "gross_amount", "deductions_charges",
+            "net_amount_received", "sale_date", "buyer_name", "payment_status",
+            "payment_received_date", "transport_charges", "commission_charges", "notes"
+        }
+        filtered = {k: v for k, v in updates.items() if k in allowed and v is not None}
+        if not filtered:
+            return False
+        filtered["updated_at"] = datetime.now().isoformat()
+
+        set_clauses = [f"{k} = ?" for k in filtered.keys()]
+        set_clauses.append("version_number = version_number + 1")
+        params = list(filtered.values())
+        params.extend([sale_id, farmer_id])
+
+        query = f"UPDATE farm_sales SET {', '.join(set_clauses)} WHERE sale_id = ? AND farmer_id = ?"
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            if cursor.rowcount > 0:
+                row = conn.execute("SELECT * FROM farm_sales WHERE sale_id = ?", (sale_id,)).fetchone()
+                payload = self._row_to_farm_sale(row).model_dump_json() if row else None
+                self._log_sync_change_conn(conn, "farm_sale", sale_id, farmer_id, "UPDATE", payload_json=payload)
+                return True
+            return False
+
+    def delete_farm_sale(self, sale_id: str, farmer_id: str) -> bool:
+        """Delete a farm sale entry."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM farm_sales WHERE sale_id = ? AND farmer_id = ?",
+                (sale_id, farmer_id),
+            )
+            if cursor.rowcount > 0:
+                self._log_sync_change_conn(conn, "farm_sale", sale_id, farmer_id, "DELETE")
+                return True
+            return False
+
+    # --- Budgets Repository Methods ---
+
+    def create_crop_cycle_budget(
+        self, budget: CropCycleBudgetRecord, items: List[BudgetItemRecord]
+    ) -> CropCycleBudgetRecord:
+        """Create a crop cycle budget header and category breakdown items."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO crop_cycle_budgets (
+                    budget_id, farmer_id, farm_id, plot_id, crop_cycle_id,
+                    budget_name, season, total_budget_amount, currency,
+                    version_number, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    budget.budget_id,
+                    budget.farmer_id,
+                    budget.farm_id,
+                    budget.plot_id,
+                    budget.crop_cycle_id,
+                    budget.budget_name,
+                    budget.season,
+                    budget.total_budget_amount,
+                    budget.currency,
+                    budget.version_number,
+                    budget.status,
+                    budget.created_at,
+                    budget.updated_at,
+                ),
+            )
+            for item in items:
+                conn.execute(
+                    """
+                    INSERT INTO crop_cycle_budget_items (
+                        item_id, budget_id, expense_category, planned_amount,
+                        notes, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    (
+                        item.item_id,
+                        item.budget_id,
+                        item.expense_category.value,
+                        item.planned_amount,
+                        item.notes,
+                        item.created_at,
+                        item.updated_at,
+                    ),
+                )
+            budget.items = items
+        return budget
+
+    def get_crop_cycle_budget(
+        self, budget_id: str, farmer_id: Optional[str] = None
+    ) -> Optional[Tuple[CropCycleBudgetRecord, List[BudgetItemRecord]]]:
+        """Fetch budget header and category breakdown."""
+        query = "SELECT * FROM crop_cycle_budgets WHERE budget_id = ?"
+        params: List[Any] = [budget_id]
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+        with self.get_connection() as conn:
+            row = conn.execute(query, params).fetchone()
+            if not row:
+                return None
+            item_rows = conn.execute(
+                "SELECT * FROM crop_cycle_budget_items WHERE budget_id = ? ORDER BY planned_amount DESC;",
+                (budget_id,),
+            ).fetchall()
+            items = [self._row_to_budget_item(ir) for ir in item_rows]
+            budget = self._row_to_crop_cycle_budget(row, items)
+            return budget, items
+
+    def get_budget_by_crop_cycle(
+        self, crop_cycle_id: str, farmer_id: str
+    ) -> Optional[Tuple[CropCycleBudgetRecord, List[BudgetItemRecord]]]:
+        """Fetch active budget for a specific crop cycle."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM crop_cycle_budgets WHERE crop_cycle_id = ? AND farmer_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1;",
+                (crop_cycle_id, farmer_id),
+            ).fetchone()
+            if not row:
+                return None
+            item_rows = conn.execute(
+                "SELECT * FROM crop_cycle_budget_items WHERE budget_id = ? ORDER BY planned_amount DESC;",
+                (row["budget_id"],),
+            ).fetchall()
+            items = [self._row_to_budget_item(ir) for ir in item_rows]
+            return self._row_to_crop_cycle_budget(row, items), items
+
+    def list_crop_cycle_budgets(
+        self, farmer_id: str, farm_id: Optional[str] = None
+    ) -> List[Tuple[CropCycleBudgetRecord, List[BudgetItemRecord]]]:
+        """List all budgets for farmer."""
+        query = "SELECT * FROM crop_cycle_budgets WHERE farmer_id = ?"
+        params: List[Any] = [farmer_id]
+        if farm_id:
+            query += " AND farm_id = ?"
+            params.append(farm_id)
+        query += " ORDER BY created_at DESC;"
+
+        with self.get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+            result = []
+            for r in rows:
+                item_rows = conn.execute(
+                    "SELECT * FROM crop_cycle_budget_items WHERE budget_id = ? ORDER BY planned_amount DESC;",
+                    (r["budget_id"],),
+                ).fetchall()
+                items = [self._row_to_budget_item(ir) for ir in item_rows]
+                result.append((self._row_to_crop_cycle_budget(r, items), items))
+            return result
+
+    def update_crop_cycle_budget(
+        self,
+        budget_id: str,
+        farmer_id: str,
+        updates: Dict[str, Any],
+        items: Optional[List[BudgetItemRecord]] = None,
+    ) -> bool:
+        """Update budget amount and optionally replace category breakdown items."""
+        allowed = {"budget_name", "total_budget_amount", "status"}
+        filtered = {k: v for k, v in updates.items() if k in allowed and v is not None}
+        filtered["updated_at"] = datetime.now().isoformat()
+
+        set_clauses = [f"{k} = ?" for k in filtered.keys()]
+        set_clauses.append("version_number = version_number + 1")
+        params = list(filtered.values())
+        params.extend([budget_id, farmer_id])
+
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                f"UPDATE crop_cycle_budgets SET {', '.join(set_clauses)} WHERE budget_id = ? AND farmer_id = ?",
+                params,
+            )
+            if cursor.rowcount > 0:
+                if items is not None:
+                    conn.execute("DELETE FROM crop_cycle_budget_items WHERE budget_id = ?;", (budget_id,))
+                    for item in items:
+                        conn.execute(
+                            """
+                            INSERT INTO crop_cycle_budget_items (
+                                item_id, budget_id, expense_category, planned_amount,
+                                notes, created_at, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?);
+                            """,
+                            (
+                                item.item_id,
+                                budget_id,
+                                item.expense_category.value,
+                                item.planned_amount,
+                                item.notes,
+                                item.created_at,
+                                item.updated_at,
+                            ),
+                        )
+                return True
+            return False
+
+    # --- Financial Scenarios Repository Methods ---
+
+    def create_financial_scenario(self, scen: Dict[str, Any]) -> Dict[str, Any]:
+        """Save a financial scenario simulation for reproducibility."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO financial_scenarios (
+                    scenario_id, farmer_id, farm_id, plot_id, crop_cycle_id,
+                    crop_name, scenario_name, scenario_type, assumptions_json,
+                    results_json, version_number, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    scen["scenario_id"],
+                    scen["farmer_id"],
+                    scen.get("farm_id"),
+                    scen.get("plot_id"),
+                    scen.get("crop_cycle_id"),
+                    scen["crop_name"],
+                    scen["scenario_name"],
+                    scen.get("scenario_type", "base"),
+                    scen["assumptions_json"],
+                    scen["results_json"],
+                    scen.get("version_number", 1),
+                    scen["created_at"],
+                    scen["updated_at"],
+                ),
+            )
+        return scen
+
+    def get_financial_scenario(self, scenario_id: str, farmer_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Fetch scenario by ID."""
+        query = "SELECT * FROM financial_scenarios WHERE scenario_id = ?"
+        params: List[Any] = [scenario_id]
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+        with self.get_connection() as conn:
+            row = conn.execute(query, params).fetchone()
+            if not row:
+                return None
+            return dict(row)
+
+    def list_financial_scenarios(self, farmer_id: str, crop_name: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List saved scenarios for farmer."""
+        query = "SELECT * FROM financial_scenarios WHERE farmer_id = ?"
+        params: List[Any] = [farmer_id]
+        if crop_name:
+            query += " AND LOWER(crop_name) = LOWER(?)"
+            params.append(crop_name)
+        query += " ORDER BY created_at DESC;"
+
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return [dict(r) for r in cursor.fetchall()]
+
+    def update_financial_scenario(
+        self, scenario_id: str, farmer_id: str, assumptions_json: str, results_json: str
+    ) -> bool:
+        """Update scenario assumptions and recomputed results."""
+        now_str = datetime.now().isoformat()
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE financial_scenarios
+                SET assumptions_json = ?, results_json = ?, updated_at = ?, version_number = version_number + 1
+                WHERE scenario_id = ? AND farmer_id = ?;
+                """,
+                (assumptions_json, results_json, now_str, scenario_id, farmer_id),
+            )
+            return cursor.rowcount > 0
+
+    def delete_financial_scenario(self, scenario_id: str, farmer_id: str) -> bool:
+        """Delete a saved scenario."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM financial_scenarios WHERE scenario_id = ? AND farmer_id = ?",
+                (scenario_id, farmer_id),
+            )
+            return cursor.rowcount > 0
+
+    # --- Financial Benchmarks Repository Methods ---
+
+    def list_financial_benchmarks(
+        self,
+        crop_name: Optional[str] = None,
+        state: Optional[str] = None,
+        district: Optional[str] = None,
+        season: Optional[str] = None,
+    ) -> List[FinancialBenchmarkRecord]:
+        """List authoritative state/district cost & yield benchmarks."""
+        query = "SELECT * FROM financial_benchmarks WHERE 1=1"
+        params: List[Any] = []
+        if crop_name:
+            query += " AND LOWER(crop_name) = LOWER(?)"
+            params.append(crop_name)
+        if state:
+            query += " AND LOWER(state) = LOWER(?)"
+            params.append(state)
+        if district:
+            query += " AND LOWER(district) = LOWER(?)"
+            params.append(district)
+        if season:
+            query += " AND LOWER(reporting_period) LIKE LOWER(?)"
+            params.append(f"%{season}%")
+        query += " ORDER BY crop_name ASC, state ASC;"
+
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return [self._row_to_financial_benchmark(r) for r in cursor.fetchall()]
+
+    def create_financial_benchmark(self, b: FinancialBenchmarkRecord) -> FinancialBenchmarkRecord:
+        """Insert or replace benchmark entry."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO financial_benchmarks (
+                    benchmark_id, crop_name, state, district, reporting_period,
+                    cost_per_acre, expected_yield_per_acre, yield_unit,
+                    source_name, source_doc, verification_status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    b.benchmark_id,
+                    b.crop_name,
+                    b.state,
+                    b.district,
+                    b.reporting_period,
+                    b.cost_per_acre,
+                    b.expected_yield_per_acre,
+                    b.yield_unit,
+                    b.source_name,
+                    b.source_doc,
+                    b.verification_status,
+                    b.created_at,
+                    b.updated_at,
+                ),
+            )
+        return b
+
+    # --- Financial Audit Log ---
+
+    def record_financial_audit(
+        self,
+        entity_type: str,
+        entity_id: str,
+        farmer_id: str,
+        action: str,
+        changed_fields: Optional[Dict[str, Any]],
+        performed_by: str,
+    ) -> None:
+        """Record an append-only audit entry for any financial transaction."""
+        audit_id = f"aud_{uuid.uuid4().hex[:12]}"
+        now_str = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO financial_audit_log (
+                    audit_id, entity_type, entity_id, farmer_id, action,
+                    changed_fields_json, performed_by, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    audit_id,
+                    entity_type,
+                    entity_id,
+                    farmer_id,
+                    action,
+                    json.dumps(changed_fields or {}),
+                    performed_by,
+                    now_str,
+                ),
+            )
+
     def get_bootstrap_bundle(self, farmer_id: str, user_id: str) -> Dict[str, Any]:
         """Assemble full authorized offline bootstrap payload for a farmer."""
         profile = self.get_farmer_profile(farmer_id)
@@ -4378,6 +5584,11 @@ class FarmDatabaseRepository:
         reminders = self.list_farm_reminders(farmer_id)
         notifs = self.list_notifications_for_farmer(farmer_id, limit=50)
         cases = self.list_advisory_cases_for_farmer(farmer_id, limit=10)
+        expenses = self.list_farm_expenses(farmer_id)
+        harvests = self.list_harvest_records(farmer_id)
+        sales = self.list_farm_sales(farmer_id)
+        budgets_raw = self.list_crop_cycle_budgets(farmer_id)
+        budgets = [b[0] for b in budgets_raw]
 
         with self.get_connection() as conn:
             cursor = conn.execute(
@@ -4397,6 +5608,10 @@ class FarmDatabaseRepository:
             "reminders": [r.model_dump() if hasattr(r, "model_dump") else r.dict() for r in reminders],
             "notifications": [n.model_dump() if hasattr(n, "model_dump") else n.dict() for n in notifs],
             "advisories": [c.model_dump() if hasattr(c, "model_dump") else c.dict() for c in cases],
+            "expenses": [e.model_dump() if hasattr(e, "model_dump") else e.dict() for e in expenses],
+            "harvests": [h.model_dump() if hasattr(h, "model_dump") else h.dict() for h in harvests],
+            "sales": [s.model_dump() if hasattr(s, "model_dump") else s.dict() for s in sales],
+            "budgets": [b.model_dump() if hasattr(b, "model_dump") else b.dict() for b in budgets],
             "server_timestamp": now,
             "sequence_cursor": max_seq,
         }

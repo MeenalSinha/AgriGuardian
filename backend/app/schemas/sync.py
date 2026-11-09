@@ -97,6 +97,10 @@ class SyncBootstrapResponse(BaseModel):
     reminders: List[Dict[str, Any]] = Field(default_factory=list)
     notifications: List[Dict[str, Any]] = Field(default_factory=list)
     advisories: List[Dict[str, Any]] = Field(default_factory=list)
+    expenses: List[Dict[str, Any]] = Field(default_factory=list)
+    harvests: List[Dict[str, Any]] = Field(default_factory=list)
+    sales: List[Dict[str, Any]] = Field(default_factory=list)
+    budgets: List[Dict[str, Any]] = Field(default_factory=list)
     server_timestamp: str
     sequence_cursor: int = 0
 

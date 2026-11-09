@@ -22,6 +22,7 @@ from frontend.views.dashboard_view import render_dashboard_view
 from frontend.views.demo_cases_view import render_demo_cases_view
 from frontend.views.disease_diagnosis_view import render_disease_diagnosis_view
 from frontend.views.expert_view import render_expert_view
+from frontend.views.farm_economics_view import render_farm_economics_view
 from frontend.views.farm_management_view import render_farm_management_view
 from frontend.views.home_view import render_home_view
 from frontend.views.knowledge_admin_view import render_knowledge_admin_view
@@ -96,6 +97,7 @@ with st.sidebar:
             "🌾 My Farms & Crops",
             "🔔 Alerts & Reminders",
             "🔄 Offline & Sync Center",
+            "💰 Farm Economics & Profitability",
             "🎙️ Voice Assistant",
             "🔬 Crop Disease Diagnosis",
             "🌦️ Weather Intelligence",
@@ -154,6 +156,8 @@ elif page == "🔔 Alerts & Reminders":
     render_notifications_view()
 elif page == "🔄 Offline & Sync Center":
     render_offline_sync_view()
+elif page == "💰 Farm Economics & Profitability":
+    render_farm_economics_view()
 elif page == "🎙️ Voice Assistant":
     render_voice_assistant_view()
 elif page == "🔬 Crop Disease Diagnosis":

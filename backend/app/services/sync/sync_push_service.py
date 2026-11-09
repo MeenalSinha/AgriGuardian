@@ -8,6 +8,13 @@ from fastapi import HTTPException, status
 
 from backend.app.core.logging import get_logger
 from backend.app.repositories.farm_db import FarmDatabaseRepository, get_farm_repo
+from backend.app.schemas.economics import (
+    ExpenseCategory,
+    FarmExpenseRecord,
+    FarmHarvestRecord,
+    FarmSaleRecord,
+    PaymentStatus,
+)
 from backend.app.schemas.farm import ActivityStatus, ActivityType, FarmActivity
 from backend.app.schemas.notification import (
     FarmReminderRecord,
@@ -146,6 +153,12 @@ class SyncPushService:
                 return self._handle_observation_mutation(device_id, farmer_id, mutation)
             elif resource == "crop_diagnosis_draft":
                 return self._handle_diagnosis_draft_mutation(device_id, farmer_id, mutation)
+            elif resource == "farm_expense":
+                return self._handle_expense_mutation(device_id, farmer_id, mutation)
+            elif resource == "farm_harvest":
+                return self._handle_harvest_mutation(device_id, farmer_id, mutation)
+            elif resource == "farm_sale":
+                return self._handle_sale_mutation(device_id, farmer_id, mutation)
             else:
                 return MutationResultItem(
                     mutation_id=mutation.mutation_id,
@@ -447,6 +460,349 @@ class SyncPushService:
             server_version=1,
         )
 
+    def _handle_expense_mutation(
+        self, device_id: str, farmer_id: str, mutation: SyncMutationItem
+    ) -> MutationResultItem:
+        """Process farm_expense CREATE, UPDATE, DELETE with optimistic locking."""
+        operation = mutation.operation.upper()
+        p = mutation.payload
+
+        if operation == "CREATE":
+            server_id = f"exp_{uuid.uuid4().hex[:12]}"
+            now_str = datetime.now(timezone.utc).isoformat()
+            raw_cat = p.get("expense_category", "other")
+            try:
+                cat = ExpenseCategory(raw_cat)
+            except Exception:
+                cat = ExpenseCategory.OTHER
+
+            raw_status = p.get("payment_status", "paid")
+            try:
+                pstatus = PaymentStatus(raw_status)
+            except Exception:
+                pstatus = PaymentStatus.PAID
+
+            rec = FarmExpenseRecord(
+                expense_id=server_id,
+                farmer_id=farmer_id,
+                farm_id=p.get("farm_id"),
+                plot_id=p.get("plot_id"),
+                crop_cycle_id=p.get("crop_cycle_id"),
+                expense_category=cat,
+                subcategory=p.get("subcategory"),
+                expense_description=p.get("expense_description", "Expense entry"),
+                input_name=p.get("input_name"),
+                quantity=float(p.get("quantity")) if p.get("quantity") is not None else None,
+                quantity_unit=p.get("quantity_unit"),
+                unit_price=float(p.get("unit_price")) if p.get("unit_price") is not None else None,
+                total_amount=float(p.get("total_amount", 0.0)),
+                currency=p.get("currency", "INR"),
+                purchase_date=p.get("purchase_date", now_str[:10]),
+                payment_date=p.get("payment_date"),
+                payment_status=pstatus,
+                is_planned=bool(p.get("is_planned", False)),
+                supplier_vendor=p.get("supplier_vendor"),
+                invoice_attachment_id=p.get("invoice_attachment_id"),
+                notes=p.get("notes"),
+                entry_source="sync_device",
+                version_number=1,
+                created_at=now_str,
+                updated_at=now_str,
+            )
+            self.repo.create_farm_expense(rec)
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="applied",
+                server_version=1,
+            )
+
+        server_id = p.get("expense_id") or mutation.client_record_id
+        existing = self.repo.get_farm_expense(server_id, farmer_id=farmer_id)
+        if not existing:
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="rejected",
+                error_message="Expense does not exist or does not belong to farmer.",
+            )
+
+        server_version = getattr(existing, "version_number", 1)
+        if mutation.base_version > 0 and server_version > mutation.base_version:
+            server_payload = existing.model_dump() if hasattr(existing, "model_dump") else existing.dict()
+            conflict = self.conflict_service.record_conflict(
+                mutation_id=mutation.mutation_id,
+                device_id=device_id,
+                farmer_id=farmer_id,
+                resource_type="farm_expense",
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                client_payload=p,
+                server_payload=server_payload,
+            )
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="conflict",
+                server_version=server_version,
+                conflict_details=conflict,
+            )
+
+        if operation == "UPDATE":
+            self.repo.update_farm_expense(server_id, farmer_id=farmer_id, updates=p)
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="applied",
+                server_version=server_version + 1,
+            )
+        elif operation == "DELETE":
+            self.repo.delete_farm_expense(server_id, farmer_id=farmer_id)
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="applied",
+                server_version=server_version + 1,
+            )
+
+        return MutationResultItem(
+            mutation_id=mutation.mutation_id,
+            client_record_id=mutation.client_record_id,
+            server_record_id=server_id,
+            status="rejected",
+            error_message=f"Unsupported operation '{mutation.operation}' for farm_expense",
+        )
+
+    def _handle_harvest_mutation(
+        self, device_id: str, farmer_id: str, mutation: SyncMutationItem
+    ) -> MutationResultItem:
+        """Process farm_harvest CREATE, UPDATE, DELETE with optimistic locking."""
+        operation = mutation.operation.upper()
+        p = mutation.payload
+
+        if operation == "CREATE":
+            server_id = f"hrv_{uuid.uuid4().hex[:12]}"
+            now_str = datetime.now(timezone.utc).isoformat()
+            rec = FarmHarvestRecord(
+                harvest_id=server_id,
+                farmer_id=farmer_id,
+                farm_id=p.get("farm_id"),
+                plot_id=p.get("plot_id"),
+                crop_cycle_id=p.get("crop_cycle_id"),
+                harvest_date=p.get("harvest_date", now_str[:10]),
+                crop_name=p.get("crop_name", "Crop"),
+                variety_name=p.get("variety_name"),
+                harvested_quantity=float(p.get("harvested_quantity", 0.0)),
+                quantity_unit=p.get("quantity_unit", "quintal"),
+                quality_grade=p.get("quality_grade"),
+                damaged_quantity=float(p.get("damaged_quantity", 0.0)),
+                rejected_quantity=float(p.get("rejected_quantity", 0.0)),
+                stored_quantity=float(p.get("stored_quantity", 0.0)),
+                sold_quantity=float(p.get("sold_quantity", 0.0)),
+                retained_quantity=float(p.get("retained_quantity", 0.0)),
+                moisture_percentage=float(p.get("moisture_percentage")) if p.get("moisture_percentage") is not None else None,
+                notes=p.get("notes"),
+                attachment_id=p.get("attachment_id"),
+                version_number=1,
+                created_at=now_str,
+                updated_at=now_str,
+            )
+            self.repo.create_harvest_record(rec)
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="applied",
+                server_version=1,
+            )
+
+        server_id = p.get("harvest_id") or mutation.client_record_id
+        existing = self.repo.get_harvest_record(server_id, farmer_id=farmer_id)
+        if not existing:
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="rejected",
+                error_message="Harvest does not exist or does not belong to farmer.",
+            )
+
+        server_version = getattr(existing, "version_number", 1)
+        if mutation.base_version > 0 and server_version > mutation.base_version:
+            server_payload = existing.model_dump() if hasattr(existing, "model_dump") else existing.dict()
+            conflict = self.conflict_service.record_conflict(
+                mutation_id=mutation.mutation_id,
+                device_id=device_id,
+                farmer_id=farmer_id,
+                resource_type="farm_harvest",
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                client_payload=p,
+                server_payload=server_payload,
+            )
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="conflict",
+                server_version=server_version,
+                conflict_details=conflict,
+            )
+
+        if operation == "UPDATE":
+            self.repo.update_harvest_record(server_id, farmer_id=farmer_id, updates=p)
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="applied",
+                server_version=server_version + 1,
+            )
+        elif operation == "DELETE":
+            self.repo.delete_harvest_record(server_id, farmer_id=farmer_id)
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="applied",
+                server_version=server_version + 1,
+            )
+
+        return MutationResultItem(
+            mutation_id=mutation.mutation_id,
+            client_record_id=mutation.client_record_id,
+            server_record_id=server_id,
+            status="rejected",
+            error_message=f"Unsupported operation '{mutation.operation}' for farm_harvest",
+        )
+
+    def _handle_sale_mutation(
+        self, device_id: str, farmer_id: str, mutation: SyncMutationItem
+    ) -> MutationResultItem:
+        """Process farm_sale CREATE, UPDATE, DELETE with optimistic locking."""
+        operation = mutation.operation.upper()
+        p = mutation.payload
+
+        if operation == "CREATE":
+            server_id = f"sale_{uuid.uuid4().hex[:12]}"
+            now_str = datetime.now(timezone.utc).isoformat()
+            raw_status = p.get("payment_status", "paid")
+            try:
+                pstatus = PaymentStatus(raw_status)
+            except Exception:
+                pstatus = PaymentStatus.PAID
+
+            qty = float(p.get("quantity_sold", 0.0))
+            price = float(p.get("realized_price_per_unit", 0.0))
+            gross = float(p.get("gross_amount", qty * price))
+            deductions = float(p.get("deductions_charges", 0.0))
+            trans = float(p.get("transport_charges", 0.0))
+            comm = float(p.get("commission_charges", 0.0))
+            net = float(p.get("net_amount_received", max(0.0, gross - deductions - trans - comm)))
+
+            rec = FarmSaleRecord(
+                sale_id=server_id,
+                farmer_id=farmer_id,
+                farm_id=p.get("farm_id"),
+                plot_id=p.get("plot_id"),
+                crop_cycle_id=p.get("crop_cycle_id"),
+                harvest_id=p.get("harvest_id"),
+                crop_name=p.get("crop_name", "Produce"),
+                quantity_sold=qty,
+                quantity_unit=p.get("quantity_unit", "quintal"),
+                realized_price_per_unit=price,
+                gross_amount=gross,
+                deductions_charges=deductions,
+                net_amount_received=net,
+                currency=p.get("currency", "INR"),
+                sale_date=p.get("sale_date", now_str[:10]),
+                buyer_name=p.get("buyer_name"),
+                mandi_id=p.get("mandi_id"),
+                quality_grade=p.get("quality_grade"),
+                payment_status=pstatus,
+                payment_received_date=p.get("payment_received_date"),
+                transport_charges=trans,
+                commission_charges=comm,
+                attachment_id=p.get("attachment_id"),
+                notes=p.get("notes"),
+                version_number=1,
+                created_at=now_str,
+                updated_at=now_str,
+            )
+            self.repo.create_farm_sale(rec)
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="applied",
+                server_version=1,
+            )
+
+        server_id = p.get("sale_id") or mutation.client_record_id
+        existing = self.repo.get_farm_sale(server_id, farmer_id=farmer_id)
+        if not existing:
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="rejected",
+                error_message="Sale does not exist or does not belong to farmer.",
+            )
+
+        server_version = getattr(existing, "version_number", 1)
+        if mutation.base_version > 0 and server_version > mutation.base_version:
+            server_payload = existing.model_dump() if hasattr(existing, "model_dump") else existing.dict()
+            conflict = self.conflict_service.record_conflict(
+                mutation_id=mutation.mutation_id,
+                device_id=device_id,
+                farmer_id=farmer_id,
+                resource_type="farm_sale",
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                client_payload=p,
+                server_payload=server_payload,
+            )
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="conflict",
+                server_version=server_version,
+                conflict_details=conflict,
+            )
+
+        if operation == "UPDATE":
+            self.repo.update_farm_sale(server_id, farmer_id=farmer_id, updates=p)
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="applied",
+                server_version=server_version + 1,
+            )
+        elif operation == "DELETE":
+            self.repo.delete_farm_sale(server_id, farmer_id=farmer_id)
+            return MutationResultItem(
+                mutation_id=mutation.mutation_id,
+                client_record_id=mutation.client_record_id,
+                server_record_id=server_id,
+                status="applied",
+                server_version=server_version + 1,
+            )
+
+        return MutationResultItem(
+            mutation_id=mutation.mutation_id,
+            client_record_id=mutation.client_record_id,
+            server_record_id=server_id,
+            status="rejected",
+            error_message=f"Unsupported operation '{mutation.operation}' for farm_sale",
+        )
+
     def _handle_diagnosis_draft_mutation(
         self, device_id: str, farmer_id: str, mutation: SyncMutationItem
     ) -> MutationResultItem:
@@ -461,3 +817,4 @@ class SyncPushService:
             status="applied",
             server_version=1,
         )
+

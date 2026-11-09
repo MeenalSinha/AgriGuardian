@@ -114,6 +114,20 @@ Built with **Streamlit, Gnani AI (Prisma v2.5 STT & Timbre v2.5 TTS), Open-Meteo
 * **Offline Leaf Photography & SHA-256 Hashes:** Device camera integration with offline thumbnail generation, SHA-256 verification hashes, and deferred background upload to `data/attachments/`.
 * **Streamlit Offline & Sync Center:** Dedicated administrative console (`🔄 Offline & Sync Center`) in `frontend/views/offline_sync_view.py` for device management, conflict resolution, and sync telemetry.
 
+### 💰 Farm Economics, Cost Tracking & Profitability Intelligence (Phase 11)
+* **Zero Fabricated Financials:** Strict grounding in authentic farmer expenses, labor outlays, harvest records, and mandi market sale realizations; zero synthetic financial defaults.
+* **Strict Decimal Arithmetic:** Complete replacement of floating-point math with Python's `decimal.Decimal` and `ROUND_HALF_UP` quantization across all financial transactions, unit conversions, and profitability metrics.
+* **Multi-Unit Agronomic Conversions:** Normalization of diverse Indian regional land measures (Pucca Bigha, Bengal Bigha, Kachha Bigha, Guntha, Cent, Hectare to Acres) and produce weights (MT, Quintal, Kg, Bags, Crates).
+* **Append-Only Auditing & Correction Chains:** Immutable expense correction history (`farm_expense_corrections`) preserving historical transaction amounts with mandatory reason attribution and monotonic version increments.
+* **Harvest & Production Material Balance:** Phased multi-picking harvest tracker enforcing strict reconciliation rules ensuring produce distributed (market sales, home consumption, seed retention, post-harvest losses) never exceeds harvested volume.
+* **Produce Sales & Net Mandi Realization:** Itemized capture of APMC cess, commission agent aadhat, hamali loading, weighment, and transport freight to calculate true net farmgate cash realization.
+* **Comprehensive Profitability Engine:** Implements CACP/ICAR Cost A1/A2 and C2 models, computing Cost per Acre, Cost per Quintal, Break-Even Selling Price ($P_{be}$), Break-Even Yield ($Y_{be}$), Gross Margin %, Net Profit/Loss, and ROI %.
+* **Provisional Cycle Safeguards:** Automatic detection and bilingual warning banners on ongoing cycles with unharvested/unsold crops, preventing misleading loss calculations.
+* **Pre-Season Budgeting & Over-Budget Alerts:** Itemized seasonal spending targets with real-time variance analysis (`FAVORABLE` vs `UNFAVORABLE`) and proactive over-budget warnings.
+* **Deterministic Scenario Planning:** Base, Conservative (-10% yield & price), and Optimistic (+10% yield & price) simulations with sensitivity analysis and multi-crop comparison matrices.
+* **Offline-First Synchronization Support:** Integrated with Phase 10 mutation queue, optimistic concurrency, and PWA companion IndexedDB v2 schema (`expenses`, `harvests`, `sales`, `budgets`).
+* **Interactive 6-Tab Streamlit Cockpit:** Visual dashboard in `frontend/views/farm_economics_view.py` covering Overview, Expenses, Harvest, Sales, Profitability/Budgets, and Planning.
+
 ---
 
 ## 🧩 Architecture & Tech Stack
@@ -153,6 +167,7 @@ AgriGuardian/
 | **Document Archival** | ReportLab 4.4 | Authentic PDF advisory report generation |
 | **Offline-First PWA** | Service Worker + IndexedDB | Installable mobile web app at `/pwa`, local persistence, mutation queue |
 | **Data Synchronization** | FastAPI Sync Engine | Change feed deltas, optimistic locking, idempotent push, conflict resolver |
+| **Farm Economics & Profitability** | Decimal Arithmetic + CACP/ICAR Models | Exact cost per acre/quintal, break-even price/yield, ROI %, append-only audit |
 
 ---
 
@@ -201,10 +216,13 @@ uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 
 Execute the comprehensive test suite with `pytest`:
 ```bash
-# Run all unit, integration, and offline sync tests
+# Run all unit, integration, offline sync, and economics tests (295 passed)
 python -m pytest tests -v
 
-# Run dedicated Phase 10 synchronization test suite
+# Run dedicated Phase 11 farm economics test suite (30 passed)
+python -m pytest tests/economics -v
+
+# Run dedicated Phase 10 synchronization test suite (20 passed)
 python -m pytest tests/sync -v
 
 # Run with integration tests against live Gnani APIs (requires GNANI_API_KEY)
@@ -214,6 +232,11 @@ python -m pytest tests/integration/test_gnani_live.py -v
 ---
 
 ## 📚 Documentation Links
+* [Phase 11 Final Engineering Report (`docs/PHASE_11_FINAL_REPORT.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_11_FINAL_REPORT.md)
+* [Phase 11 REST API Documentation (`docs/PHASE_11_API_DOCUMENTATION.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_11_API_DOCUMENTATION.md)
+* [Phase 11 Financial & Agronomic Methodology (`docs/PHASE_11_FINANCIAL_METHODOLOGY.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_11_FINANCIAL_METHODOLOGY.md)
+* [Phase 11 User & Field Guide (`docs/PHASE_11_USER_GUIDE.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_11_USER_GUIDE.md)
+* [Phase 10 Verification Gate (`docs/PHASE_10_VERIFICATION.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_10_VERIFICATION.md)
 * [Phase 10 Final Engineering Report (`docs/PHASE_10_FINAL_REPORT.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_10_FINAL_REPORT.md)
 * [Phase 10 Sync API Documentation (`docs/PHASE_10_SYNC_API_DOCUMENTATION.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_10_SYNC_API_DOCUMENTATION.md)
 * [Phase 10 Offline Operations Guide (`docs/PHASE_10_OFFLINE_OPERATIONS_GUIDE.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_10_OFFLINE_OPERATIONS_GUIDE.md)

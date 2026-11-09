@@ -52,6 +52,10 @@ class SyncPullService:
             reminders=bundle.get("reminders", []),
             notifications=bundle.get("notifications", []),
             advisories=bundle.get("advisories", []),
+            expenses=bundle.get("expenses", []),
+            harvests=bundle.get("harvests", []),
+            sales=bundle.get("sales", []),
+            budgets=bundle.get("budgets", []),
             server_timestamp=bundle.get("server_timestamp", datetime.now(timezone.utc).isoformat()),
             sequence_cursor=cursor_seq,
         )

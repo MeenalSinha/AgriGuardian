@@ -123,6 +123,39 @@ from backend.app.schemas.sync import (
     SyncPushResponse,
     SyncTelemetryReport,
 )
+from backend.app.schemas.economics import (
+    BudgetItemCreate,
+    BudgetItemRecord,
+    BudgetVarianceItem,
+    BudgetVarianceReport,
+    CropComparisonItem,
+    CropComparisonReport,
+    CropComparisonRequest,
+    CropCycleBudgetCreate,
+    CropCycleBudgetRecord,
+    CropCycleBudgetUpdate,
+    ExpenseCategory,
+    ExpenseCorrectionCreate,
+    ExpenseCorrectionRecord,
+    FarmerFinancialOverview,
+    FarmExpenseCreate,
+    FarmExpenseRecord,
+    FarmExpenseUpdate,
+    FarmHarvestCreate,
+    FarmHarvestRecord,
+    FarmHarvestUpdate,
+    FarmSaleCreate,
+    FarmSaleRecord,
+    FarmSaleUpdate,
+    FinancialBenchmarkRecord,
+    FinancialScenarioRecord,
+    PaymentStatus,
+    ProfitabilityMetrics,
+    ScenarioResult,
+    ScenarioSimulateRequest,
+    ScenarioType,
+)
+from backend.app.services.economics import EconomicsService, get_economics_service
 from backend.app.services.sync.sync_service import SyncService
 from backend.app.services.analytics.metric_definitions import METRIC_CATALOG
 from backend.app.services.auth.auth_service import AuthService, AuthenticationError
@@ -185,6 +218,7 @@ farm_context_service = FarmContextService(
     calendar_service=crop_calendar_service,
 )
 sync_service = SyncService.get_instance()
+economics_service = get_economics_service()
 
 
 def get_current_farmer_auth(authorization: Optional[str] = Header(None)) -> Tuple[UserRecord, FarmerProfile]:
@@ -2357,6 +2391,465 @@ def get_sync_attachment_metadata(
     """Retrieve metadata and verification status for uploaded attachment."""
     farmer_id = _get_farmer_id_for_user(user)
     return sync_service.get_attachment_metadata(attachment_id=attachment_id, farmer_id=farmer_id)
+
+
+# =============================================================================
+# PHASE 11: FARM ECONOMICS, COST TRACKING & PROFITABILITY INTELLIGENCE
+# =============================================================================
+
+# --- EXPENSES ---
+@app.post("/api/v1/economics/expenses", response_model=FarmExpenseRecord, tags=["Farm Economics & Profitability Intelligence"])
+def create_farm_expense(
+    payload: FarmExpenseCreate,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Record an agricultural expense entry with strict arithmetic validation."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.expenses.record_expense(farmer_id=farmer_id, payload=payload, user_id=user.user_id)
+
+
+@app.get("/api/v1/economics/expenses", response_model=List[FarmExpenseRecord], tags=["Farm Economics & Profitability Intelligence"])
+def list_farm_expenses(
+    farm_id: Optional[str] = None,
+    plot_id: Optional[str] = None,
+    crop_cycle_id: Optional[str] = None,
+    category: Optional[ExpenseCategory] = None,
+    is_planned: Optional[bool] = None,
+    payment_status: Optional[PaymentStatus] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """List farm expenses for the authenticated farmer with optional filters."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.expenses.list_expenses(
+        farmer_id=farmer_id,
+        farm_id=farm_id,
+        plot_id=plot_id,
+        crop_cycle_id=crop_cycle_id,
+        category=category,
+        is_planned=is_planned,
+        payment_status=payment_status,
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+
+@app.get("/api/v1/economics/expenses/{expense_id}", response_model=FarmExpenseRecord, tags=["Farm Economics & Profitability Intelligence"])
+def get_farm_expense(
+    expense_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Get single farm expense by ID."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.expenses.get_expense(expense_id=expense_id, farmer_id=farmer_id)
+
+
+@app.put("/api/v1/economics/expenses/{expense_id}", response_model=FarmExpenseRecord, tags=["Farm Economics & Profitability Intelligence"])
+def update_farm_expense(
+    expense_id: str,
+    payload: FarmExpenseUpdate,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Update mutable fields of an expense entry."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.expenses.update_expense(
+        expense_id=expense_id,
+        farmer_id=farmer_id,
+        payload=payload,
+        user_id=user.user_id,
+    )
+
+
+@app.delete("/api/v1/economics/expenses/{expense_id}", tags=["Farm Economics & Profitability Intelligence"])
+def delete_farm_expense(
+    expense_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Permanently delete an expense record."""
+    farmer_id = _get_farmer_id_for_user(user)
+    success = economics_service.expenses.delete_expense(
+        expense_id=expense_id,
+        farmer_id=farmer_id,
+        user_id=user.user_id,
+    )
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found or deletion failed.")
+    return {"message": "Expense deleted successfully", "expense_id": expense_id}
+
+
+@app.post("/api/v1/economics/expenses/{expense_id}/correct", response_model=ExpenseCorrectionRecord, tags=["Farm Economics & Profitability Intelligence"])
+def correct_farm_expense(
+    expense_id: str,
+    payload: ExpenseCorrectionCreate,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Record an append-only correction on an expense without erasing audit history."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.expenses.correct_expense(
+        expense_id=expense_id,
+        farmer_id=farmer_id,
+        payload=payload,
+        user_id=user.user_id,
+    )
+
+
+@app.get("/api/v1/economics/expenses/{expense_id}/corrections", response_model=List[ExpenseCorrectionRecord], tags=["Farm Economics & Profitability Intelligence"])
+def list_expense_corrections(
+    expense_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Fetch audit trail of corrections for an expense."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.expenses.list_corrections(expense_id=expense_id, farmer_id=farmer_id)
+
+
+# --- HARVESTS ---
+@app.post("/api/v1/economics/harvests", response_model=FarmHarvestRecord, tags=["Farm Economics & Profitability Intelligence"])
+def create_farm_harvest(
+    payload: FarmHarvestCreate,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Record a harvest event with production reconciliation."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.harvests.record_harvest(farmer_id=farmer_id, payload=payload, user_id=user.user_id)
+
+
+@app.get("/api/v1/economics/harvests", response_model=List[FarmHarvestRecord], tags=["Farm Economics & Profitability Intelligence"])
+def list_farm_harvests(
+    farm_id: Optional[str] = None,
+    crop_cycle_id: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """List harvest records for the farmer."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.harvests.list_harvests(
+        farmer_id=farmer_id,
+        farm_id=farm_id,
+        crop_cycle_id=crop_cycle_id,
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+
+@app.get("/api/v1/economics/harvests/{harvest_id}", response_model=FarmHarvestRecord, tags=["Farm Economics & Profitability Intelligence"])
+def get_farm_harvest(
+    harvest_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Get single harvest record by ID."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.harvests.get_harvest(harvest_id=harvest_id, farmer_id=farmer_id)
+
+
+@app.put("/api/v1/economics/harvests/{harvest_id}", response_model=FarmHarvestRecord, tags=["Farm Economics & Profitability Intelligence"])
+def update_farm_harvest(
+    harvest_id: str,
+    payload: FarmHarvestUpdate,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Update mutable fields of a harvest record."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.harvests.update_harvest(
+        harvest_id=harvest_id,
+        farmer_id=farmer_id,
+        payload=payload,
+        user_id=user.user_id,
+    )
+
+
+@app.delete("/api/v1/economics/harvests/{harvest_id}", tags=["Farm Economics & Profitability Intelligence"])
+def delete_farm_harvest(
+    harvest_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Permanently delete a harvest record."""
+    farmer_id = _get_farmer_id_for_user(user)
+    success = economics_service.harvests.delete_harvest(
+        harvest_id=harvest_id,
+        farmer_id=farmer_id,
+        user_id=user.user_id,
+    )
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Harvest not found or deletion failed.")
+    return {"message": "Harvest deleted successfully", "harvest_id": harvest_id}
+
+
+# --- SALES ---
+@app.post("/api/v1/economics/sales", response_model=FarmSaleRecord, tags=["Farm Economics & Profitability Intelligence"])
+def create_farm_sale(
+    payload: FarmSaleCreate,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Record actual produce sale with strict gross and net revenue arithmetic."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.sales.record_sale(farmer_id=farmer_id, payload=payload, user_id=user.user_id)
+
+
+@app.get("/api/v1/economics/sales", response_model=List[FarmSaleRecord], tags=["Farm Economics & Profitability Intelligence"])
+def list_farm_sales(
+    farm_id: Optional[str] = None,
+    crop_cycle_id: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """List produce sales for the farmer."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.sales.list_sales(
+        farmer_id=farmer_id,
+        farm_id=farm_id,
+        crop_cycle_id=crop_cycle_id,
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+
+@app.get("/api/v1/economics/sales/{sale_id}", response_model=FarmSaleRecord, tags=["Farm Economics & Profitability Intelligence"])
+def get_farm_sale(
+    sale_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Get single sale record by ID."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.sales.get_sale(sale_id=sale_id, farmer_id=farmer_id)
+
+
+@app.put("/api/v1/economics/sales/{sale_id}", response_model=FarmSaleRecord, tags=["Farm Economics & Profitability Intelligence"])
+def update_farm_sale(
+    sale_id: str,
+    payload: FarmSaleUpdate,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Update mutable fields of a sale record."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.sales.update_sale(
+        sale_id=sale_id,
+        farmer_id=farmer_id,
+        payload=payload,
+        user_id=user.user_id,
+    )
+
+
+@app.delete("/api/v1/economics/sales/{sale_id}", tags=["Farm Economics & Profitability Intelligence"])
+def delete_farm_sale(
+    sale_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Permanently delete a sale record."""
+    farmer_id = _get_farmer_id_for_user(user)
+    success = economics_service.sales.delete_sale(
+        sale_id=sale_id,
+        farmer_id=farmer_id,
+        user_id=user.user_id,
+    )
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sale not found or deletion failed.")
+    return {"message": "Sale deleted successfully", "sale_id": sale_id}
+
+
+# --- BUDGETS ---
+@app.post("/api/v1/economics/budgets", response_model=CropCycleBudgetRecord, tags=["Farm Economics & Profitability Intelligence"])
+def create_crop_cycle_budget(
+    payload: CropCycleBudgetCreate,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Create a seasonal or crop-cycle budget."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.budgets.create_budget(farmer_id=farmer_id, payload=payload, user_id=user.user_id)
+
+
+@app.get("/api/v1/economics/budgets", response_model=List[CropCycleBudgetRecord], tags=["Farm Economics & Profitability Intelligence"])
+def list_crop_cycle_budgets(
+    farm_id: Optional[str] = None,
+    crop_cycle_id: Optional[str] = None,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """List budgets for the farmer."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.budgets.list_budgets(
+        farmer_id=farmer_id,
+        farm_id=farm_id,
+        crop_cycle_id=crop_cycle_id,
+    )
+
+
+@app.get("/api/v1/economics/budgets/{budget_id}", response_model=CropCycleBudgetRecord, tags=["Farm Economics & Profitability Intelligence"])
+def get_crop_cycle_budget(
+    budget_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Get single budget with category items by ID."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.budgets.get_budget(budget_id=budget_id, farmer_id=farmer_id)
+
+
+@app.put("/api/v1/economics/budgets/{budget_id}", response_model=CropCycleBudgetRecord, tags=["Farm Economics & Profitability Intelligence"])
+def update_crop_cycle_budget(
+    budget_id: str,
+    payload: CropCycleBudgetUpdate,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Update an existing budget."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.budgets.update_budget(
+        budget_id=budget_id,
+        farmer_id=farmer_id,
+        payload=payload,
+        user_id=user.user_id,
+    )
+
+
+@app.get("/api/v1/economics/budgets/crop-cycle/{crop_cycle_id}/variance", response_model=BudgetVarianceReport, tags=["Farm Economics & Profitability Intelligence"])
+def get_crop_cycle_budget_variance(
+    crop_cycle_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Calculate budget vs actual expenditure variance report."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.budgets.calculate_budget_variance(crop_cycle_id=crop_cycle_id, farmer_id=farmer_id)
+
+
+# --- PROFITABILITY & FINANCIAL OVERVIEW ---
+@app.get("/api/v1/economics/profitability/crop-cycle/{crop_cycle_id}", response_model=ProfitabilityMetrics, tags=["Farm Economics & Profitability Intelligence"])
+def get_crop_cycle_profitability(
+    crop_cycle_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Compute transparent profitability metrics, break-even analysis, and ROI for a crop cycle."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.profitability.calculate_crop_cycle_profitability(
+        crop_cycle_id=crop_cycle_id,
+        farmer_id=farmer_id,
+    )
+
+
+@app.get("/api/v1/economics/profitability/overview", response_model=FarmerFinancialOverview, tags=["Farm Economics & Profitability Intelligence"])
+def get_farmer_financial_overview(
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Retrieve high-level financial performance summary for the farmer."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.profitability.get_farmer_financial_overview(farmer_id=farmer_id)
+
+
+# --- SCENARIOS & CROP COMPARISON ---
+@app.post("/api/v1/economics/scenarios", response_model=ScenarioResult, tags=["Farm Economics & Profitability Intelligence"])
+def simulate_financial_scenario(
+    payload: ScenarioSimulateRequest,
+    save: bool = False,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Run deterministic financial projection with sensitivity analysis."""
+    farmer_id = _get_farmer_id_for_user(user)
+    result = economics_service.scenarios.simulate_scenario(payload)
+    if save:
+        economics_service.scenarios.save_scenario(
+            farmer_id=farmer_id,
+            req=payload,
+            result=result,
+            user_id=user.user_id,
+        )
+    return result
+
+
+@app.post("/api/v1/economics/scenarios/save", response_model=FinancialScenarioRecord, tags=["Farm Economics & Profitability Intelligence"])
+def save_financial_scenario(
+    payload: ScenarioSimulateRequest,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Simulate and save a scenario for future retrieval."""
+    farmer_id = _get_farmer_id_for_user(user)
+    result = economics_service.scenarios.simulate_scenario(payload)
+    return economics_service.scenarios.save_scenario(
+        farmer_id=farmer_id,
+        req=payload,
+        result=result,
+        user_id=user.user_id,
+    )
+
+
+@app.get("/api/v1/economics/scenarios", response_model=List[FinancialScenarioRecord], tags=["Farm Economics & Profitability Intelligence"])
+def list_financial_scenarios(
+    farm_id: Optional[str] = None,
+    crop_name: Optional[str] = None,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """List saved scenarios for the farmer."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.scenarios.list_scenarios(
+        farmer_id=farmer_id,
+        farm_id=farm_id,
+        crop_name=crop_name,
+    )
+
+
+@app.get("/api/v1/economics/scenarios/{scenario_id}", response_model=FinancialScenarioRecord, tags=["Farm Economics & Profitability Intelligence"])
+def get_financial_scenario(
+    scenario_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Get single saved scenario by ID."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return economics_service.scenarios.get_scenario(scenario_id=scenario_id, farmer_id=farmer_id)
+
+
+@app.delete("/api/v1/economics/scenarios/{scenario_id}", tags=["Farm Economics & Profitability Intelligence"])
+def delete_financial_scenario(
+    scenario_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Delete a saved financial scenario."""
+    farmer_id = _get_farmer_id_for_user(user)
+    success = economics_service.scenarios.delete_scenario(
+        scenario_id=scenario_id,
+        farmer_id=farmer_id,
+        user_id=user.user_id,
+    )
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scenario not found or deletion failed.")
+    return {"message": "Scenario deleted successfully", "scenario_id": scenario_id}
+
+
+@app.post("/api/v1/economics/compare-crops", response_model=CropComparisonReport, tags=["Farm Economics & Profitability Intelligence"])
+def compare_prospective_crops(
+    payload: CropComparisonRequest,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Compare multiple prospective crops for a plot with clear disclaimers."""
+    return economics_service.scenarios.compare_crops(payload)
+
+
+# --- BENCHMARKS ---
+@app.get("/api/v1/economics/benchmarks", response_model=List[FinancialBenchmarkRecord], tags=["Farm Economics & Profitability Intelligence"])
+def list_financial_benchmarks(
+    crop_name: Optional[str] = None,
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+    season: Optional[str] = None,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """List regional/ICAR/CACP financial benchmarks."""
+    return economics_service.list_benchmarks(
+        crop_name=crop_name,
+        state=state,
+        district=district,
+        season=season,
+    )
+
+
+@app.post("/api/v1/economics/benchmarks", response_model=FinancialBenchmarkRecord, tags=["Farm Economics & Profitability Intelligence"])
+def create_financial_benchmark(
+    payload: FinancialBenchmarkRecord,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Record an authoritative regional benchmark (restricted to Admins & Field Officers)."""
+    if user.role not in (UserRole.ADMINISTRATOR, UserRole.FIELD_OFFICER):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators and field officers can publish benchmarks.")
+    return economics_service.create_benchmark(payload)
+
 
 
 

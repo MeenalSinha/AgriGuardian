@@ -2,7 +2,7 @@
 // Provides structured, user-isolated local persistence for farms, crops, activities, reminders, and offline mutations
 
 const DB_NAME = 'AgriGuardianOfflineDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export class IndexedDBStorage {
   constructor() {
@@ -42,6 +42,28 @@ export class IndexedDBStorage {
         }
         if (!db.objectStoreNames.contains('advisories')) {
           db.createObjectStore('advisories', { keyPath: 'case_id' });
+        }
+
+        // Phase 11: Economics Stores
+        if (!db.objectStoreNames.contains('expenses')) {
+          const expStore = db.createObjectStore('expenses', { keyPath: 'expense_id' });
+          expStore.createIndex('crop_cycle_id', 'crop_cycle_id', { unique: false });
+          expStore.createIndex('purchase_date', 'purchase_date', { unique: false });
+          expStore.createIndex('payment_status', 'payment_status', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('harvests')) {
+          const hrvStore = db.createObjectStore('harvests', { keyPath: 'harvest_id' });
+          hrvStore.createIndex('crop_cycle_id', 'crop_cycle_id', { unique: false });
+          hrvStore.createIndex('harvest_date', 'harvest_date', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('sales')) {
+          const saleStore = db.createObjectStore('sales', { keyPath: 'sale_id' });
+          saleStore.createIndex('crop_cycle_id', 'crop_cycle_id', { unique: false });
+          saleStore.createIndex('sale_date', 'sale_date', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('budgets')) {
+          const bdgStore = db.createObjectStore('budgets', { keyPath: 'budget_id' });
+          bdgStore.createIndex('crop_cycle_id', 'crop_cycle_id', { unique: false });
         }
 
         // Offline Durable Queue & Attachments
@@ -164,7 +186,10 @@ export class IndexedDBStorage {
   // Security: Clear user data on account switch or logout
   async clearUserData() {
     console.warn('[IndexedDB] Purging local user data on account switch/logout.');
-    const stores = ['farms', 'plots', 'crop_cycles', 'activities', 'reminders', 'notifications', 'advisories', 'mutations', 'attachments'];
+    const stores = [
+      'farms', 'plots', 'crop_cycles', 'activities', 'reminders', 'notifications',
+      'advisories', 'expenses', 'harvests', 'sales', 'budgets', 'mutations', 'attachments'
+    ];
     for (const s of stores) {
       await this.clearStore(s);
     }

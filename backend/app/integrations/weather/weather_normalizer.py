@@ -153,3 +153,4 @@ def normalize_open_meteo_response(
         daily=daily_list,
         provenance=provenance,
     )
+

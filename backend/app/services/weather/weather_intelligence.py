@@ -71,3 +71,4 @@ class WeatherIntelligenceService:
             "risk_assessment": risk_assessment,
             "active_alerts": managed_alerts,
         }
+

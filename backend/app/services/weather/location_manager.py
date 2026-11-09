@@ -141,3 +141,4 @@ class LocationManager:
         dlam = math.radians(lon2 - lon1)
         a = math.sin(dphi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2.0) ** 2
         return 2.0 * r * math.asin(math.sqrt(a))
+

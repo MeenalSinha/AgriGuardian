@@ -133,3 +133,19 @@ def test_weather_report_to_legacy_context(mock_open_meteo_json, sample_location)
     assert legacy.is_live is True
     assert "max_temp" in legacy.forecast
     assert len(legacy.forecast["max_temp"]) == 3
+
+
+def test_weather_report_unavailable_to_legacy_context(sample_location):
+    """Verify to_legacy_context returns explicit unavailable state without fake temperatures."""
+    report = WeatherReport(
+        location=sample_location,
+        current=None,
+    )
+    report.provenance.is_unavailable = True
+
+    legacy = report.to_legacy_context()
+    assert isinstance(legacy, WeatherContext)
+    assert legacy.temperature is None
+    assert legacy.is_available is False
+    assert legacy.is_live is False
+    assert "temporarily unavailable" in legacy.summary

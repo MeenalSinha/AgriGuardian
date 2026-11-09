@@ -131,38 +131,46 @@ class WeatherReport(BaseModel):
 
     def to_legacy_context(self) -> WeatherContext:
         """Convert to backward-compatible WeatherContext schema for Phase 0-3 components."""
-        if self.current and self.provenance.is_live:
+        if self.current and not self.provenance.is_unavailable:
             temp = self.current.temperature_c
             humidity = self.current.relative_humidity_pct
             precip = self.current.precipitation_mm
             rain_recent = precip > 1.0 or any(d.precipitation_sum_mm > 1.0 for d in self.daily[:1])
-            is_live = True
+            is_live = self.provenance.is_live
             summary = f"{temp:.1f}°C, {humidity:.0f}% humidity, {precip:.1f}mm rain"
+            max_temps = [d.max_temperature_c for d in self.daily[:3]] if self.daily else []
+            min_temps = [d.min_temperature_c for d in self.daily[:3]] if self.daily else []
+            precips = [d.precipitation_sum_mm for d in self.daily[:3]] if self.daily else []
+
+            return WeatherContext(
+                temperature=temp,
+                humidity=humidity,
+                precipitation=precip,
+                rain_recent=rain_recent,
+                temp_high=temp > 35.0,
+                temp_very_high=temp > 40.0,
+                humidity_high=humidity > 80.0,
+                forecast={
+                    "max_temp": max_temps,
+                    "min_temp": min_temps,
+                    "precipitation": precips,
+                },
+                summary=summary,
+                is_live=is_live,
+                is_available=True,
+            )
         else:
-            temp = 28.0
-            humidity = 65.0
-            precip = 0.0
-            rain_recent = False
-            is_live = False
-            summary = "Weather temporarily unavailable (degraded context)"
+            return WeatherContext(
+                temperature=None,
+                humidity=None,
+                precipitation=None,
+                rain_recent=False,
+                temp_high=False,
+                temp_very_high=False,
+                humidity_high=False,
+                forecast={},
+                summary="Weather data temporarily unavailable (offline/disconnected)",
+                is_live=False,
+                is_available=False,
+            )
 
-        max_temps = [d.max_temperature_c for d in self.daily[:3]] if self.daily else [30.0, 31.0, 29.0]
-        min_temps = [d.min_temperature_c for d in self.daily[:3]] if self.daily else [22.0, 23.0, 21.0]
-        precips = [d.precipitation_sum_mm for d in self.daily[:3]] if self.daily else [0.0, 0.0, 0.0]
-
-        return WeatherContext(
-            temperature=temp,
-            humidity=humidity,
-            precipitation=precip,
-            rain_recent=rain_recent,
-            temp_high=temp > 35.0,
-            temp_very_high=temp > 40.0,
-            humidity_high=humidity > 80.0,
-            forecast={
-                "max_temp": max_temps,
-                "min_temp": min_temps,
-                "precipitation": precips,
-            },
-            summary=summary,
-            is_live=is_live,
-        )

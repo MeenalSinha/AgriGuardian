@@ -23,6 +23,7 @@ from frontend.views.demo_cases_view import render_demo_cases_view
 from frontend.views.disease_diagnosis_view import render_disease_diagnosis_view
 from frontend.views.home_view import render_home_view
 from frontend.views.knowledge_admin_view import render_knowledge_admin_view
+from frontend.views.market_intelligence_view import render_market_intelligence_view
 from frontend.views.voice_assistant_view import render_voice_assistant_view
 from frontend.views.weather_dashboard_view import render_weather_dashboard_view
 
@@ -91,6 +92,7 @@ with st.sidebar:
             "🎙️ Voice Assistant",
             "🔬 Crop Disease Diagnosis",
             "🌦️ Weather Intelligence",
+            "📈 Market Intelligence",
             "🏠 Farm Advisory",
             "📚 Knowledge Base",
             "📊 Dashboard",
@@ -143,6 +145,8 @@ elif page == "🔬 Crop Disease Diagnosis":
     render_disease_diagnosis_view()
 elif page == "🌦️ Weather Intelligence":
     render_weather_dashboard_view()
+elif page == "📈 Market Intelligence":
+    render_market_intelligence_view()
 elif page == "🏠 Farm Advisory":
     render_home_view()
 elif page == "📚 Knowledge Base":

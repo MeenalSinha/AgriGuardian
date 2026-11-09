@@ -85,3 +85,4 @@ def test_coordinate_validation():
             latitude=28.0,
             longitude=195.0,  # Invalid: > 180
         )
+

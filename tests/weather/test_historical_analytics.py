@@ -66,3 +66,4 @@ def test_calculate_rainfall_excess_anomaly(sample_location, test_settings):
 
     assert comp.rainfall_anomaly_pct == 150.0  # +150% excess
     assert "excess rainfall" in comp.notes.lower()
+

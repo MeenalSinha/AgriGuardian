@@ -30,3 +30,4 @@ SECTION 4: HEATWAVE & DRY SPELL CRITERIA IN AGRICULTURE (Pages 35-39)
 - Agricultural Heatwave: Maximum temperature reaching ≥ 40°C in plains (or ≥ 30°C in hilly regions), or a departure of ≥ 4.5°C from normal maximum temperature sustained over 2 consecutive days. High night temperatures (minimum temperature ≥ 25°C) exacerbate respiratory assimilate losses in cereal and vegetable crops.
 - Dry Spell: A period of at least 7 to 10 consecutive rainless days during the active Kharif monsoon season in rainfed tracts, creating acute root-zone soil moisture deficits and accelerating reference evapotranspiration (ET0).
 ================================================================================
+

@@ -227,7 +227,7 @@ class WeatherRiskEngine:
                 recommended_actions=[
                     "Cover nursery beds and young transplants with straw mulch or plastic low-tunnels in the evening.",
                     "Apply a light irrigation during evening hours before cold nights to increase soil thermal capacity.",
-                    "Generate smudging (controlled low-temperature smoke) on the windward field boundary to prevent radiative cooling during clear calm nights.",
+                    "Where permitted under local environmental guidelines, light smoke smudging on windward boundaries may provide localized radiative frost shielding; prioritize organic straw mulch and low-tunnels as primary physical barriers.",
                 ],
                 prohibited_actions=[
                     "Do not leave young transplanted seedlings uncovered on calm, cloudless winter nights.",
@@ -292,7 +292,7 @@ class WeatherRiskEngine:
                     "Store harvested produce and seeds in elevated, moisture-proof storage facilities.",
                 ],
                 prohibited_actions=[
-                    "DO NOT spray or apply foliar fungicides, insecticides, or top-dress urea fertilizer immediately before or during rain (wash-off risk).",
+                    "DO NOT spray or apply foliar fungicides, insecticides, or top-dress urea fertilizer when heavy rain is imminent within 2-4 hours to prevent washoff, unless using specialized rainfast formulations with stickers.",
                     "Do not carry out intercultural tractor operations on wet, waterlogged clay soils to avoid compaction.",
                 ],
                 status=AlertStatus.NEW,
@@ -453,12 +453,12 @@ class WeatherRiskEngine:
                 source_ids=["SRC-ICAR-WHEAT-2023"],
                 explanation="Tall crops such as wheat during heading/grain-filling, maize, and sugarcane are highly prone to stem and root lodging when soils are wet under high convective wind.",
                 recommended_actions=[
-                    "SUSPEND field irrigation immediately during the wind advisory window to maintain root soil anchorage.",
+                    "Suspend flood or furrow irrigation on tall, heading crops (wheat, maize, sugarcane) during the wind advisory window to avoid saturated soil and root loosening.",
                     "Stake tall tomato plants or reinforce trellis supports to prevent vine breakage.",
                     "Postpone foliar pesticide sprays to prevent chemical spray drift onto non-target areas.",
                 ],
                 prohibited_actions=[
-                    "DO NOT irrigate standing tall cereal or vegetable crops when high winds are predicted.",
+                    "DO NOT surface-flood or furrow-irrigate standing tall cereal crops when high winds are predicted (subsurface drip may proceed if soil is dry).",
                     "DO NOT spray herbicides or insecticides in wind speeds > 15 km/h.",
                 ],
                 status=AlertStatus.NEW,

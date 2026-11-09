@@ -91,3 +91,4 @@ class WeatherCache:
 
 # Global singleton instance for app-wide weather caching
 weather_cache = WeatherCache(default_ttl_seconds=1800, spatial_grid_deg=0.05)
+

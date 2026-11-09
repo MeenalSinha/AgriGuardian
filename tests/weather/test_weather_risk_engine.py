@@ -233,3 +233,4 @@ def test_high_wind_lodging_irrigation_suspension(risk_engine, base_location):
     assert "FCT-WHEAT-LODGE-WIND-01" in wind_alert.evidence_ids
     # Crucial action: SUSPEND irrigation
     assert any("irrigate" in p.lower() or "irrigation" in p.lower() for p in wind_alert.prohibited_actions)
+

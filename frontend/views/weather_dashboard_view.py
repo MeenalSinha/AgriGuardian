@@ -210,7 +210,7 @@ def render_weather_dashboard_view():
                         <div style="font-size: 0.95rem; font-weight: 600;">{day.max_temperature_c:.0f}° / <span style="color: #666;">{day.min_temperature_c:.0f}°C</span></div>
                         <div style="font-size: 0.8rem; color: #1565C0; margin-top: 4px;">💧 {day.precipitation_sum_mm:.1f} mm</div>
                         <div style="font-size: 0.75rem; color: #555;">💨 {day.max_wind_speed_kmh:.0f} km/h</div>
-                        <div style="font-size: 0.75rem; color: #888; margin-top: 2px;">ET₀: {day.et0_evapotranspiration_mm or 4.0:.1f} mm</div>
+                        <div style="font-size: 0.75rem; color: #888; margin-top: 2px;">{f"ET₀: {day.et0_evapotranspiration_mm:.1f} mm" if day.et0_evapotranspiration_mm is not None else "ET₀: N/A"}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -254,24 +254,29 @@ def render_weather_dashboard_view():
 
     with col_d1:
         st.markdown("#### 💧 Irrigation Scheduling")
-        et0_today = report.daily[0].et0_evapotranspiration_mm if report.daily and report.daily[0].et0_evapotranspiration_mm else 4.2
+        et0_today = report.daily[0].et0_evapotranspiration_mm if (report.daily and report.daily[0].et0_evapotranspiration_mm is not None) else None
         precip_3d = sum(d.precipitation_sum_mm for d in report.daily[:3]) if report.daily else 0.0
 
         if precip_3d >= 15.0:
             st.warning(f"🌧️ **Hold Irrigation:** Significant rain expected ({precip_3d:.1f} mm in next 3 days). Postpone irrigation to avoid waterlogging and runoff losses.")
-        elif et0_today >= 5.0:
+        elif et0_today is not None and et0_today >= 5.0:
             st.warning(f"☀️ **High Water Demand:** Daily ET₀ is high ({et0_today:.1f} mm/day). Schedule irrigation during early morning to minimize evaporative loss.")
-        else:
+        elif et0_today is not None:
             st.success(f"💧 **Normal Irrigation:** Daily ET₀ is {et0_today:.1f} mm/day. Follow standard crop stage irrigation schedule.")
+        else:
+            st.info("ℹ️ Daily ET₀ evapotranspiration not provided for today. Check root-zone soil moisture directly before scheduling irrigation.")
 
     with col_d2:
         st.markdown("#### 🛡️ Agrochemical Spray Window")
-        max_wind_today = report.daily[0].max_wind_speed_kmh if report.daily else 10.0
-        precip_today = report.daily[0].precipitation_sum_mm if report.daily else 0.0
+        max_wind_today = report.daily[0].max_wind_speed_kmh if (report.daily and report.daily[0].max_wind_speed_kmh is not None) else None
+        precip_today = report.daily[0].precipitation_sum_mm if (report.daily and report.daily[0].precipitation_sum_mm is not None) else 0.0
 
         if precip_today >= 5.0:
             st.error("🚫 **DO NOT Spray:** Rain expected today. Foliar sprays will be washed off, wasting inputs and risking environmental contamination.")
-        elif max_wind_today >= 20.0:
+        elif max_wind_today is not None and max_wind_today >= 20.0:
             st.warning(f"💨 **High Drift Hazard:** Wind gusts reaching {max_wind_today:.0f} km/h. Postpone foliar spraying until early morning when winds are calm (< 12 km/h).")
-        else:
+        elif max_wind_today is not None:
             st.success("✅ **Optimal Spray Window:** Low wind speeds and clear skies make early morning ideal for necessary protective sprays.")
+        else:
+            st.info("ℹ️ Wind speed forecast not provided for today. Verify calm wind conditions (< 12 km/h) before spraying.")
+

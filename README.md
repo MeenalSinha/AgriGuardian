@@ -54,6 +54,17 @@ Built with **Streamlit, Gnani AI (Prisma v2.5 STT & Timbre v2.5 TTS), Open-Meteo
 * **Privacy-First Location Architecture:** Curated district presets across 12 Indian states, interactive map pin selection, and transparent spatial accuracy labels with explicit GPS consent.
 * **Interactive Weather Dashboard View:** Visual Streamlit dashboard with hourly/daily forecast cards, active hazard banners, ERA5 anomaly gauges, and irrigation/spraying decision matrices.
 
+### 📈 Intelligent Market Intelligence & Price Forecasting (Phase 5)
+* **Zero Synthetic Fallbacks:** Eradicated all static benchmark dictionaries and hardcoded ₹2,000/qtl defaults; strictly grounded in official AGMARKNET daily bulletins, e-NAM electronic trade feeds, and CACP statutory MSP notifications.
+* **Master Catalogs & Verified Geographic Centroids:** Standardized catalogs covering 12 commodities, 8 commercial varieties, and 25+ regulated APMC mandis across 12 states with exact GPS coordinates.
+* **Strict Paddy vs. Rice Boundary:** Rigorous agronomic and economic separation between rough unhusked Paddy (*Dhan* at ₹2,100–₹2,500/qtl with statutory MSP) and milled commercial Rice (*Chawal* at ₹3,200–₹4,500/qtl without direct MSP).
+* **Time-Series Volatility & Trend Analytics:** Analyzes 7d, 30d, 90d, 1y historical price series computing mean, median, spread, standard deviation ($\sigma$), coefficient of variation ($CV$), and statistical trend direction (`RISING`, `FALLING`, `STABLE`, `VOLATILE`).
+* **Location-Aware Nearby Mandi Discovery:** Calculates geodesic straight-line distance using haversine formula to surface price arbitrage opportunities across surrounding APMC yards.
+* **Walk-Forward Backtested Price Forecasting:** Responsible 14-day Holt linear exponential smoothing evaluated via rolling-origin backtesting (strictly NO random train/test splits) against a persistence naive baseline, with expanding 80% and 95% confidence intervals and data sufficiency gates ($\ge 14$ observations).
+* **Farmgate Net Realization Calculator:** Deducts user-supplied transport rates, handling hamali, and APMC cess to calculate true net realization per quintal.
+* **Durable Market Alert Lifecycle:** File-backed persistent alerts (`data/market/market_alerts.json`) tracking price crashes ($> 10\%$ drop), price surges ($> 12\%$ rise), and below-MSP warning conditions.
+* **Interactive Streamlit Market View:** Visual dashboard with real-time rate cards, MSP status badges, historical line charts, forecast intervals, nearby mandi tables, and interactive realization calculators.
+
 ### 📊 Field Officer Dashboard & PDF Exports
 * **Regional Outbreak Analytics:** Tracks crop health queries, risk distributions, and peak advisory hours.
 * **Case Management:** Review and update advisory statuses and agronomist field feedback.
@@ -93,8 +104,8 @@ AgriGuardian/
 | **Explainable AI (XAI)** | Grad-CAM | Backward gradient attribution hooks and saliency heatmaps |
 | **Damage Quantification** | Severity Assessor | Evidence-based foliar lesion area segmentation and clinical staging |
 | **Headless REST API** | FastAPI + Uvicorn | Programmatic voice, vision, and advisory endpoints |
-| **Weather Integration** | Open-Meteo REST API | Live meteorological data and precipitation forecasts |
-| **Market Intelligence** | Agmarknet Benchmark Model | Mandi pricing trends with source transparency |
+| **Weather Integration** | Open-Meteo REST API | Live meteorological data, ET0, and ERA5 historical reanalysis |
+| **Market Intelligence** | AGMARKNET & e-NAM + Holt Forecasting | Verified daily closing APMC rates, spatial discovery, and walk-forward forecasting |
 | **Document Archival** | ReportLab 4.4 | Authentic PDF advisory report generation |
 
 ---

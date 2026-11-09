@@ -61,8 +61,8 @@ class ConversationEngine:
             "मौसम", "बारिश", "तापमान", "वर्षा", "पानी", "सिंचाई", "ओले", "कोहरा"
         ]
         market_keywords = [
-            "price", "market", "mandi", "rate", "cost", "sell", "selling", "bhav",
-            "भाव", "दाम", "मंडी", "कीमत", "बिक्री", "रुपये", "खरीद"
+            "price", "market", "mandi", "rate", "cost", "sell", "selling", "bhav", "msp",
+            "भाव", "दाम", "मंडी", "कीमत", "बिक्री", "रुपये", "खरीद", "एमएसपी", "समर्थन मूल्य"
         ]
 
         if any(w in q for w in disease_keywords):
@@ -140,7 +140,15 @@ class ConversationEngine:
         weather_risk = weather_intel["risk_assessment"]
         weather_alerts = weather_intel["active_alerts"]
         weather = weather_report.to_legacy_context()
-        market = self.system.market_service.get_market_data(crop=effective_crop)
+        market = self.system.market_service.get_market_data(
+            crop=effective_crop,
+            location=effective_location,
+            latitude=loc.latitude if loc else None,
+            longitude=loc.longitude if loc else None,
+        )
+
+        if intent == "market" and market.is_available:
+            effective_query = f"{user_query} [Market Context: {market.summary}]"
 
         # 2. Vision Diagnosis if Image Provided
         image_diag = None

@@ -1,6 +1,9 @@
 """Alert manager controlling in-app alert lifecycle, deduplication, and notification states."""
 
+import json
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, List, Optional
 from backend.app.core.logging import get_logger
 from backend.app.schemas.weather_alert import (
@@ -14,11 +17,34 @@ logger = get_logger("AlertManager")
 
 
 class AlertManager:
-    """Manages lifecycle, deduplication, and farmer acknowledgments for agricultural weather alerts."""
+    """Manages lifecycle, deduplication, persistent storage, and farmer acknowledgments for agricultural weather alerts."""
 
-    def __init__(self):
-        # In-memory alert store keyed by alert_id
+    def __init__(self, persistence_file: Optional[str] = None):
+        self.persistence_file = persistence_file or os.path.join(os.getcwd(), "data", "weather", "weather_alerts.json")
         self._alerts: Dict[str, WeatherAlert] = {}
+        self._load_persisted_alerts()
+
+    def _load_persisted_alerts(self) -> None:
+        """Load previously stored alerts from disk on initialization."""
+        if os.path.exists(self.persistence_file):
+            try:
+                with open(self.persistence_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    for item in data:
+                        alert = WeatherAlert(**item)
+                        self._alerts[alert.alert_id] = alert
+                logger.info(f"Loaded {len(self._alerts)} alerts from persistent storage ({self.persistence_file}).")
+            except Exception as e:
+                logger.warning(f"Could not load persisted alerts from {self.persistence_file}: {e}")
+
+    def _save_alerts(self) -> None:
+        """Persist current alert store to disk."""
+        try:
+            Path(self.persistence_file).parent.mkdir(parents=True, exist_ok=True)
+            with open(self.persistence_file, "w", encoding="utf-8") as f:
+                json.dump([a.model_dump() for a in self._alerts.values()], f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to persist alerts to {self.persistence_file}: {e}")
 
     def register_alerts(self, new_alerts: List[WeatherAlert]) -> List[WeatherAlert]:
         """Process incoming alerts from risk engine, performing deduplication and lifecycle updates.
@@ -53,6 +79,7 @@ class AlertManager:
                 logger.info(f"Registered new weather alert: {alert.alert_id} [{alert.hazard_type.value} - {alert.risk_level.value}]")
                 registered.append(alert)
 
+        self._save_alerts()
         return registered
 
     def get_active_alerts(
@@ -78,6 +105,7 @@ class AlertManager:
         """Mark an alert as acknowledged by the farmer."""
         if alert_id in self._alerts:
             self._alerts[alert_id].acknowledged = True
+            self._save_alerts()
             logger.info(f"Alert {alert_id} acknowledged by user.")
             return True
         return False
@@ -87,6 +115,7 @@ class AlertManager:
         if alert_id in self._alerts:
             self._alerts[alert_id].status = AlertStatus.DISMISSED
             self._alerts[alert_id].updated_at = datetime.now(timezone.utc).isoformat()
+            self._save_alerts()
             logger.info(f"Alert {alert_id} dismissed.")
             return True
         return False
@@ -96,6 +125,7 @@ class AlertManager:
         if alert_id in self._alerts:
             self._alerts[alert_id].status = AlertStatus.RESOLVED
             self._alerts[alert_id].updated_at = datetime.now(timezone.utc).isoformat()
+            self._save_alerts()
             return True
         return False
 
@@ -106,6 +136,7 @@ class AlertManager:
     def clear(self) -> None:
         """Clear all stored alerts (for testing)."""
         self._alerts.clear()
+        self._save_alerts()
 
     def _find_matching_active_alert(self, alert: WeatherAlert) -> Optional[WeatherAlert]:
         """Find active alert matching hazard type, crop, and location to prevent spam."""
@@ -122,3 +153,4 @@ class AlertManager:
 
 # Global singleton instance for application-wide alert management
 alert_manager = AlertManager()
+

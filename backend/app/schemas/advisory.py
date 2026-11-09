@@ -7,9 +7,9 @@ from pydantic import BaseModel, Field
 
 class WeatherContext(BaseModel):
     """Normalized weather conditions for agricultural reasoning."""
-    temperature: float
-    humidity: float
-    precipitation: float
+    temperature: Optional[float] = None
+    humidity: Optional[float] = None
+    precipitation: Optional[float] = None
     rain_recent: bool = False
     temp_high: bool = False
     temp_very_high: bool = False
@@ -17,15 +17,16 @@ class WeatherContext(BaseModel):
     forecast: Dict[str, Any] = Field(default_factory=dict)
     summary: str
     is_live: bool = True
+    is_available: bool = True
 
 
 class MarketContext(BaseModel):
-    """Market price information with source transparency."""
+    """Market price information with source transparency and verified APMC grounding."""
     crop: str
-    current_price: float
-    trend: str
-    min_price: float
-    max_price: float
+    current_price: Optional[float] = None
+    trend: str = "stable"
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
     last_week_price: Optional[float] = None
     price_change: Optional[float] = None
     change_percent: Optional[float] = None
@@ -33,8 +34,12 @@ class MarketContext(BaseModel):
     demand: Optional[str] = None
     insight: Optional[str] = None
     summary: str
-    source: str = "Indicative Reference Benchmark"
+    source: str = "AGMARKNET / e-NAM Daily Bulletin"
     is_live: bool = False
+    is_available: bool = True
+    mandi_name: Optional[str] = None
+    has_msp: bool = False
+    msp_price: Optional[float] = None
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
 
 

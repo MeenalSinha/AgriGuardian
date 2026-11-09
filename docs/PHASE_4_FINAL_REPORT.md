@@ -305,3 +305,4 @@ tests\weather\test_weather_risk_engine.py .......                        [100%]
 2. **Rate Limit Headroom:** Spatial grid discretization ensures that even with 50,000 active farmers across India, Open-Meteo queries remain well within open-tier limits (~1,000 queries/day).
 3. **IMD Agromet Sync:** In production, configure a daily cron job to ingest the 130 Agromet district bulletins published by IMD at 13:00 IST to corroborate automated warnings.
 4. **Transition to Phase 5:** The completed weather intelligence and risk system serves as the meteorological backbone for **Phase 5 (Market Intelligence, Price Forecasting & Mandi Analytics)**.
+

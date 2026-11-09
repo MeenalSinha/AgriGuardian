@@ -86,7 +86,7 @@ class AgriGuardianSystem:
 
         # Step 2: Market data
         t0 = time.time()
-        market = self.market_service.get_market_data(crop=crop)
+        market = self.market_service.get_market_data(crop=crop, location=location)
         timing["market"] = time.time() - t0
 
         # Step 3: Image analysis if provided

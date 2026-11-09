@@ -12,19 +12,23 @@ def test_market_service_known_crop(test_settings):
 
     assert isinstance(ctx, MarketContext)
     assert ctx.crop == "Wheat"
-    assert ctx.current_price > 0
+    assert ctx.current_price is not None and ctx.current_price > 0
+    assert ctx.is_available is True
     assert ctx.is_live is False  # Must be explicitly transparent
-    assert "Agmarknet Indicative" in ctx.source
-    assert ctx.trend in ("rising", "falling", "stable")
+    assert "AGMARKNET" in ctx.source
+    assert ctx.trend in ("rising", "falling", "stable", "volatile")
+    assert ctx.has_msp is True
+    assert ctx.msp_price == 2275.0 or ctx.msp_price == 2425.0
 
 
 def test_market_service_unknown_crop(test_settings):
-    """Verify market service returns sensible baseline for unlisted crop."""
+    """Verify market service returns explicit unavailable state without synthetic price fallbacks."""
     service = MarketService(settings=test_settings)
     ctx = service.get_market_data(crop="Dragonfruit")
 
     assert isinstance(ctx, MarketContext)
     assert ctx.crop == "Dragonfruit"
-    assert ctx.current_price == 2000.0
-    assert ctx.is_live is False
+    assert ctx.is_available is False
+    assert ctx.current_price is None
+    assert "unavailable" in ctx.summary.lower()
 

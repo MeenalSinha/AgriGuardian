@@ -91,3 +91,4 @@ def test_conversation_engine_weather_turn(test_settings, mock_open_meteo_hot):
         assert "weather_alerts" in turn.context_used
         assert turn.context_used["weather_risk_level"] in ("high", "extreme", "moderate")
         assert len(session.turns) == 1
+

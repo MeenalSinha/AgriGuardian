@@ -23,10 +23,16 @@ from backend.app.schemas.speech import (
     SpeechSynthesisResult,
     TranscriptionResult,
 )
+from backend.app.repositories.market_catalog import market_catalog
+from backend.app.schemas.market import MarketTrendAnalysis, PriceForecastResult
 from backend.app.services.advisory.orchestrator import AgriGuardianSystem
 from backend.app.services.agriculture.disease_detector import PlantDiseaseDetector
 from backend.app.services.agriculture.knowledge_service import KnowledgeService
 from backend.app.services.conversation.engine import ConversationEngine
+from backend.app.services.market.market_analytics import MarketAnalyticsService
+from backend.app.services.market.market_intelligence import MarketIntelligenceService
+from backend.app.services.market.net_realization_calculator import NetRealizationCalculator
+from backend.app.services.market.price_forecaster import PriceForecaster
 
 # Initialize settings and structured logging
 settings = get_settings()
@@ -55,6 +61,7 @@ app.add_middleware(
 system = AgriGuardianSystem(settings=settings)
 conversation_engine = ConversationEngine(system=system, settings=settings)
 knowledge_service = KnowledgeService(settings=settings)
+market_intel = MarketIntelligenceService()
 
 # In-memory sessions store (can be backed by Redis / PostgreSQL in Phase 2)
 sessions_store: Dict[str, ConversationSession] = {}
@@ -62,6 +69,19 @@ sessions_store: Dict[str, ConversationSession] = {}
 
 # ==============================================================================
 # SCHEMAS FOR API REQUESTS
+# ==============================================================================
+
+class NetRealizationRequest(BaseModel):
+    """Payload for calculating net farmgate realization."""
+    market_id: str
+    market_name: str
+    commodity_name: str
+    distance_km: float = Field(..., ge=0.0)
+    quantity_quintals: float = Field(..., gt=0.0)
+    reference_modal_price: float = Field(..., gt=0.0)
+    transport_cost_override: Optional[float] = None
+    handling_fee_override: Optional[float] = None
+    transport_rate_per_km_qtl: Optional[float] = None
 # ==============================================================================
 
 class ConversationTurnRequest(BaseModel):
@@ -457,6 +477,230 @@ def dismiss_weather_alert(alert_id: str):
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Alert '{alert_id}' not found.")
     return {"status": "dismissed", "alert_id": alert_id}
+
+
+# ==============================================================================
+# PHASE 5: AGRICULTURAL MARKET INTELLIGENCE & PRICE FORECASTING ENDPOINTS
+# ==============================================================================
+
+@app.get("/api/v1/market/commodities", tags=["Market Intelligence"])
+def list_commodities():
+    """Retrieve catalog of standardized agricultural commodities with Hindi names and aliases."""
+    commodities = market_catalog.get_all_commodities()
+    return {
+        "commodities": [c.model_dump() for c in commodities],
+        "count": len(commodities),
+    }
+
+
+@app.get("/api/v1/market/mandis", tags=["Market Intelligence"])
+def list_mandis(state: Optional[str] = None, district: Optional[str] = None):
+    """Retrieve registered APMC mandis across 12 states with verified GPS coordinates."""
+    mandis = market_catalog.get_all_mandis(state=state, district=district)
+    return {
+        "mandis": [m.model_dump() for m in mandis],
+        "count": len(mandis),
+    }
+
+
+@app.get("/api/v1/market/prices/latest", tags=["Market Intelligence"])
+def get_latest_market_price(
+    commodity: str,
+    market_id: Optional[str] = None,
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+):
+    """Fetch latest verified modal, min, and max price observation for a commodity."""
+    try:
+        obs = market_intel.provider.get_latest_price(
+            commodity_id=commodity,
+            market_id=market_id,
+            state=state,
+            district=district,
+        )
+        if not obs:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No market price bulletin found for commodity '{commodity}'.",
+            )
+        return obs.model_dump()
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Error fetching latest market price: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get("/api/v1/market/nearby", tags=["Market Intelligence"])
+def discover_nearby_mandis(
+    commodity: str,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    location: Optional[str] = None,
+    radius_km: float = 120.0,
+):
+    """Discover nearby APMC mandis trading a commodity with straight-line distances."""
+    try:
+        nearby = market_intel.nearby_service.discover_nearby_prices(
+            commodity_id=commodity,
+            latitude=lat,
+            longitude=lon,
+            location_query=location,
+            radius_km=radius_km,
+        )
+        return {
+            "commodity": commodity,
+            "nearby_mandis": [m.model_dump() for m in nearby],
+            "count": len(nearby),
+        }
+    except Exception as e:
+        logger.error(f"Error discovering nearby mandis: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get("/api/v1/market/history", tags=["Market Intelligence"])
+def get_market_history_and_trend(
+    commodity: str,
+    market_id: str,
+    days: int = 90,
+):
+    """Retrieve sequential historical observations, statistical metrics, and trend trajectory."""
+    try:
+        obs_list = market_intel.provider.get_historical_observations(
+            commodity_id=commodity,
+            market_id=market_id,
+            days=days,
+        )
+        if not obs_list:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No historical price records found for commodity '{commodity}' in market '{market_id}'.",
+            )
+        trend = market_intel.forecaster._fit_holt  # test helper
+        trend_analysis = MarketAnalyticsService.analyze_trend(
+            observations=obs_list,
+            window_days=min(len(obs_list), days),
+        )
+        return {
+            "commodity": commodity,
+            "market_id": market_id,
+            "observations_count": len(obs_list),
+            "trend_analysis": trend_analysis.model_dump(),
+            "observations": [o.model_dump() for o in obs_list],
+        }
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Error retrieving market history: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get("/api/v1/market/msp", tags=["Market Intelligence"])
+def get_msp_benchmark(commodity: str, current_modal_price: Optional[float] = None):
+    """Retrieve statutory MSP benchmark and comparative evaluation."""
+    try:
+        if current_modal_price is not None:
+            comparison = market_intel.msp_provider.compare_price_with_msp(
+                commodity_query=commodity,
+                current_modal_price=current_modal_price,
+            )
+            return comparison
+        else:
+            msp_rec = market_intel.msp_provider.get_msp(commodity)
+            if not msp_rec:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No statutory MSP policy benchmark found for '{commodity}'.",
+                )
+            return msp_rec.model_dump()
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Error retrieving MSP benchmark: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get("/api/v1/market/forecast", tags=["Market Intelligence"])
+def get_price_forecast(
+    commodity: str,
+    market_id: str,
+    horizon_days: int = 14,
+):
+    """Generate 7-14 day time-series forecast with 80% & 95% intervals and backtest metrics."""
+    try:
+        obs_list = market_intel.provider.get_historical_observations(
+            commodity_id=commodity,
+            market_id=market_id,
+            days=90,
+        )
+        if len(obs_list) < PriceForecaster.MIN_OBSERVATIONS_REQUIRED:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Insufficient sequential data: price forecasting requires at least {PriceForecaster.MIN_OBSERVATIONS_REQUIRED} observations (available: {len(obs_list)}).",
+            )
+        forecast_res = market_intel.forecaster.forecast_prices(
+            observations=obs_list,
+            horizon_days=horizon_days,
+        )
+        return forecast_res.model_dump()
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        logger.error(f"Error generating price forecast: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.post("/api/v1/market/calculate-net-realization", tags=["Market Intelligence"])
+def calculate_net_realization(req: NetRealizationRequest):
+    """Calculate transparent net farmgate realization factoring logistics, labor, and market fees."""
+    try:
+        res = NetRealizationCalculator.calculate(
+            market_id=req.market_id,
+            market_name=req.market_name,
+            commodity_name=req.commodity_name,
+            distance_km=req.distance_km,
+            quantity_quintals=req.quantity_quintals,
+            reference_modal_price=req.reference_modal_price,
+            transport_cost_override=req.transport_cost_override,
+            handling_fee_override=req.handling_fee_override,
+            transport_rate_per_km_qtl=req.transport_rate_per_km_qtl,
+        )
+        return res.model_dump()
+    except Exception as e:
+        logger.error(f"Net realization calculation error: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get("/api/v1/market/alerts", tags=["Market Intelligence"])
+def get_market_alerts(commodity: Optional[str] = None, market_id: Optional[str] = None):
+    """Retrieve active market alerts (price crash, surge, below MSP)."""
+    alerts = market_intel.alert_manager.get_active_alerts(
+        commodity_id=commodity,
+        market_id=market_id,
+    )
+    return {
+        "alerts": [a.model_dump() for a in alerts],
+        "count": len(alerts),
+    }
+
+
+@app.post("/api/v1/market/alerts/{alert_id}/acknowledge", tags=["Market Intelligence"])
+def acknowledge_market_alert(alert_id: str):
+    """Acknowledge an in-app agricultural market alert."""
+    success = market_intel.alert_manager.acknowledge_alert(alert_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Market alert '{alert_id}' not found.")
+    return {"status": "acknowledged", "alert_id": alert_id}
+
+
+@app.post("/api/v1/market/alerts/{alert_id}/dismiss", tags=["Market Intelligence"])
+def dismiss_market_alert(alert_id: str):
+    """Dismiss an in-app agricultural market alert."""
+    success = market_intel.alert_manager.dismiss_alert(alert_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Market alert '{alert_id}' not found.")
+    return {"status": "dismissed", "alert_id": alert_id}
+
 
 
 

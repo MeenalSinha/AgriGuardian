@@ -42,7 +42,8 @@ def test_weather_fallback_on_network_error(test_settings):
     with patch("requests.get", side_effect=Exception("Network disconnected")):
         w = service.get_weather()
         assert isinstance(w, WeatherContext)
-        assert w.temperature == 28.0
+        assert w.temperature is None
         assert w.is_live is False
-        assert "estimated baseline" in w.summary
+        assert w.is_available is False
+        assert "temporarily unavailable" in w.summary
 

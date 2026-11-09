@@ -1,0 +1,43 @@
+[
+  {
+    "alert_id": "ALT-HEAT-TOM-MEE",
+    "hazard_type": "heat_stress",
+    "risk_level": "high",
+    "title": "Tomato Heat Stress Warning: Elevated Flower Drop Risk",
+    "summary": "Forecast temperatures reaching 39.0\u00b0C exceed the 35\u00b0C thermal tolerance threshold for tomato flowering.",
+    "crop": "tomato",
+    "crop_stage": "flowering_fruit_set",
+    "triggered_conditions": {
+      "peak_temp_c": 39.0,
+      "threshold_c": 35.0
+    },
+    "forecast_window": {
+      "period": "Next 1-3 days"
+    },
+    "evidence_ids": [
+      "FCT-TOM-HEAT-STRESS-01"
+    ],
+    "source_ids": [
+      "SRC-ICAR-TOMATO-2024"
+    ],
+    "explanation": "Daytime temperatures consistently exceeding 35\u00b0C during flowering cause pollen sterility, style elongation, and flower abortion, drastically reducing fruit set.",
+    "recommended_actions": [
+      "Schedule light, frequent furrow or drip irrigation during early morning hours to maintain root-zone moisture and reduce canopy temperature.",
+      "Erect shade netting (35-50% shade) over nurseries or vulnerable beds if commercially viable.",
+      "Avoid applying chemical pesticide or foliar fertilizer sprays during peak afternoon heat (11:00 AM - 3:30 PM)."
+    ],
+    "prohibited_actions": [
+      "Do not allow soil to undergo severe drying between irrigations.",
+      "Do not apply foliar sulfur or emulsifiable concentrate insecticides at temperatures > 35\u00b0C (causes phytotoxicity)."
+    ],
+    "status": "active",
+    "is_official_warning": false,
+    "official_bulletin_source": null,
+    "created_at": "2026-11-09T11:20:01.580698+00:00",
+    "updated_at": null,
+    "expires_at": null,
+    "acknowledged": false,
+    "location_district": null,
+    "location_state": null
+  }
+]

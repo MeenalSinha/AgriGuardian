@@ -93,3 +93,4 @@ def test_alert_acknowledgment_and_dismissal(manager):
     # Dismiss
     assert manager.dismiss_alert("ALT-TEST-ACK") is True
     assert len(manager.get_active_alerts()) == 0  # Dismissed alerts no longer appear in active list
+

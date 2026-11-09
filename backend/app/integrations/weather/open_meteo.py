@@ -90,22 +90,19 @@ class WeatherService:
             )
 
         except Exception as e:
-            logger.warning(f"Live weather fetch failed ({e}). Providing safe fallback context.")
+            logger.warning(f"Live weather fetch failed ({e}). Returning explicit unavailable context.")
             return WeatherContext(
-                temperature=28.0,
-                humidity=65.0,
-                precipitation=0.0,
+                temperature=None,
+                humidity=None,
+                precipitation=None,
                 rain_recent=False,
                 temp_high=False,
                 temp_very_high=False,
                 humidity_high=False,
-                forecast={
-                    "max_temp": [30.0, 31.0, 29.0],
-                    "min_temp": [22.0, 23.0, 21.0],
-                    "precipitation": [0.0, 2.0, 0.0],
-                },
-                summary="Weather estimated baseline (offline)",
+                forecast={},
+                summary="Weather data temporarily unavailable (offline/disconnected)",
                 is_live=False,
+                is_available=False,
             )
 
     def get_weather_report(

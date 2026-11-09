@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#2d6a4f">
+  <meta name="description" content="AgriGuardian Offline-First Agricultural Companion">
+  <title>AgriGuardian — Farmer Companion (Offline-First)</title>
+  <link rel="manifest" href="/pwa/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/pwa/assets/icons/icon-192.svg">
+  <link rel="stylesheet" href="/pwa/app.css">
+</head>
+<body>
+
+  <!-- Top App Header -->
+  <header class="app-header">
+    <div class="brand-row">
+      <span class="brand-logo">🌾</span>
+      <span class="brand-title">AgriGuardian</span>
+    </div>
+    <div class="header-controls">
+      <button id="btn-lang-toggle" class="lang-toggle" aria-label="Toggle Language">हिंदी</button>
+    </div>
+  </header>
+
+  <!-- Live/Offline Truthful Connectivity Indicator Banner -->
+  <div id="offline-indicator-root"></div>
+
+  <!-- Main Scrollable App Container -->
+  <main class="main-content">
+    <!-- Tab 1: Farmer Dashboard View -->
+    <div id="pane-dashboard" class="tab-pane">
+      <div id="farmer-dashboard-root"></div>
+    </div>
+
+    <!-- Tab 2: Log Farm Activity View -->
+    <div id="pane-activity" class="tab-pane" style="display: none;">
+      <div id="activity-form-root"></div>
+    </div>
+
+    <!-- Tab 3: Crop Disease Leaf Photo & Symptom Capture -->
+    <div id="pane-diagnosis" class="tab-pane" style="display: none;">
+      <div id="leaf-capture-root"></div>
+    </div>
+
+    <!-- Tab 4: Smart Farm Reminders -->
+    <div id="pane-reminder" class="tab-pane" style="display: none;">
+      <div id="reminder-manager-root"></div>
+    </div>
+
+    <!-- Tab 5: Synchronization Center & Conflict Resolver -->
+    <div id="pane-sync" class="tab-pane" style="display: none;">
+      <div id="sync-center-root"></div>
+      <div id="conflict-resolver-root" style="margin-top: 16px;"></div>
+    </div>
+  </main>
+
+  <!-- Mobile Bottom Navigation Bar -->
+  <nav class="bottom-nav">
+    <button class="nav-tab-btn active" data-tab="dashboard">
+      <span class="nav-icon">🏠</span>
+      <span>Dashboard</span>
+    </button>
+    <button class="nav-tab-btn" data-tab="activity">
+      <span class="nav-icon">🚜</span>
+      <span>Activities</span>
+    </button>
+    <button class="nav-tab-btn" data-tab="diagnosis">
+      <span class="nav-icon">📷</span>
+      <span>Diagnosis</span>
+    </button>
+    <button class="nav-tab-btn" data-tab="reminder">
+      <span class="nav-icon">⏰</span>
+      <span>Reminders</span>
+    </button>
+    <button class="nav-tab-btn" data-tab="sync">
+      <span class="nav-icon">🔄</span>
+      <span>Sync Center</span>
+    </button>
+  </nav>
+
+  <!-- Main ES Module Bootstrapper -->
+  <script type="module" src="/pwa/src/app.js"></script>
+</body>
+</html>

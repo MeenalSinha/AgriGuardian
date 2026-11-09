@@ -27,6 +27,7 @@ from frontend.views.home_view import render_home_view
 from frontend.views.knowledge_admin_view import render_knowledge_admin_view
 from frontend.views.market_intelligence_view import render_market_intelligence_view
 from frontend.views.notifications_view import render_notifications_view
+from frontend.views.offline_sync_view import render_offline_sync_view
 from frontend.views.voice_assistant_view import render_voice_assistant_view
 from frontend.views.weather_dashboard_view import render_weather_dashboard_view
 
@@ -94,6 +95,7 @@ with st.sidebar:
         [
             "🌾 My Farms & Crops",
             "🔔 Alerts & Reminders",
+            "🔄 Offline & Sync Center",
             "🎙️ Voice Assistant",
             "🔬 Crop Disease Diagnosis",
             "🌦️ Weather Intelligence",
@@ -150,6 +152,8 @@ if page == "🌾 My Farms & Crops":
     render_farm_management_view()
 elif page == "🔔 Alerts & Reminders":
     render_notifications_view()
+elif page == "🔄 Offline & Sync Center":
+    render_offline_sync_view()
 elif page == "🎙️ Voice Assistant":
     render_voice_assistant_view()
 elif page == "🔬 Crop Disease Diagnosis":

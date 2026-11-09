@@ -235,6 +235,7 @@ class Farm(FarmBase):
     total_area_acres: float = Field(..., description="Standardized area in acres for agronomic calculations")
     created_at: str
     updated_at: str
+    version_number: int = 1
 
     @property
     def id(self) -> str:
@@ -280,6 +281,7 @@ class Plot(PlotBase):
     area_acres: float = Field(..., description="Standardized area in acres")
     created_at: str
     updated_at: str
+    version_number: int = 1
 
     @property
     def id(self) -> str:
@@ -340,6 +342,7 @@ class CropCycle(CropCycleBase):
     status: CropCycleStatus = CropCycleStatus.ACTIVE
     created_at: str
     updated_at: str
+    version_number: int = 1
 
 
 # --- Soil & Irrigation Profile Schemas ---
@@ -451,6 +454,7 @@ class FarmActivity(FarmActivityBase):
     status: ActivityStatus = ActivityStatus.PLANNED
     created_at: str
     updated_at: str
+    version_number: int = 1
 
 
 # --- Unified Farm Context Schema ---

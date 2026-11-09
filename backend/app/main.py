@@ -5,11 +5,13 @@ crop diagnostics, weather context, and agricultural advisory services.
 """
 
 import os
+from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from backend.app.core.config import SUPPORTED_LANGUAGES, TIMBRE_V25_VOICES, get_settings
@@ -105,6 +107,23 @@ from backend.app.schemas.notification import (
     NotificationStatus,
     OutboxProcessResult,
 )
+from backend.app.schemas.sync import (
+    AttachmentMetadataResponse,
+    AttachmentUploadResponse,
+    ConflictItem,
+    ConflictResolveRequest,
+    ConflictResolveResponse,
+    DeviceRegisterRequest,
+    DeviceResponse,
+    DeviceRevokeRequest,
+    SyncBootstrapResponse,
+    SyncPullRequest,
+    SyncPullResponse,
+    SyncPushRequest,
+    SyncPushResponse,
+    SyncTelemetryReport,
+)
+from backend.app.services.sync.sync_service import SyncService
 from backend.app.services.analytics.metric_definitions import METRIC_CATALOG
 from backend.app.services.auth.auth_service import AuthService, AuthenticationError
 from backend.app.services.farm.crop_calendar_service import CropCalendarService
@@ -138,6 +157,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount Offline-First Farmer Progressive Web App (PWA)
+pwa_dir = Path("frontend/pwa")
+if pwa_dir.exists():
+    app.mount("/pwa", StaticFiles(directory=str(pwa_dir), html=True), name="pwa")
+
 # Global services singletons
 system = AgriGuardianSystem(settings=settings)
 conversation_engine = ConversationEngine(system=system, settings=settings)
@@ -160,6 +184,7 @@ farm_context_service = FarmContextService(
     soil_service=soil_irrigation_service,
     calendar_service=crop_calendar_service,
 )
+sync_service = SyncService.get_instance()
 
 
 def get_current_farmer_auth(authorization: Optional[str] = Header(None)) -> Tuple[UserRecord, FarmerProfile]:
@@ -2198,6 +2223,140 @@ def get_notification_channels_telemetry(
 ):
     """Return genuine operational readiness and delivery telemetry across all notification channels."""
     return system.notification_service.get_channel_health()
+
+
+# =============================================================================
+# PHASE 10: OFFLINE-FIRST SYNC & RESILIENCE ENDPOINTS
+# =============================================================================
+
+@app.get("/api/v1/sync/status", tags=["Offline Sync & Connectivity Resilience"])
+def get_sync_connectivity_status():
+    """Lightweight network reachability and sync service health check."""
+    return sync_service.get_sync_status()
+
+
+@app.post("/api/v1/sync/devices/register", response_model=DeviceResponse, tags=["Offline Sync & Connectivity Resilience"])
+def register_sync_device(
+    req: DeviceRegisterRequest,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Register or refresh client device registration bound to authenticated user."""
+    farmer_id = None
+    if user.role == UserRole.FARMER:
+        farmer_id = _get_farmer_id_for_user(user)
+    return sync_service.register_device(user_id=user.user_id, farmer_id=farmer_id, req=req)
+
+
+@app.get("/api/v1/sync/devices", response_model=List[DeviceResponse], tags=["Offline Sync & Connectivity Resilience"])
+def list_registered_devices(
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """List devices registered to authenticated user."""
+    return sync_service.list_user_devices(user_id=user.user_id)
+
+
+@app.post("/api/v1/sync/devices/{device_id}/revoke", tags=["Offline Sync & Connectivity Resilience"])
+def revoke_sync_device(
+    device_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Revoke device authorization; revoked devices cannot pull or push future data."""
+    sync_service.revoke_device(device_id=device_id, user_id=user.user_id)
+    return {"message": "Device revoked successfully.", "device_id": device_id}
+
+
+@app.get("/api/v1/sync/bootstrap", response_model=SyncBootstrapResponse, tags=["Offline Sync & Connectivity Resilience"])
+def get_offline_bootstrap(
+    device_id: str = Query(..., description="Registered client device ID"),
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Initial download of minimal authorized farmer dataset required for offline operation."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return sync_service.get_bootstrap(user_id=user.user_id, farmer_id=farmer_id, device_id=device_id)
+
+
+@app.post("/api/v1/sync/pull", response_model=SyncPullResponse, tags=["Offline Sync & Connectivity Resilience"])
+def pull_incremental_sync(
+    req: SyncPullRequest,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Fetch incremental change-feed updates since device's last acknowledged sequence_id."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return sync_service.pull_changes(user_id=user.user_id, farmer_id=farmer_id, req=req)
+
+
+@app.post("/api/v1/sync/push", response_model=SyncPushResponse, tags=["Offline Sync & Connectivity Resilience"])
+def push_offline_mutations(
+    req: SyncPushRequest,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Process ordered batch of offline mutations idempotently with optimistic locking."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return sync_service.push_mutations(user_id=user.user_id, farmer_id=farmer_id, req=req)
+
+
+@app.get("/api/v1/sync/conflicts", response_model=List[ConflictItem], tags=["Offline Sync & Connectivity Resilience"])
+def list_sync_conflicts(
+    status: Optional[str] = Query("pending", description="Filter by pending or resolved"),
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """List pending or resolved sync edit collisions for the authenticated farmer."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return sync_service.list_conflicts(farmer_id=farmer_id, status_filter=status)
+
+
+@app.get("/api/v1/sync/conflicts/{conflict_id}", response_model=ConflictItem, tags=["Offline Sync & Connectivity Resilience"])
+def get_sync_conflict_detail(
+    conflict_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Get single conflict diff and details."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return sync_service.get_conflict(conflict_id=conflict_id, farmer_id=farmer_id)
+
+
+@app.post("/api/v1/sync/conflicts/{conflict_id}/resolve", response_model=ConflictResolveResponse, tags=["Offline Sync & Connectivity Resilience"])
+def resolve_sync_conflict(
+    conflict_id: str,
+    req: ConflictResolveRequest,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Resolve an edit conflict choosing client_wins, server_wins, or manual_merge."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return sync_service.resolve_conflict(conflict_id=conflict_id, farmer_id=farmer_id, req=req)
+
+
+@app.post("/api/v1/sync/attachments", response_model=AttachmentUploadResponse, tags=["Offline Sync & Connectivity Resilience"])
+async def upload_sync_attachment(
+    device_id: str = Form(...),
+    resource_type: str = Form("crop_diagnosis"),
+    resource_id: Optional[str] = Form(None),
+    file: UploadFile = File(...),
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Upload queued offline photograph (leaf disease, crop condition) with SHA-256 validation."""
+    farmer_id = _get_farmer_id_for_user(user)
+    file_bytes = await file.read()
+    return sync_service.upload_attachment(
+        user_id=user.user_id,
+        farmer_id=farmer_id,
+        device_id=device_id,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        file_bytes=file_bytes,
+        filename=file.filename or "photo.jpg",
+        content_type=file.content_type or "image/jpeg",
+    )
+
+
+@app.get("/api/v1/sync/attachments/{attachment_id}", response_model=AttachmentMetadataResponse, tags=["Offline Sync & Connectivity Resilience"])
+def get_sync_attachment_metadata(
+    attachment_id: str,
+    user: UserRecord = Depends(get_current_user_auth),
+):
+    """Retrieve metadata and verification status for uploaded attachment."""
+    farmer_id = _get_farmer_id_for_user(user)
+    return sync_service.get_attachment_metadata(attachment_id=attachment_id, farmer_id=farmer_id)
 
 
 

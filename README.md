@@ -104,6 +104,16 @@ Built with **Streamlit, Gnani AI (Prisma v2.5 STT & Timbre v2.5 TTS), Open-Meteo
 * **DPDP Act Compliant Consent Tracking:** Explicit channel opt-in/opt-out management with immutable audit trails per India's Digital Personal Data Protection Act.
 * **Streamlit Notification Center:** Complete 4-tab interface for Notifications, Smart Reminders, Preferences/Consents, and Admin Outbox Telemetry.
 
+### 📶 Offline-First Farmer Experience & Low-Connectivity Resilience (Phase 10)
+* **Zero Simulated Connectivity:** Truthful offline handling with real timestamps, offline badges, and zero fabricated sync delivery.
+* **Installable Mobile-First PWA:** Native-feeling Progressive Web App at `/pwa` with Service Worker caching (`agriguardian-shell-v1.10.0`), high-contrast outdoor UI, and bilingual navigation (English & Hindi).
+* **Client-Side IndexedDB Storage:** Durable local storage across 6 entity stores (`farms`, `crop_cycles`, `activities`, `reminders`, `notifications`, `pending_mutations`).
+* **Delta Change Feed & Cursor Pull:** Monotonic sequence cursor (`since_sequence_id`) in `sync_change_log` pulling delta payloads and deletion tombstones, slashing mobile data overhead.
+* **Idempotent Batch Push & Offline Queue:** Local mutation queue with replay protection via `sync_mutation_results`, eliminating duplicate execution upon network restoration.
+* **Optimistic Locking & Conflict Arbitration:** Automatic version tracking (`version_number`) detecting concurrent server/client divergence, quarantining collisions into `sync_conflicts` with 3 resolution strategies (`CLIENT_WINS`, `SERVER_WINS`, `MANUAL_MERGE`).
+* **Offline Leaf Photography & SHA-256 Hashes:** Device camera integration with offline thumbnail generation, SHA-256 verification hashes, and deferred background upload to `data/attachments/`.
+* **Streamlit Offline & Sync Center:** Dedicated administrative console (`🔄 Offline & Sync Center`) in `frontend/views/offline_sync_view.py` for device management, conflict resolution, and sync telemetry.
+
 ---
 
 ## 🧩 Architecture & Tech Stack
@@ -141,6 +151,8 @@ AgriGuardian/
 | **Weather Integration** | Open-Meteo REST API | Live meteorological data, ET0, and ERA5 historical reanalysis |
 | **Market Intelligence** | AGMARKNET & e-NAM + Holt Forecasting | Verified daily closing APMC rates, spatial discovery, and walk-forward forecasting |
 | **Document Archival** | ReportLab 4.4 | Authentic PDF advisory report generation |
+| **Offline-First PWA** | Service Worker + IndexedDB | Installable mobile web app at `/pwa`, local persistence, mutation queue |
+| **Data Synchronization** | FastAPI Sync Engine | Change feed deltas, optimistic locking, idempotent push, conflict resolver |
 
 ---
 
@@ -173,9 +185,15 @@ pip install -r requirements.txt
 
 ### 4. Run AgriGuardian
 ```bash
+# Run the Streamlit desktop application
 streamlit run app.py
+
+# Or launch the headless FastAPI backend with PWA static mount
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 ```
-Open your browser at `http://localhost:8501`.
+- Open Streamlit: `http://localhost:8501`
+- Open Installable PWA: `http://localhost:8000/pwa`
+- Open FastAPI Swagger Docs: `http://localhost:8000/docs`
 
 ---
 
@@ -183,8 +201,11 @@ Open your browser at `http://localhost:8501`.
 
 Execute the comprehensive test suite with `pytest`:
 ```bash
-# Run all unit and pipeline tests
+# Run all unit, integration, and offline sync tests
 python -m pytest tests -v
+
+# Run dedicated Phase 10 synchronization test suite
+python -m pytest tests/sync -v
 
 # Run with integration tests against live Gnani APIs (requires GNANI_API_KEY)
 python -m pytest tests/integration/test_gnani_live.py -v
@@ -193,7 +214,11 @@ python -m pytest tests/integration/test_gnani_live.py -v
 ---
 
 ## 📚 Documentation Links
-* [Phase 9 Final Engineering Report (`docs/PHASE_9_FINAL_REPORT.md`)](file:///docs/PHASE_9_FINAL_REPORT.md)
+* [Phase 10 Final Engineering Report (`docs/PHASE_10_FINAL_REPORT.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_10_FINAL_REPORT.md)
+* [Phase 10 Sync API Documentation (`docs/PHASE_10_SYNC_API_DOCUMENTATION.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_10_SYNC_API_DOCUMENTATION.md)
+* [Phase 10 Offline Operations Guide (`docs/PHASE_10_OFFLINE_OPERATIONS_GUIDE.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_10_OFFLINE_OPERATIONS_GUIDE.md)
+* [Phase 9 Verification Gate (`docs/PHASE_9_VERIFICATION.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_9_VERIFICATION.md)
+* [Phase 9 Final Engineering Report (`docs/PHASE_9_FINAL_REPORT.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_9_FINAL_REPORT.md)
 * [Phase 9 REST API Documentation (`docs/PHASE_9_API_DOCUMENTATION.md`)](file:///docs/PHASE_9_API_DOCUMENTATION.md)
 * [Phase 9 Operations & Maintenance Guide (`docs/PHASE_9_OPERATIONS_GUIDE.md`)](file:///docs/PHASE_9_OPERATIONS_GUIDE.md)
 * [Phase 8 Verification & Security Hardening (`docs/PHASE_8_VERIFICATION.md`)](file:///docs/PHASE_8_VERIFICATION.md)

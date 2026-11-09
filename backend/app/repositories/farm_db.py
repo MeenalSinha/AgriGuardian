@@ -6,10 +6,10 @@ import sqlite3
 import threading
 import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 from backend.app.core.config import get_settings
 from backend.app.core.logging import get_logger
@@ -714,6 +714,143 @@ class FarmDatabaseRepository:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, default_templates)
 
+            # Migration check: ensure version_number exists on key syncable entities
+            for table_name in ["farms", "farm_plots", "crop_cycles", "farm_activities", "farm_reminders"]:
+                try:
+                    cursor.execute(f"PRAGMA table_info({table_name});")
+                    cols = [r[1] for r in cursor.fetchall()]
+                    if cols and "version_number" not in cols:
+                        cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN version_number INTEGER NOT NULL DEFAULT 1;")
+                except Exception as e:
+                    logger.warning(f"Could not check/add version_number for {table_name}: {e}")
+
+            # 27. Phase 10 Sync Devices (Physical / PWA Client Devices)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_devices (
+                device_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                farmer_id TEXT REFERENCES farmer_profiles(farmer_id) ON DELETE CASCADE,
+                device_name TEXT NOT NULL,
+                device_type TEXT NOT NULL,
+                app_version TEXT NOT NULL,
+                last_sync_at TEXT,
+                is_revoked INTEGER NOT NULL DEFAULT 0,
+                revoked_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 28. Phase 10 Sync Cursors (Per-device monotonic pull pointers)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_cursors (
+                cursor_id TEXT PRIMARY KEY,
+                device_id TEXT NOT NULL REFERENCES sync_devices(device_id) ON DELETE CASCADE,
+                resource_type TEXT NOT NULL,
+                last_sequence_id INTEGER NOT NULL DEFAULT 0,
+                last_sync_at TEXT NOT NULL,
+                UNIQUE(device_id, resource_type)
+            );
+            """)
+
+            # 29. Phase 10 Sync Change Log (Monotonic Change Feed for Incremental Pull)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_change_log (
+                sequence_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                resource_type TEXT NOT NULL,
+                resource_id TEXT NOT NULL,
+                farmer_id TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                version_number INTEGER NOT NULL DEFAULT 1,
+                payload_json TEXT,
+                created_at TEXT NOT NULL
+            );
+            """)
+
+            # 30. Phase 10 Sync Mutations (Inbound Durable Push Mutations Queue)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_mutations (
+                mutation_id TEXT PRIMARY KEY,
+                device_id TEXT NOT NULL REFERENCES sync_devices(device_id) ON DELETE CASCADE,
+                user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                farmer_id TEXT NOT NULL,
+                resource_type TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                client_record_id TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                base_version INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'pending',
+                received_at TEXT NOT NULL
+            );
+            """)
+
+            # 31. Phase 10 Sync Mutation Results (Idempotency and Processing Outcomes)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_mutation_results (
+                result_id TEXT PRIMARY KEY,
+                mutation_id TEXT NOT NULL UNIQUE REFERENCES sync_mutations(mutation_id) ON DELETE CASCADE,
+                server_record_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                server_version INTEGER NOT NULL DEFAULT 1,
+                conflict_details_json TEXT,
+                applied_at TEXT NOT NULL
+            );
+            """)
+
+            # 32. Phase 10 Sync Conflicts (Divergent Edits Requiring Safe Resolution)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_conflicts (
+                conflict_id TEXT PRIMARY KEY,
+                mutation_id TEXT,
+                device_id TEXT,
+                farmer_id TEXT NOT NULL,
+                resource_type TEXT NOT NULL,
+                client_record_id TEXT NOT NULL,
+                server_record_id TEXT,
+                client_payload_json TEXT NOT NULL,
+                server_payload_json TEXT,
+                resolution_strategy TEXT DEFAULT 'pending',
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                resolved_at TEXT
+            );
+            """)
+
+            # 33. Phase 10 Sync Attachments (Offline Photographs & Symptoms Drafts)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_attachments (
+                attachment_id TEXT PRIMARY KEY,
+                farmer_id TEXT NOT NULL,
+                device_id TEXT NOT NULL REFERENCES sync_devices(device_id) ON DELETE CASCADE,
+                resource_type TEXT NOT NULL,
+                resource_id TEXT,
+                sha256_checksum TEXT NOT NULL,
+                file_name TEXT NOT NULL,
+                mime_type TEXT NOT NULL,
+                byte_size INTEGER NOT NULL,
+                storage_path TEXT NOT NULL,
+                is_uploaded INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+            """)
+
+            # 34. Phase 10 Sync Telemetry (Performance & Quality of Service Audit)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sync_telemetry (
+                session_id TEXT PRIMARY KEY,
+                device_id TEXT NOT NULL REFERENCES sync_devices(device_id) ON DELETE CASCADE,
+                farmer_id TEXT NOT NULL,
+                sync_type TEXT NOT NULL,
+                duration_ms INTEGER NOT NULL DEFAULT 0,
+                pull_count INTEGER NOT NULL DEFAULT 0,
+                push_count INTEGER NOT NULL DEFAULT 0,
+                conflict_count INTEGER NOT NULL DEFAULT 0,
+                bytes_transferred INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            """)
+
             # Performance & Isolation Indexes
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_farms_farmer ON farms(farmer_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_plots_farm ON farm_plots(farm_id);")
@@ -744,6 +881,18 @@ class FarmDatabaseRepository:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_outbox_lease ON notification_outbox(lease_expires_at);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_reminders_farmer ON farm_reminders(farmer_id, scheduled_date, status);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_dedup ON notification_events(dedup_key, created_at);")
+
+            # Phase 10 Sync Indexes
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_devices_user ON sync_devices(user_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_devices_farmer ON sync_devices(farmer_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_cursors_dev ON sync_cursors(device_id, resource_type);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_changelog_seq ON sync_change_log(sequence_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_changelog_farmer ON sync_change_log(farmer_id, sequence_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_mutations_dev ON sync_mutations(device_id, status);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_mut_res_mut ON sync_mutation_results(mutation_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_conflicts_farmer ON sync_conflicts(farmer_id, status);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_attachments_farmer ON sync_attachments(farmer_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sync_attachments_checksum ON sync_attachments(sha256_checksum);")
 
         logger.info(f"Initialized FarmDatabaseRepository at {self.db_path}")
 
@@ -938,6 +1087,14 @@ class FarmDatabaseRepository:
                     farm.updated_at,
                 ),
             )
+            self._log_sync_change_conn(
+                conn,
+                "farm",
+                farm.farm_id,
+                farm.farmer_id,
+                "INSERT",
+                farm.model_dump_json() if hasattr(farm, "model_dump_json") else json.dumps(farm.dict()),
+            )
         return farm
 
     def get_farm(self, farm_id: str, farmer_id: Optional[str] = None) -> Optional[Farm]:
@@ -1077,6 +1234,7 @@ class FarmDatabaseRepository:
             notes=row["notes"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            version_number=row["version_number"] if "version_number" in row.keys() else 1,
         )
 
     # =========================================================================
@@ -1203,6 +1361,7 @@ class FarmDatabaseRepository:
             notes=row["notes"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            version_number=row["version_number"] if "version_number" in row.keys() else 1,
         )
 
     # =========================================================================
@@ -1367,6 +1526,7 @@ class FarmDatabaseRepository:
             notes=row["notes"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            version_number=row["version_number"] if "version_number" in row.keys() else 1,
         )
 
     # =========================================================================
@@ -1553,6 +1713,14 @@ class FarmDatabaseRepository:
                     activity.updated_at,
                 ),
             )
+            self._log_sync_change_conn(
+                conn,
+                "farm_activity",
+                activity.activity_id,
+                activity.farmer_id,
+                "INSERT",
+                activity.model_dump_json() if hasattr(activity, "model_dump_json") else json.dumps(activity.dict()),
+            )
         return activity
 
     def get_farm_activity(self, activity_id: str, farmer_id: str) -> Optional[FarmActivity]:
@@ -1644,6 +1812,14 @@ class FarmDatabaseRepository:
                     activity.farmer_id,
                 ),
             )
+            self._log_sync_change_conn(
+                conn,
+                "farm_activity",
+                activity.activity_id,
+                activity.farmer_id,
+                "UPDATE",
+                activity.model_dump_json() if hasattr(activity, "model_dump_json") else json.dumps(activity.dict()),
+            )
         return activity
 
     def delete_farm_activity(self, activity_id: str, farmer_id: str) -> bool:
@@ -1653,6 +1829,8 @@ class FarmDatabaseRepository:
                 "DELETE FROM farm_activities WHERE activity_id = ? AND farmer_id = ?",
                 (activity_id, farmer_id),
             )
+            if cursor.rowcount > 0:
+                self._log_sync_change_conn(conn, "farm_activity", activity_id, farmer_id, "DELETE")
             return cursor.rowcount > 0
 
     def _row_to_farm_activity(self, row: sqlite3.Row) -> FarmActivity:
@@ -1673,6 +1851,7 @@ class FarmDatabaseRepository:
             notes=row["notes"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            version_number=row["version_number"] if "version_number" in row.keys() else 1,
         )
 
     # =========================================================================
@@ -3560,6 +3739,14 @@ class FarmDatabaseRepository:
                     r.updated_at,
                 ),
             )
+            self._log_sync_change_conn(
+                conn,
+                "farm_reminder",
+                r.reminder_id,
+                r.farmer_id,
+                "INSERT",
+                r.model_dump_json() if hasattr(r, "model_dump_json") else json.dumps(r.dict()),
+            )
         return r.reminder_id
 
     def get_farm_reminder(self, reminder_id: str) -> Optional[FarmReminderRecord]:
@@ -3600,25 +3787,39 @@ class FarmDatabaseRepository:
     def complete_farm_reminder(self, reminder_id: str, farmer_id: Optional[str] = None) -> bool:
         """Mark reminder as completed with ownership check."""
         now_str = datetime.now().isoformat()
-        query = "UPDATE farm_reminders SET status = 'completed', completed_at = ?, updated_at = ? WHERE reminder_id = ?"
-        params: List[Any] = [now_str, now_str, reminder_id]
-        if farmer_id:
-            query += " AND farmer_id = ?"
-            params.append(farmer_id)
         with self.get_connection() as conn:
+            f_id = farmer_id
+            if not f_id:
+                row = conn.execute("SELECT farmer_id FROM farm_reminders WHERE reminder_id = ?", (reminder_id,)).fetchone()
+                if row:
+                    f_id = row[0]
+            query = "UPDATE farm_reminders SET status = 'completed', completed_at = ?, updated_at = ?, version_number = version_number + 1 WHERE reminder_id = ?"
+            params: List[Any] = [now_str, now_str, reminder_id]
+            if farmer_id:
+                query += " AND farmer_id = ?"
+                params.append(farmer_id)
             cursor = conn.execute(query, params)
+            if cursor.rowcount > 0 and f_id:
+                self._log_sync_change_conn(conn, "farm_reminder", reminder_id, f_id, "UPDATE")
             return cursor.rowcount > 0
 
     def snooze_farm_reminder(self, reminder_id: str, snooze_until: str, farmer_id: Optional[str] = None) -> bool:
         """Snooze a reminder to a new date."""
         now_str = datetime.now().isoformat()
-        query = "UPDATE farm_reminders SET status = 'snoozed', snooze_until = ?, updated_at = ? WHERE reminder_id = ?"
-        params: List[Any] = [snooze_until, now_str, reminder_id]
-        if farmer_id:
-            query += " AND farmer_id = ?"
-            params.append(farmer_id)
         with self.get_connection() as conn:
+            f_id = farmer_id
+            if not f_id:
+                row = conn.execute("SELECT farmer_id FROM farm_reminders WHERE reminder_id = ?", (reminder_id,)).fetchone()
+                if row:
+                    f_id = row[0]
+            query = "UPDATE farm_reminders SET status = 'snoozed', snooze_until = ?, updated_at = ?, version_number = version_number + 1 WHERE reminder_id = ?"
+            params: List[Any] = [snooze_until, now_str, reminder_id]
+            if farmer_id:
+                query += " AND farmer_id = ?"
+                params.append(farmer_id)
             cursor = conn.execute(query, params)
+            if cursor.rowcount > 0 and f_id:
+                self._log_sync_change_conn(conn, "farm_reminder", reminder_id, f_id, "UPDATE")
             return cursor.rowcount > 0
 
     def update_farm_reminder_weather_risk(
@@ -3664,25 +3865,31 @@ class FarmDatabaseRepository:
             weather_risk_reason_hi=r["weather_risk_reason_hi"],
             created_at=r["created_at"],
             updated_at=r["updated_at"],
+            version_number=r["version_number"] if "version_number" in r.keys() else 1,
         )
 
     def update_farm_reminder(
         self,
         reminder_id: str,
-        updates: Dict[str, Any],
+        updates: Optional[Dict[str, Any]] = None,
         farmer_id: Optional[str] = None,
+        update_data: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Update fields of an existing farm reminder."""
+        data = updates if updates is not None else update_data
+        if not data:
+            return False
         allowed = {
             "title_en", "title_hi", "description_en", "description_hi",
             "scheduled_date", "due_time", "activity_type", "status"
         }
-        filtered = {k: v for k, v in updates.items() if k in allowed and v is not None}
+        filtered = {k: v for k, v in data.items() if k in allowed and v is not None}
         if not filtered:
             return False
         filtered["updated_at"] = datetime.now().isoformat()
 
         set_clauses = [f"{k} = ?" for k in filtered.keys()]
+        set_clauses.append("version_number = version_number + 1")
         params = list(filtered.values())
         params.append(reminder_id)
 
@@ -3692,19 +3899,37 @@ class FarmDatabaseRepository:
             params.append(farmer_id)
 
         with self.get_connection() as conn:
+            f_id = farmer_id
+            if not f_id:
+                row = conn.execute("SELECT farmer_id FROM farm_reminders WHERE reminder_id = ?", (reminder_id,)).fetchone()
+                if row:
+                    f_id = row[0]
             cursor = conn.execute(query, params)
+            if cursor.rowcount > 0 and f_id:
+                rem_row = conn.execute("SELECT * FROM farm_reminders WHERE reminder_id = ?", (reminder_id,)).fetchone()
+                payload = None
+                if rem_row:
+                    payload = self._row_to_farm_reminder(rem_row).model_dump_json()
+                self._log_sync_change_conn(conn, "farm_reminder", reminder_id, f_id, "UPDATE", payload_json=payload)
             return cursor.rowcount > 0
 
     def delete_farm_reminder(self, reminder_id: str, farmer_id: Optional[str] = None) -> bool:
         """Permanently delete a farm reminder."""
-        query = "DELETE FROM farm_reminders WHERE reminder_id = ?"
-        params = [reminder_id]
-        if farmer_id:
-            query += " AND farmer_id = ?"
-            params.append(farmer_id)
-
         with self.get_connection() as conn:
+            f_id = farmer_id
+            if not f_id:
+                row = conn.execute("SELECT farmer_id FROM farm_reminders WHERE reminder_id = ?", (reminder_id,)).fetchone()
+                if row:
+                    f_id = row[0]
+            query = "DELETE FROM farm_reminders WHERE reminder_id = ?"
+            params = [reminder_id]
+            if farmer_id:
+                query += " AND farmer_id = ?"
+                params.append(farmer_id)
+
             cursor = conn.execute(query, params)
+            if cursor.rowcount > 0 and f_id:
+                self._log_sync_change_conn(conn, "farm_reminder", reminder_id, f_id, "DELETE")
             return cursor.rowcount > 0
 
     def get_farmer_ids_by_district(self, district: str) -> List[str]:
@@ -3730,6 +3955,451 @@ class FarmDatabaseRepository:
                 (f"%{crop_name}%",),
             )
             return [row[0] for row in cursor.fetchall() if row[0]]
+
+    # =========================================================================
+    # PHASE 10: OFFLINE SYNC, CURSORS, MUTATIONS & CONFLICT REPOSITORY METHODS
+    # =========================================================================
+
+    def _log_sync_change_conn(
+        self,
+        conn: sqlite3.Connection,
+        resource_type: str,
+        resource_id: str,
+        farmer_id: str,
+        operation: str,
+        payload_json: Optional[str] = None,
+        version_number: int = 1,
+    ) -> int:
+        """Internal helper to insert a record into sync_change_log inside an existing connection."""
+        cursor = conn.execute(
+            """
+            INSERT INTO sync_change_log (
+                resource_type, resource_id, farmer_id, operation, version_number, payload_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                resource_type,
+                resource_id,
+                farmer_id,
+                operation.upper(),
+                version_number,
+                payload_json,
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        return cursor.lastrowid
+
+    def log_sync_change(
+        self,
+        resource_type: str,
+        resource_id: str,
+        farmer_id: str,
+        operation: str,
+        payload_json: Optional[str] = None,
+        version_number: int = 1,
+    ) -> int:
+        """Insert a record into sync_change_log."""
+        with self.get_connection() as conn:
+            return self._log_sync_change_conn(
+                conn, resource_type, resource_id, farmer_id, operation, payload_json, version_number
+            )
+
+    def register_device(
+        self,
+        device_id: str,
+        user_id: str,
+        farmer_id: Optional[str],
+        device_name: str,
+        device_type: str,
+        app_version: str,
+    ) -> Dict[str, Any]:
+        """Register or update a sync device."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO sync_devices (
+                    device_id, user_id, farmer_id, device_name, device_type, app_version,
+                    last_sync_at, is_revoked, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                ON CONFLICT(device_id) DO UPDATE SET
+                    device_name = excluded.device_name,
+                    device_type = excluded.device_type,
+                    app_version = excluded.app_version,
+                    updated_at = excluded.updated_at
+                """,
+                (device_id, user_id, farmer_id, device_name, device_type, app_version, now, now, now),
+            )
+        return self.get_device(device_id) or {}
+
+    def get_device(self, device_id: str) -> Optional[Dict[str, Any]]:
+        """Get device by ID."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM sync_devices WHERE device_id = ?",
+                (device_id,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_devices_for_user(self, user_id: str) -> List[Dict[str, Any]]:
+        """List devices registered to a specific user."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM sync_devices WHERE user_id = ? ORDER BY created_at DESC",
+                (user_id,),
+            )
+            return [dict(r) for r in cursor.fetchall()]
+
+    def revoke_device(self, device_id: str, user_id: str) -> bool:
+        """Revoke a device belonging to user_id."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE sync_devices SET is_revoked = 1, revoked_at = ?, updated_at = ? WHERE device_id = ? AND user_id = ?",
+                (now, now, device_id, user_id),
+            )
+            return cursor.rowcount > 0
+
+    def update_device_sync_time(self, device_id: str) -> bool:
+        """Update last_sync_at for an active device."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE sync_devices SET last_sync_at = ?, updated_at = ? WHERE device_id = ? AND is_revoked = 0",
+                (now, now, device_id),
+            )
+            return cursor.rowcount > 0
+
+    def get_sync_cursor(self, device_id: str, resource_type: str = "global") -> int:
+        """Retrieve last acknowledged sequence_id for this device and resource_type."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT last_sequence_id FROM sync_cursors WHERE device_id = ? AND resource_type = ?",
+                (device_id, resource_type),
+            )
+            row = cursor.fetchone()
+            return row["last_sequence_id"] if row else 0
+
+    def update_sync_cursor(self, device_id: str, resource_type: str, last_sequence_id: int) -> None:
+        """Update or insert monotonic cursor sequence for a device."""
+        now = datetime.now(timezone.utc).isoformat()
+        cursor_id = f"cur_{device_id}_{resource_type}"
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO sync_cursors (cursor_id, device_id, resource_type, last_sequence_id, last_sync_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(device_id, resource_type) DO UPDATE SET
+                    last_sequence_id = excluded.last_sequence_id,
+                    last_sync_at = excluded.last_sync_at
+                """,
+                (cursor_id, device_id, resource_type, last_sequence_id, now),
+            )
+
+    def get_change_feed(
+        self, farmer_id: str, after_sequence_id: int = 0, limit: int = 100
+    ) -> Tuple[List[Dict[str, Any]], int, bool]:
+        """Fetch change feed records for farmer after sequence_id up to limit."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                SELECT sequence_id, resource_type, resource_id, farmer_id, operation,
+                       version_number, payload_json, created_at
+                FROM sync_change_log
+                WHERE farmer_id = ? AND sequence_id > ?
+                ORDER BY sequence_id ASC
+                LIMIT ?
+                """,
+                (farmer_id, after_sequence_id, limit + 1),
+            )
+            rows = [dict(r) for r in cursor.fetchall()]
+            has_more = len(rows) > limit
+            if has_more:
+                rows = rows[:limit]
+            max_seq = max([r["sequence_id"] for r in rows], default=after_sequence_id)
+            return rows, max_seq, has_more
+
+    def record_mutation(
+        self,
+        mutation_id: str,
+        device_id: str,
+        user_id: str,
+        farmer_id: str,
+        resource_type: str,
+        operation: str,
+        client_record_id: str,
+        payload_json: str,
+        base_version: int = 0,
+        status: str = "pending",
+    ) -> None:
+        """Persist inbound mutation record."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO sync_mutations (
+                    mutation_id, device_id, user_id, farmer_id, resource_type,
+                    operation, client_record_id, payload_json, base_version, status, received_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    mutation_id,
+                    device_id,
+                    user_id,
+                    farmer_id,
+                    resource_type,
+                    operation,
+                    client_record_id,
+                    payload_json,
+                    base_version,
+                    status,
+                    now,
+                ),
+            )
+
+    def get_mutation(self, mutation_id: str) -> Optional[Dict[str, Any]]:
+        """Get mutation record by ID."""
+        with self.get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM sync_mutations WHERE mutation_id = ?", (mutation_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_mutation_result(self, mutation_id: str) -> Optional[Dict[str, Any]]:
+        """Get existing mutation result for idempotency."""
+        with self.get_connection() as conn:
+            cursor = conn.execute("SELECT * FROM sync_mutation_results WHERE mutation_id = ?", (mutation_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def record_mutation_result(
+        self,
+        result_id: str,
+        mutation_id: str,
+        server_record_id: str,
+        status: str,
+        server_version: int = 1,
+        conflict_details_json: Optional[str] = None,
+    ) -> None:
+        """Save result of processing a mutation."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO sync_mutation_results (
+                    result_id, mutation_id, server_record_id, status, server_version, conflict_details_json, applied_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(mutation_id) DO UPDATE SET
+                    server_record_id = excluded.server_record_id,
+                    status = excluded.status,
+                    server_version = excluded.server_version,
+                    conflict_details_json = excluded.conflict_details_json,
+                    applied_at = excluded.applied_at
+                """,
+                (result_id, mutation_id, server_record_id, status, server_version, conflict_details_json, now),
+            )
+            conn.execute(
+                "UPDATE sync_mutations SET status = ? WHERE mutation_id = ?",
+                (status.lower(), mutation_id),
+            )
+
+    def create_conflict(
+        self,
+        conflict_id: str,
+        mutation_id: str,
+        device_id: str,
+        farmer_id: str,
+        resource_type: str,
+        client_record_id: str,
+        server_record_id: Optional[str],
+        client_payload_json: str,
+        server_payload_json: Optional[str],
+    ) -> Dict[str, Any]:
+        """Record an edit collision / conflict."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO sync_conflicts (
+                    conflict_id, mutation_id, device_id, farmer_id, resource_type,
+                    client_record_id, server_record_id, client_payload_json, server_payload_json,
+                    resolution_strategy, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', ?)
+                """,
+                (
+                    conflict_id,
+                    mutation_id,
+                    device_id,
+                    farmer_id,
+                    resource_type,
+                    client_record_id,
+                    server_record_id,
+                    client_payload_json,
+                    server_payload_json,
+                    now,
+                ),
+            )
+        return self.get_conflict(conflict_id) or {}
+
+    def get_conflict(self, conflict_id: str, farmer_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get conflict by ID with optional tenant check."""
+        query = "SELECT * FROM sync_conflicts WHERE conflict_id = ?"
+        params = [conflict_id]
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_conflicts_for_farmer(self, farmer_id: str, status: Optional[str] = "pending") -> List[Dict[str, Any]]:
+        """List conflicts for farmer."""
+        query = "SELECT * FROM sync_conflicts WHERE farmer_id = ?"
+        params = [farmer_id]
+        if status:
+            query += " AND status = ?"
+            params.append(status.lower())
+        query += " ORDER BY created_at DESC"
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            return [dict(r) for r in cursor.fetchall()]
+
+    def resolve_conflict(self, conflict_id: str, farmer_id: str, resolution_strategy: str) -> bool:
+        """Mark conflict as resolved."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE sync_conflicts
+                SET status = 'resolved', resolution_strategy = ?, resolved_at = ?
+                WHERE conflict_id = ? AND farmer_id = ?
+                """,
+                (resolution_strategy, now, conflict_id, farmer_id),
+            )
+            return cursor.rowcount > 0
+
+    def save_sync_attachment(
+        self,
+        attachment_id: str,
+        farmer_id: str,
+        device_id: str,
+        resource_type: str,
+        resource_id: Optional[str],
+        sha256_checksum: str,
+        file_name: str,
+        mime_type: str,
+        byte_size: int,
+        storage_path: str,
+    ) -> Dict[str, Any]:
+        """Record uploaded photo or diagnostic attachment."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO sync_attachments (
+                    attachment_id, farmer_id, device_id, resource_type, resource_id,
+                    sha256_checksum, file_name, mime_type, byte_size, storage_path, is_uploaded, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                """,
+                (
+                    attachment_id,
+                    farmer_id,
+                    device_id,
+                    resource_type,
+                    resource_id,
+                    sha256_checksum,
+                    file_name,
+                    mime_type,
+                    byte_size,
+                    storage_path,
+                    now,
+                ),
+            )
+        return self.get_sync_attachment(attachment_id, farmer_id) or {}
+
+    def get_sync_attachment(self, attachment_id: str, farmer_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Retrieve attachment record."""
+        query = "SELECT * FROM sync_attachments WHERE attachment_id = ?"
+        params = [attachment_id]
+        if farmer_id:
+            query += " AND farmer_id = ?"
+            params.append(farmer_id)
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, params)
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def record_sync_telemetry(
+        self,
+        session_id: str,
+        device_id: str,
+        farmer_id: str,
+        sync_type: str,
+        duration_ms: int,
+        pull_count: int,
+        push_count: int,
+        conflict_count: int,
+        bytes_transferred: int,
+        status: str,
+    ) -> None:
+        """Record sync session telemetry for observability."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO sync_telemetry (
+                    session_id, device_id, farmer_id, sync_type, duration_ms,
+                    pull_count, push_count, conflict_count, bytes_transferred, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    device_id,
+                    farmer_id,
+                    sync_type,
+                    duration_ms,
+                    pull_count,
+                    push_count,
+                    conflict_count,
+                    bytes_transferred,
+                    status,
+                    now,
+                ),
+            )
+
+    def get_bootstrap_bundle(self, farmer_id: str, user_id: str) -> Dict[str, Any]:
+        """Assemble full authorized offline bootstrap payload for a farmer."""
+        profile = self.get_farmer_profile(farmer_id)
+        farms = self.list_farms_by_farmer(farmer_id)
+        plots = self.get_plots_by_farmer(farmer_id)
+        cycles = self.get_all_crop_cycles_by_farmer(farmer_id)
+        activities = self.get_activities_by_farmer(farmer_id)
+        reminders = self.list_farm_reminders(farmer_id)
+        notifs = self.list_notifications_for_farmer(farmer_id, limit=50)
+        cases = self.list_advisory_cases_for_farmer(farmer_id, limit=10)
+
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT MAX(sequence_id) AS max_seq FROM sync_change_log WHERE farmer_id = ?",
+                (farmer_id,),
+            )
+            row = cursor.fetchone()
+            max_seq = row["max_seq"] if row and row["max_seq"] is not None else 0
+
+        now = datetime.now(timezone.utc).isoformat()
+        return {
+            "farmer_profile": profile.model_dump() if profile and hasattr(profile, "model_dump") else (profile.dict() if profile else None),
+            "farms": [f.model_dump() if hasattr(f, "model_dump") else f.dict() for f in farms],
+            "plots": [p.model_dump() if hasattr(p, "model_dump") else p.dict() for p in plots],
+            "crop_cycles": [c.model_dump() if hasattr(c, "model_dump") else c.dict() for c in cycles],
+            "activities": [a.model_dump() if hasattr(a, "model_dump") else a.dict() for a in activities],
+            "reminders": [r.model_dump() if hasattr(r, "model_dump") else r.dict() for r in reminders],
+            "notifications": [n.model_dump() if hasattr(n, "model_dump") else n.dict() for n in notifs],
+            "advisories": [c.model_dump() if hasattr(c, "model_dump") else c.dict() for c in cases],
+            "server_timestamp": now,
+            "sequence_cursor": max_seq,
+        }
 
 
 

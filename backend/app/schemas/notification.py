@@ -159,6 +159,7 @@ class NotificationOutboxItem(BaseModel):
     last_error: Optional[str] = None
     created_at: str
     updated_at: str
+    version_number: int = 1
 
 
 class NotificationDeliveryAttempt(BaseModel):
@@ -208,6 +209,7 @@ class FarmReminderRecord(BaseModel):
     weather_risk_reason_hi: Optional[str] = None
     created_at: str
     updated_at: str
+    version_number: int = 1
 
 
 class FarmReminderCreate(BaseModel):

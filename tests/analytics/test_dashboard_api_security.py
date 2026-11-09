@@ -223,3 +223,19 @@ def test_admin_dashboard_endpoint(auth_fixture):
     assert overview.admin_id == admin.user_id
     assert overview.metrics["admin_total_users"].value >= 3
     assert len(overview.integration_health) >= 5
+
+
+def test_public_registration_blocks_privileged_role_escalation():
+    """Verify that attempting to self-register as an administrator or officer is strictly blocked."""
+    rand_sfx = uuid.uuid4().hex[:6]
+    # Attempting to supply ADMINISTRATOR role in public registration
+    user, profile, _ = auth_service.register_farmer(UserRegistrationRequest(
+        username=f"hacker_adm_{rand_sfx}",
+        password="ValidPassword123!",
+        full_name="Attacker Attempting Escalation",
+        role=UserRole.ADMINISTRATOR,
+    ))
+    # Must be forced to ordinary FARMER!
+    assert user.role == UserRole.FARMER
+    fetched = auth_service.repo.get_user_by_username(f"hacker_adm_{rand_sfx}")
+    assert fetched.role == UserRole.FARMER

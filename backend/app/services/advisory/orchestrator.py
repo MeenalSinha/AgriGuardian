@@ -14,6 +14,7 @@ from backend.app.services.agriculture.recommendation_engine import Recommendatio
 from backend.app.services.agriculture.rule_engine import DynamicRuleEngine
 from backend.app.services.analytics.dashboard import EnhancedDashboardAnalytics
 from backend.app.services.analytics.analytics_orchestrator import AnalyticsOrchestrator
+from backend.app.services.expert.expert_review_service import ExpertReviewService
 from backend.app.services.farm.farm_context_service import FarmContextService
 from backend.app.services.reporting.pdf_generator import PDFReportGenerator
 from backend.app.services.weather.weather_intelligence import WeatherIntelligenceService
@@ -42,6 +43,7 @@ class AgriGuardianSystem:
             weather_service=self.weather_intel,
             market_service=self.market_service,
         )
+        self.expert_review_service = ExpertReviewService(repo=self.farm_context.repo)
         logger.info("AgriGuardianSystem initialized successfully.")
 
     def process_request(
@@ -267,6 +269,21 @@ class AgriGuardianSystem:
         except Exception as e:
             logger.warning(f"Could not persist advisory case to relational DB: {e}")
             result["case_id"] = None
+
+        # Route case to Expert Review if eligible
+        if result.get("case_id"):
+            try:
+                review_id, policy_result = self.expert_review_service.route_advisory_case_for_review(
+                    case_id=result["case_id"],
+                    diagnosis_data=image_analysis,
+                    recommendation_data=result.get("recommendation", {}),
+                    weather_data=weather.__dict__ if hasattr(weather, "__dict__") else {},
+                )
+                result["expert_review_id"] = review_id
+                result["expert_review_eligibility"] = policy_result.eligibility.value
+                result["expert_review_priority"] = policy_result.priority.value
+            except Exception as e:
+                logger.warning(f"Could not evaluate expert review policy: {e}")
 
         logger.info(f"Advisory completed for {farmer_name} with risk: {result['risk']} in {timing['total']:.2f}s")
         return result

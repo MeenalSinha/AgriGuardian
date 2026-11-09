@@ -38,7 +38,10 @@ class AuthService:
     def __init__(self, repo: Optional[FarmDatabaseRepository] = None, settings: Optional[Settings] = None):
         self.settings = settings or get_settings()
         self.repo = repo or get_farm_repo()
-        self.secret_key = getattr(self.settings, "jwt_secret_key", "agri-guardian-secure-phase6-secret-key-3848201").encode("utf-8")
+        secret = getattr(self.settings, "jwt_secret_key", None) or os.getenv("JWT_SECRET_KEY")
+        if not secret:
+            secret = secrets.token_hex(32)
+        self.secret_key = secret.encode("utf-8")
         self.token_expire_seconds = getattr(self.settings, "access_token_expire_minutes", 1440) * 60
 
     # =========================================================================
@@ -123,7 +126,12 @@ class AuthService:
     # =========================================================================
 
     def register_farmer(self, req: UserRegistrationRequest) -> Tuple[UserRecord, FarmerProfile, str]:
-        """Register a new farmer account and provision their initial profile."""
+        """Register a new farmer account and provision their initial profile.
+        
+        CRITICAL SECURITY RULE: Public self-registration strictly provisions ordinary FARMER accounts.
+        Privileged roles (FIELD_OFFICER, AGRONOMIST, ADMINISTRATOR) must be provisioned through
+        administrative workflows. Any client-supplied privileged role is safely ignored.
+        """
         existing = self.repo.get_user_by_username(req.username.strip())
         if existing:
             raise ValueError(f"Username or mobile '{req.username}' is already registered.")
@@ -133,12 +141,13 @@ class AuthService:
         now_str = datetime.now().isoformat()
         user_id = f"usr_{uuid.uuid4().hex[:12]}"
 
+        # Always enforce FARMER role for public registration
         user = UserRecord(
             user_id=user_id,
             username=req.username.strip(),
             password_hash=pwd_hash,
             salt=salt,
-            role=req.role,
+            role=UserRole.FARMER,
             created_at=now_str,
             last_login=now_str,
         )
@@ -165,6 +174,39 @@ class AuthService:
         token = self.create_access_token(user, profile)
         logger.info(f"Registered new farmer '{req.username}' with ID {farmer_id}")
         return user, profile, token
+
+    def provision_privileged_user(
+        self,
+        username: str,
+        password: str,
+        role: UserRole,
+        full_name: Optional[str] = None,
+    ) -> Tuple[UserRecord, str]:
+        """Provision a privileged user account (Field Officer, Agronomist/Expert, Administrator).
+        
+        Must only be invoked by authorized administrators.
+        """
+        existing = self.repo.get_user_by_username(username.strip())
+        if existing:
+            raise ValueError(f"Username '{username}' is already registered.")
+
+        pwd_hash, salt = self.hash_password(password)
+        now_str = datetime.now().isoformat()
+        user_id = f"usr_{uuid.uuid4().hex[:12]}"
+
+        user = UserRecord(
+            user_id=user_id,
+            username=username.strip(),
+            password_hash=pwd_hash,
+            salt=salt,
+            role=role,
+            created_at=now_str,
+            last_login=now_str,
+        )
+        self.repo.create_user(user)
+        token = self.create_access_token(user)
+        logger.info(f"Administratively provisioned privileged user '{username}' with role {role.value}")
+        return user, token
 
     def authenticate_user(self, req: UserLoginRequest) -> UserLoginResponse:
         """Verify login credentials and return bearer token with profile summary."""

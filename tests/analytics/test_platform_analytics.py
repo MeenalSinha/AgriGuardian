@@ -93,7 +93,9 @@ def test_admin_dashboard_metrics(admin_setup):
     assert overview.metrics["admin_platform_farms"].value == 2
     assert overview.metrics["admin_total_advisories"].value == 1
     assert overview.metrics["admin_system_uptime"].status == MetricStatus.OPTIMAL
-    assert overview.metrics["admin_api_error_rate"].status == MetricStatus.OPTIMAL
+    assert overview.metrics["admin_api_error_rate"].status == MetricStatus.UNAVAILABLE
+    assert overview.metrics["admin_api_error_rate"].is_available is False
+    assert "OpenTelemetry" in overview.metrics["admin_api_error_rate"].missing_reason
 
 
 def test_admin_integration_health_checks(admin_setup):

@@ -157,3 +157,4 @@ class AnalyticsOrchestrator:
     def invalidate_all(self) -> None:
         """Flush the cache."""
         self.cache.clear()
+

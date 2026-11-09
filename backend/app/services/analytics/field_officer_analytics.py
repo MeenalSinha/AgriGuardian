@@ -332,3 +332,4 @@ class FieldOfficerAnalyticsService:
                 )
 
         return self.db.list_case_follow_ups(case_id)
+

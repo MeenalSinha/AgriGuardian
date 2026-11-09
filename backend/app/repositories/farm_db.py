@@ -7,6 +7,7 @@ import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional
 
@@ -39,6 +40,20 @@ from backend.app.schemas.analytics import (
     AdvisoryCase,
     CaseFollowUpRecord,
     OfficerTerritoryScope,
+)
+from backend.app.schemas.expert import (
+    ExpertAccountStatus,
+    ExpertCredentialRecord,
+    ExpertDiagnosisAssessment,
+    ExpertProfile,
+    ExpertRecommendationVersion,
+    ExpertReviewComment,
+    ExpertSpecializationItem,
+    KnowledgeImprovementProposal,
+    DiagnosisDecision,
+    RecommendationDecision,
+    BiologicalControlItem,
+    ChemicalInterventionItem,
 )
 
 logger = get_logger("FarmDBRepository")
@@ -303,6 +318,138 @@ class FarmDatabaseRepository:
             );
             """)
 
+            # 12. Phase 8 Expert Profiles
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS expert_profiles (
+                expert_id TEXT PRIMARY KEY,
+                user_id TEXT UNIQUE NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                full_name TEXT NOT NULL,
+                email TEXT,
+                phone_number TEXT,
+                institution TEXT NOT NULL,
+                designation TEXT NOT NULL DEFAULT 'Agronomist',
+                experience_years INTEGER NOT NULL DEFAULT 0,
+                specialization_json TEXT NOT NULL DEFAULT '{}',
+                verification_status TEXT NOT NULL DEFAULT 'pending_verification',
+                verified_by_admin_id TEXT REFERENCES users(user_id),
+                verified_at TEXT,
+                active_caseload INTEGER NOT NULL DEFAULT 0,
+                total_reviewed_cases INTEGER NOT NULL DEFAULT 0,
+                accuracy_rating REAL NOT NULL DEFAULT 5.0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 13. Phase 8 Expert Credentials
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS expert_credentials (
+                credential_id TEXT PRIMARY KEY,
+                expert_id TEXT NOT NULL REFERENCES expert_profiles(expert_id) ON DELETE CASCADE,
+                institution_name TEXT NOT NULL,
+                degree_or_certification TEXT NOT NULL,
+                registration_number TEXT NOT NULL,
+                document_url TEXT,
+                issued_date TEXT,
+                expiry_date TEXT,
+                is_verified INTEGER NOT NULL DEFAULT 0,
+                verified_by_admin TEXT REFERENCES users(user_id),
+                verified_at TEXT
+            );
+            """)
+
+            # 14. Phase 8 Expert Review Cases
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS expert_review_cases (
+                review_id TEXT PRIMARY KEY,
+                case_id TEXT UNIQUE NOT NULL REFERENCES advisory_cases(case_id) ON DELETE CASCADE,
+                priority TEXT NOT NULL DEFAULT 'medium',
+                status TEXT NOT NULL DEFAULT 'queued',
+                eligibility TEXT NOT NULL DEFAULT 'recommended',
+                trigger_reasons_json TEXT NOT NULL DEFAULT '[]',
+                requires_dual_review INTEGER NOT NULL DEFAULT 0,
+                assigned_expert_id TEXT REFERENCES expert_profiles(expert_id),
+                secondary_expert_id TEXT REFERENCES expert_profiles(expert_id),
+                claimed_at TEXT,
+                reviewed_at TEXT,
+                secondary_reviewed_at TEXT,
+                sla_deadline TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
+            # 15. Phase 8 Expert Diagnosis Assessments
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS expert_diagnosis_assessments (
+                assessment_id TEXT PRIMARY KEY,
+                review_id TEXT NOT NULL REFERENCES expert_review_cases(review_id) ON DELETE CASCADE,
+                case_id TEXT NOT NULL REFERENCES advisory_cases(case_id) ON DELETE CASCADE,
+                expert_id TEXT NOT NULL REFERENCES expert_profiles(expert_id),
+                decision TEXT NOT NULL,
+                revised_crop TEXT,
+                revised_disease TEXT,
+                confidence_score REAL NOT NULL DEFAULT 1.0,
+                differential_diagnosis_json TEXT NOT NULL DEFAULT '[]',
+                pathology_notes TEXT NOT NULL,
+                assessed_at TEXT NOT NULL
+            );
+            """)
+
+            # 16. Phase 8 Expert Recommendation Versions
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS expert_recommendation_versions (
+                version_id TEXT PRIMARY KEY,
+                review_id TEXT NOT NULL REFERENCES expert_review_cases(review_id) ON DELETE CASCADE,
+                case_id TEXT NOT NULL REFERENCES advisory_cases(case_id) ON DELETE CASCADE,
+                expert_id TEXT NOT NULL REFERENCES expert_profiles(expert_id),
+                version_number INTEGER NOT NULL DEFAULT 1,
+                decision TEXT NOT NULL,
+                cultural_management_json TEXT NOT NULL DEFAULT '[]',
+                biological_control_json TEXT NOT NULL DEFAULT '[]',
+                chemical_control_json TEXT NOT NULL DEFAULT '[]',
+                pre_harvest_interval_days INTEGER,
+                safety_disclaimers_json TEXT NOT NULL DEFAULT '[]',
+                rationale TEXT NOT NULL,
+                farmer_summary_notes TEXT,
+                field_officer_instructions TEXT,
+                requires_secondary_review INTEGER NOT NULL DEFAULT 0,
+                is_approved INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+            """)
+
+            # 17. Phase 8 Expert Review Comments
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS expert_review_comments (
+                comment_id TEXT PRIMARY KEY,
+                review_id TEXT NOT NULL REFERENCES expert_review_cases(review_id) ON DELETE CASCADE,
+                author_id TEXT NOT NULL,
+                author_name TEXT NOT NULL,
+                author_role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            """)
+
+            # 18. Phase 8 Knowledge Improvement Proposals
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS knowledge_improvement_proposals (
+                proposal_id TEXT PRIMARY KEY,
+                case_id TEXT NOT NULL REFERENCES advisory_cases(case_id) ON DELETE CASCADE,
+                expert_id TEXT NOT NULL REFERENCES expert_profiles(expert_id),
+                original_ai_disease TEXT NOT NULL,
+                expert_confirmed_disease TEXT NOT NULL,
+                crop TEXT NOT NULL,
+                correction_category TEXT NOT NULL,
+                reason_for_override TEXT NOT NULL,
+                suggested_kb_fact_or_rule TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                reviewed_by_admin TEXT,
+                created_at TEXT NOT NULL
+            );
+            """)
+
             # Performance & Isolation Indexes
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_farms_farmer ON farms(farmer_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_plots_farm ON farm_plots(farm_id);")
@@ -317,6 +464,16 @@ class FarmDatabaseRepository:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cases_created ON advisory_cases(created_at);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_officer_assign ON field_officer_assignments(officer_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_follow_ups_case ON case_follow_ups(case_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_expert_user ON expert_profiles(user_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_expert_status ON expert_profiles(verification_status);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_review_case ON expert_review_cases(case_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_review_expert ON expert_review_cases(assigned_expert_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_review_status ON expert_review_cases(status);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_review_priority ON expert_review_cases(priority);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_diag_review ON expert_diagnosis_assessments(review_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_rec_ver_review ON expert_recommendation_versions(review_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_comments_review ON expert_review_comments(review_id);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_proposals_status ON knowledge_improvement_proposals(status);")
 
         logger.info(f"Initialized FarmDatabaseRepository at {self.db_path}")
 
@@ -1755,6 +1912,668 @@ class FarmDatabaseRepository:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
+
+    # =========================================================================
+    # PHASE 8: AGRICULTURAL EXPERT IDENTITY & REPOSITORY METHODS
+    # =========================================================================
+
+    def _row_to_credential(self, row: sqlite3.Row) -> ExpertCredentialRecord:
+        """Convert credential database row to schema."""
+        return ExpertCredentialRecord(
+            credential_id=row["credential_id"],
+            expert_id=row["expert_id"],
+            institution_name=row["institution_name"],
+            degree_or_certification=row["degree_or_certification"],
+            registration_number=row["registration_number"],
+            document_url=row["document_url"],
+            issued_date=row["issued_date"],
+            expiry_date=row["expiry_date"],
+            is_verified=bool(row["is_verified"]),
+            verified_by_admin=row["verified_by_admin"],
+            verified_at=row["verified_at"],
+        )
+
+    def _row_to_expert_profile(
+        self, row: sqlite3.Row, credentials: Optional[List[ExpertCredentialRecord]] = None
+    ) -> ExpertProfile:
+        """Convert expert profile database row to schema."""
+        spec_data = {}
+        if row["specialization_json"]:
+            try:
+                spec_data = json.loads(row["specialization_json"])
+            except Exception:
+                pass
+        specializations = ExpertSpecializationItem(**spec_data) if spec_data else ExpertSpecializationItem()
+
+        return ExpertProfile(
+            expert_id=row["expert_id"],
+            user_id=row["user_id"],
+            full_name=row["full_name"],
+            email=row["email"],
+            phone_number=row["phone_number"],
+            institution=row["institution"],
+            designation=row["designation"],
+            experience_years=row["experience_years"],
+            specializations=specializations,
+            credentials=credentials or [],
+            verification_status=ExpertAccountStatus(row["verification_status"]),
+            verified_by_admin_id=row["verified_by_admin_id"],
+            verified_at=row["verified_at"],
+            active_caseload=row["active_caseload"],
+            total_reviewed_cases=row["total_reviewed_cases"],
+            accuracy_rating=row["accuracy_rating"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def create_expert_profile(self, profile: ExpertProfile) -> ExpertProfile:
+        """Insert a new expert profile."""
+        spec_json = json.dumps(profile.specializations.model_dump())
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO expert_profiles (
+                    expert_id, user_id, full_name, email, phone_number,
+                    institution, designation, experience_years, specialization_json,
+                    verification_status, verified_by_admin_id, verified_at,
+                    active_caseload, total_reviewed_cases, accuracy_rating,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    profile.expert_id,
+                    profile.user_id,
+                    profile.full_name,
+                    profile.email,
+                    profile.phone_number,
+                    profile.institution,
+                    profile.designation,
+                    profile.experience_years,
+                    spec_json,
+                    profile.verification_status.value,
+                    profile.verified_by_admin_id,
+                    profile.verified_at,
+                    profile.active_caseload,
+                    profile.total_reviewed_cases,
+                    profile.accuracy_rating,
+                    profile.created_at,
+                    profile.updated_at,
+                ),
+            )
+            # Insert initial credentials if present
+            for cred in profile.credentials:
+                conn.execute(
+                    """
+                    INSERT INTO expert_credentials (
+                        credential_id, expert_id, institution_name,
+                        degree_or_certification, registration_number, document_url,
+                        issued_date, expiry_date, is_verified, verified_by_admin, verified_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    (
+                        cred.credential_id,
+                        profile.expert_id,
+                        cred.institution_name,
+                        cred.degree_or_certification,
+                        cred.registration_number,
+                        cred.document_url,
+                        cred.issued_date,
+                        cred.expiry_date,
+                        1 if cred.is_verified else 0,
+                        cred.verified_by_admin,
+                        cred.verified_at,
+                    ),
+                )
+        return self.get_expert_profile(profile.expert_id) or profile
+
+    def get_expert_profile(self, expert_id: str) -> Optional[ExpertProfile]:
+        """Fetch expert profile by expert_id with verified credentials."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM expert_profiles WHERE expert_id = ?;", (expert_id,)
+            ).fetchone()
+            if not row:
+                return None
+            cred_rows = conn.execute(
+                "SELECT * FROM expert_credentials WHERE expert_id = ?;", (expert_id,)
+            ).fetchall()
+            credentials = [self._row_to_credential(cr) for cr in cred_rows]
+            return self._row_to_expert_profile(row, credentials)
+
+    def get_expert_profile_by_user_id(self, user_id: str) -> Optional[ExpertProfile]:
+        """Fetch expert profile by linked user_id."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM expert_profiles WHERE user_id = ?;", (user_id,)
+            ).fetchone()
+            if not row:
+                return None
+            cred_rows = conn.execute(
+                "SELECT * FROM expert_credentials WHERE expert_id = ?;", (row["expert_id"],)
+            ).fetchall()
+            credentials = [self._row_to_credential(cr) for cr in cred_rows]
+            return self._row_to_expert_profile(row, credentials)
+
+    def list_expert_profiles(self, status: Optional[str] = None) -> List[ExpertProfile]:
+        """List expert profiles filtered optionally by verification status."""
+        with self.get_connection() as conn:
+            if status:
+                rows = conn.execute(
+                    "SELECT * FROM expert_profiles WHERE verification_status = ? ORDER BY created_at DESC;",
+                    (status,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM expert_profiles ORDER BY created_at DESC;"
+                ).fetchall()
+            
+            result = []
+            for r in rows:
+                cred_rows = conn.execute(
+                    "SELECT * FROM expert_credentials WHERE expert_id = ?;", (r["expert_id"],)
+                ).fetchall()
+                creds = [self._row_to_credential(cr) for cr in cred_rows]
+                result.append(self._row_to_expert_profile(r, creds))
+            return result
+
+    def update_expert_profile(self, expert_id: str, updates: Dict[str, Any]) -> Optional[ExpertProfile]:
+        """Update selected fields of an expert profile."""
+        with self.get_connection() as conn:
+            set_clauses = []
+            params = []
+            for key, val in updates.items():
+                if key == "specializations" and isinstance(val, (dict, ExpertSpecializationItem)):
+                    set_clauses.append("specialization_json = ?")
+                    params.append(
+                        json.dumps(val.model_dump() if isinstance(val, ExpertSpecializationItem) else val)
+                    )
+                elif key in (
+                    "full_name", "email", "phone_number", "institution", "designation",
+                    "experience_years", "active_caseload", "total_reviewed_cases", "accuracy_rating",
+                    "verification_status", "verified_by_admin_id", "verified_at"
+                ):
+                    set_clauses.append(f"{key} = ?")
+                    params.append(val.value if isinstance(val, Enum) else val)
+
+            if not set_clauses:
+                return self.get_expert_profile(expert_id)
+
+            set_clauses.append("updated_at = ?")
+            params.append(datetime.now().isoformat())
+            params.append(expert_id)
+
+            query = f"UPDATE expert_profiles SET {', '.join(set_clauses)} WHERE expert_id = ?;"
+            conn.execute(query, tuple(params))
+        return self.get_expert_profile(expert_id)
+
+    def verify_expert(
+        self,
+        expert_id: str,
+        admin_id: str,
+        status: ExpertAccountStatus,
+        rejection_reason: Optional[str] = None,
+    ) -> bool:
+        """Admin action to verify, reject, or suspend an agronomist."""
+        now_str = datetime.now().isoformat()
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE expert_profiles
+                SET verification_status = ?, verified_by_admin_id = ?, verified_at = ?, updated_at = ?
+                WHERE expert_id = ?;
+                """,
+                (status.value, admin_id, now_str, now_str, expert_id),
+            )
+            # If approved, also mark credentials as verified
+            if status == ExpertAccountStatus.ACTIVE_VERIFIED:
+                conn.execute(
+                    """
+                    UPDATE expert_credentials
+                    SET is_verified = 1, verified_by_admin = ?, verified_at = ?
+                    WHERE expert_id = ?;
+                    """,
+                    (admin_id, now_str, expert_id),
+                )
+            return cursor.rowcount > 0
+
+    def add_expert_credential(self, cred: ExpertCredentialRecord) -> ExpertCredentialRecord:
+        """Attach a verified academic or institutional credential."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO expert_credentials (
+                    credential_id, expert_id, institution_name,
+                    degree_or_certification, registration_number, document_url,
+                    issued_date, expiry_date, is_verified, verified_by_admin, verified_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    cred.credential_id,
+                    cred.expert_id,
+                    cred.institution_name,
+                    cred.degree_or_certification,
+                    cred.registration_number,
+                    cred.document_url,
+                    cred.issued_date,
+                    cred.expiry_date,
+                    1 if cred.is_verified else 0,
+                    cred.verified_by_admin,
+                    cred.verified_at,
+                ),
+            )
+        return cred
+
+    def get_expert_credentials(self, expert_id: str) -> List[ExpertCredentialRecord]:
+        """Fetch all credentials for an expert."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM expert_credentials WHERE expert_id = ? ORDER BY is_verified DESC;",
+                (expert_id,),
+            ).fetchall()
+            return [self._row_to_credential(r) for r in rows]
+
+    # =========================================================================
+    # PHASE 8: CASE REVIEW WORKFLOW REPOSITORY METHODS
+    # =========================================================================
+
+    def create_review_case(
+        self,
+        case_id: str,
+        priority: str,
+        eligibility: str,
+        trigger_reasons: List[str],
+        requires_dual_review: bool = False,
+        sla_deadline: Optional[str] = None,
+        assigned_expert_id: Optional[str] = None,
+    ) -> str:
+        """Route an advisory case to the expert review queue."""
+        review_id = f"rev_{uuid.uuid4().hex[:12]}"
+        now_str = datetime.now().isoformat()
+        triggers_json = json.dumps(trigger_reasons)
+
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO expert_review_cases (
+                    review_id, case_id, priority, status, eligibility,
+                    trigger_reasons_json, requires_dual_review, assigned_expert_id,
+                    sla_deadline, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    review_id,
+                    case_id,
+                    priority,
+                    "assigned" if assigned_expert_id else "queued",
+                    eligibility,
+                    triggers_json,
+                    1 if requires_dual_review else 0,
+                    assigned_expert_id,
+                    sla_deadline,
+                    now_str,
+                    now_str,
+                ),
+            )
+            # Update advisory case status to awaiting review
+            conn.execute(
+                "UPDATE advisory_cases SET status = 'awaiting_expert_review', updated_at = ? WHERE case_id = ?;",
+                (now_str, case_id),
+            )
+            if assigned_expert_id:
+                conn.execute(
+                    "UPDATE expert_profiles SET active_caseload = active_caseload + 1 WHERE expert_id = ?;",
+                    (assigned_expert_id,),
+                )
+        return review_id
+
+    def get_review_case(self, review_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch expert review case record with details."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM expert_review_cases WHERE review_id = ?;", (review_id,)
+            ).fetchone()
+            if not row:
+                return None
+            return dict(row)
+
+    def get_review_case_by_advisory_id(self, case_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch review record for an advisory case."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM expert_review_cases WHERE case_id = ?;", (case_id,)
+            ).fetchone()
+            if not row:
+                return None
+            return dict(row)
+
+    def list_review_cases(
+        self,
+        status: Optional[str] = None,
+        priority: Optional[str] = None,
+        expert_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Query review cases matching filtering criteria."""
+        with self.get_connection() as conn:
+            query = "SELECT * FROM expert_review_cases WHERE 1=1"
+            params = []
+            if status:
+                query += " AND status = ?"
+                params.append(status)
+            if priority:
+                query += " AND priority = ?"
+                params.append(priority)
+            if expert_id:
+                query += " AND (assigned_expert_id = ? OR secondary_expert_id = ?)"
+                params.extend([expert_id, expert_id])
+            query += " ORDER BY created_at DESC;"
+            rows = conn.execute(query, tuple(params)).fetchall()
+            return [dict(r) for r in rows]
+
+    def update_review_case(self, review_id: str, updates: Dict[str, Any]) -> bool:
+        """Update expert review case fields."""
+        with self.get_connection() as conn:
+            clauses = []
+            params = []
+            for k, v in updates.items():
+                if k in (
+                    "status", "priority", "assigned_expert_id", "secondary_expert_id",
+                    "claimed_at", "reviewed_at", "secondary_reviewed_at", "sla_deadline"
+                ):
+                    clauses.append(f"{k} = ?")
+                    params.append(v.value if isinstance(v, Enum) else v)
+            if not clauses:
+                return False
+            clauses.append("updated_at = ?")
+            params.append(datetime.now().isoformat())
+            params.append(review_id)
+            query = f"UPDATE expert_review_cases SET {', '.join(clauses)} WHERE review_id = ?;"
+            cursor = conn.execute(query, tuple(params))
+            return cursor.rowcount > 0
+
+    def claim_review_case(self, review_id: str, expert_id: str) -> bool:
+        """Allow an eligible agronomist to claim an unassigned queued case."""
+        now_str = datetime.now().isoformat()
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE expert_review_cases
+                SET assigned_expert_id = ?, status = 'claimed', claimed_at = ?, updated_at = ?
+                WHERE review_id = ? AND (assigned_expert_id IS NULL OR status = 'queued');
+                """,
+                (expert_id, now_str, now_str, review_id),
+            )
+            if cursor.rowcount > 0:
+                conn.execute(
+                    "UPDATE expert_profiles SET active_caseload = active_caseload + 1 WHERE expert_id = ?;",
+                    (expert_id,),
+                )
+                return True
+            return False
+
+    def save_diagnosis_assessment(self, assessment: ExpertDiagnosisAssessment) -> None:
+        """Record expert plant pathology assessment."""
+        diff_json = json.dumps(assessment.differential_diagnosis)
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO expert_diagnosis_assessments (
+                    assessment_id, review_id, case_id, expert_id, decision,
+                    revised_crop, revised_disease, confidence_score,
+                    differential_diagnosis_json, pathology_notes, assessed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(assessment_id) DO UPDATE SET
+                    decision = excluded.decision,
+                    revised_crop = excluded.revised_crop,
+                    revised_disease = excluded.revised_disease,
+                    confidence_score = excluded.confidence_score,
+                    differential_diagnosis_json = excluded.differential_diagnosis_json,
+                    pathology_notes = excluded.pathology_notes,
+                    assessed_at = excluded.assessed_at;
+                """,
+                (
+                    assessment.assessment_id,
+                    assessment.review_id,
+                    assessment.case_id,
+                    assessment.expert_id,
+                    assessment.decision.value,
+                    assessment.revised_crop,
+                    assessment.revised_disease,
+                    assessment.confidence_score,
+                    diff_json,
+                    assessment.pathology_notes,
+                    assessment.assessed_at,
+                ),
+            )
+
+    def get_diagnosis_assessment(self, review_id: str) -> Optional[ExpertDiagnosisAssessment]:
+        """Fetch expert diagnosis assessment for a review case."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM expert_diagnosis_assessments WHERE review_id = ? ORDER BY assessed_at DESC LIMIT 1;",
+                (review_id,),
+            ).fetchone()
+            if not row:
+                return None
+            diff_diag = []
+            if row["differential_diagnosis_json"]:
+                try:
+                    diff_diag = json.loads(row["differential_diagnosis_json"])
+                except Exception:
+                    pass
+            return ExpertDiagnosisAssessment(
+                assessment_id=row["assessment_id"],
+                review_id=row["review_id"],
+                case_id=row["case_id"],
+                expert_id=row["expert_id"],
+                decision=DiagnosisDecision(row["decision"]),
+                revised_crop=row["revised_crop"],
+                revised_disease=row["revised_disease"],
+                confidence_score=row["confidence_score"],
+                differential_diagnosis=diff_diag,
+                pathology_notes=row["pathology_notes"],
+                assessed_at=row["assessed_at"],
+            )
+
+    def save_recommendation_version(self, rec: ExpertRecommendationVersion) -> None:
+        """Preserve immutable recommendation revision authored by agronomist."""
+        cult_json = json.dumps(rec.cultural_management)
+        bio_json = json.dumps([b.model_dump() if hasattr(b, "model_dump") else b for b in rec.biological_control])
+        chem_json = json.dumps([c.model_dump() if hasattr(c, "model_dump") else c for c in rec.chemical_control])
+        safety_json = json.dumps(rec.safety_disclaimers)
+
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO expert_recommendation_versions (
+                    version_id, review_id, case_id, expert_id, version_number,
+                    decision, cultural_management_json, biological_control_json,
+                    chemical_control_json, pre_harvest_interval_days, safety_disclaimers_json,
+                    rationale, requires_secondary_review, is_approved, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    rec.version_id,
+                    rec.review_id,
+                    rec.case_id,
+                    rec.expert_id,
+                    rec.version_number,
+                    rec.decision.value,
+                    cult_json,
+                    bio_json,
+                    chem_json,
+                    rec.pre_harvest_interval_days,
+                    safety_json,
+                    rec.rationale,
+                    1 if rec.requires_secondary_review else 0,
+                    1,
+                    rec.created_at,
+                ),
+            )
+
+    def get_latest_recommendation_version(self, review_id: str) -> Optional[ExpertRecommendationVersion]:
+        """Fetch the most recent recommendation version for a review case."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM expert_recommendation_versions WHERE review_id = ? ORDER BY version_number DESC LIMIT 1;",
+                (review_id,),
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_recommendation_version(row)
+
+    def list_recommendation_versions(self, review_id: str) -> List[ExpertRecommendationVersion]:
+        """Fetch all versions of treatment recommendations for a review case."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM expert_recommendation_versions WHERE review_id = ? ORDER BY version_number ASC;",
+                (review_id,),
+            ).fetchall()
+            return [self._row_to_recommendation_version(r) for r in rows]
+
+    def _row_to_recommendation_version(self, row: sqlite3.Row) -> ExpertRecommendationVersion:
+        """Convert row to ExpertRecommendationVersion schema."""
+        cultural = []
+        bio = []
+        chem = []
+        safety = []
+        try:
+            if row["cultural_management_json"]:
+                cultural = json.loads(row["cultural_management_json"])
+            if row["biological_control_json"]:
+                bio_raw = json.loads(row["biological_control_json"])
+                bio = [BiologicalControlItem(**b) if isinstance(b, dict) else b for b in bio_raw]
+            if row["chemical_control_json"]:
+                chem_raw = json.loads(row["chemical_control_json"])
+                chem = [ChemicalInterventionItem(**c) if isinstance(c, dict) else c for c in chem_raw]
+            if row["safety_disclaimers_json"]:
+                safety = json.loads(row["safety_disclaimers_json"])
+        except Exception:
+            pass
+
+        return ExpertRecommendationVersion(
+            version_id=row["version_id"],
+            review_id=row["review_id"],
+            case_id=row["case_id"],
+            expert_id=row["expert_id"],
+            version_number=row["version_number"],
+            decision=RecommendationDecision(row["decision"]),
+            cultural_management=cultural,
+            biological_control=bio,
+            chemical_control=chem,
+            pre_harvest_interval_days=row["pre_harvest_interval_days"],
+            safety_disclaimers=safety,
+            rationale=row["rationale"],
+            requires_secondary_review=bool(row["requires_secondary_review"]),
+            created_at=row["created_at"],
+        )
+
+    def add_review_comment(self, comment: ExpertReviewComment) -> None:
+        """Add communication or query comment on a case."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO expert_review_comments (
+                    comment_id, review_id, author_id, author_name, author_role, content, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    comment.comment_id,
+                    comment.review_id,
+                    comment.author_id,
+                    comment.author_name,
+                    comment.author_role,
+                    comment.content,
+                    comment.created_at,
+                ),
+            )
+
+    def list_review_comments(self, review_id: str) -> List[ExpertReviewComment]:
+        """List chronological comments on a review case."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM expert_review_comments WHERE review_id = ? ORDER BY created_at ASC;",
+                (review_id,),
+            ).fetchall()
+            return [
+                ExpertReviewComment(
+                    comment_id=r["comment_id"],
+                    review_id=r["review_id"],
+                    author_id=r["author_id"],
+                    author_name=r["author_name"],
+                    author_role=r["author_role"],
+                    content=r["content"],
+                    created_at=r["created_at"],
+                )
+                for r in rows
+            ]
+
+    def create_knowledge_proposal(self, proposal: KnowledgeImprovementProposal) -> None:
+        """Record agronomist feedback proposing knowledge base refinement."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO knowledge_improvement_proposals (
+                    proposal_id, case_id, expert_id, original_ai_disease,
+                    expert_confirmed_disease, crop, correction_category,
+                    reason_for_override, suggested_kb_fact_or_rule, status,
+                    reviewed_by_admin, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    proposal.proposal_id,
+                    proposal.case_id,
+                    proposal.expert_id,
+                    proposal.original_ai_disease,
+                    proposal.expert_confirmed_disease,
+                    proposal.crop,
+                    proposal.correction_category,
+                    proposal.reason_for_override,
+                    proposal.suggested_kb_fact_or_rule,
+                    proposal.status,
+                    proposal.reviewed_by_admin,
+                    proposal.created_at,
+                ),
+            )
+
+    def list_knowledge_proposals(self, status: Optional[str] = None) -> List[KnowledgeImprovementProposal]:
+        """List proposals for administrative knowledge curation."""
+        with self.get_connection() as conn:
+            if status:
+                rows = conn.execute(
+                    "SELECT * FROM knowledge_improvement_proposals WHERE status = ? ORDER BY created_at DESC;",
+                    (status,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM knowledge_improvement_proposals ORDER BY created_at DESC;"
+                ).fetchall()
+            return [
+                KnowledgeImprovementProposal(
+                    proposal_id=r["proposal_id"],
+                    case_id=r["case_id"],
+                    expert_id=r["expert_id"],
+                    original_ai_disease=r["original_ai_disease"],
+                    expert_confirmed_disease=r["expert_confirmed_disease"],
+                    crop=r["crop"],
+                    correction_category=r["correction_category"],
+                    reason_for_override=r["reason_for_override"],
+                    suggested_kb_fact_or_rule=r["suggested_kb_fact_or_rule"],
+                    status=r["status"],
+                    reviewed_by_admin=r["reviewed_by_admin"],
+                    created_at=r["created_at"],
+                )
+                for r in rows
+            ]
+
+    def update_knowledge_proposal_status(self, proposal_id: str, status: str, admin_id: str) -> bool:
+        """Admin action on a knowledge improvement proposal."""
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE knowledge_improvement_proposals SET status = ?, reviewed_by_admin = ? WHERE proposal_id = ?;",
+                (status, admin_id, proposal_id),
+            )
+            return cursor.rowcount > 0
+
 
 
 # Global singleton instance helper

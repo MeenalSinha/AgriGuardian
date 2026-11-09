@@ -49,27 +49,39 @@ def render_dashboard_view() -> None:
         unsafe_allow_html=True,
     )
 
-    # Role Selection / Switcher
-    default_role_idx = 0
-    if current_user:
-        if current_user.role == UserRole.FIELD_OFFICER:
-            default_role_idx = 1
-        elif current_user.role == UserRole.ADMINISTRATOR:
-            default_role_idx = 2
+    # Role Selection / Switcher with Strict Server-Side Role Enforcement
+    if not current_user:
+        st.warning("🔒 Authentication Required: Please log in or register via '🌾 My Farms & Crops' to access your role-based dashboard.")
+        st.info("For privacy and platform security, metrics and cases are scoped strictly to authenticated farmer, field officer, expert, or administrator accounts.")
+        return
 
-    role_options = [
-        "🌾 Farmer Dashboard (Personalized)",
-        "👮 Field Officer Dashboard (Regional Intelligence)",
-        "⚙️ Administrator Dashboard (Platform Telemetry)",
-    ]
+    # Determine permitted dashboards based on user role
+    role_options = []
+    if current_user.role == UserRole.FARMER:
+        role_options = ["🌾 Farmer Dashboard (Personalized)"]
+    elif current_user.role == UserRole.FIELD_OFFICER:
+        role_options = ["👮 Field Officer Dashboard (Regional Intelligence)"]
+        if current_farmer:
+            role_options.append("🌾 Farmer Dashboard (My Personal Farm)")
+    elif current_user.role == UserRole.AGRONOMIST:
+        role_options = ["🔬 Agricultural Expert Portal (Case Verification)"]
+        if current_farmer:
+            role_options.append("🌾 Farmer Dashboard (My Personal Farm)")
+    elif current_user.role == UserRole.ADMINISTRATOR:
+        role_options = [
+            "⚙️ Administrator Dashboard (Platform Telemetry)",
+            "👮 Field Officer Dashboard (Regional Intelligence)",
+            "🔬 Agricultural Expert Portal (Case Verification)",
+            "🌾 Farmer Dashboard (Personalized)",
+        ]
 
     col_role, col_refresh = st.columns([3, 1])
     with col_role:
         selected_dashboard = st.selectbox(
-            "Select Dashboard View / Role Persona",
+            "Select Authorized Dashboard Surface",
             options=role_options,
-            index=default_role_idx,
-            help="Switch between role-specific dashboard views. In production, users view their authorized role.",
+            index=0,
+            help="Displays only dashboards authorized for your authenticated user role.",
         )
     with col_refresh:
         st.write("")
@@ -82,8 +94,11 @@ def render_dashboard_view() -> None:
         _render_farmer_dashboard(orchestrator, current_farmer, force_refresh)
     elif "Field Officer" in selected_dashboard:
         _render_field_officer_dashboard(orchestrator, current_user, force_refresh)
-    else:
+    elif "Administrator" in selected_dashboard:
         _render_administrator_dashboard(orchestrator, current_user, force_refresh)
+    else:
+        # Phase 8 Expert Portal placeholder (rendered via expert view module)
+        st.info("🔬 Agricultural Expert Portal is available in the dedicated Expert Review console.")
 
 
 # ==============================================================================
@@ -92,22 +107,12 @@ def render_dashboard_view() -> None:
 
 def _render_farmer_dashboard(orchestrator, current_farmer, force_refresh: bool) -> None:
     """Render personalized farmer dashboard."""
-    # Resolve farmer ID
-    farmer_id = current_farmer.farmer_id if current_farmer else None
-
-    # If no logged-in farmer, find first registered farmer in DB for demo inspection
-    if not farmer_id:
-        try:
-            with orchestrator.db.get_connection() as conn:
-                row = conn.execute("SELECT farmer_id FROM farmer_profiles LIMIT 1").fetchone()
-                if row:
-                    farmer_id = row[0]
-        except Exception:
-            pass
-
-    if not farmer_id:
-        st.info("ℹ️ No farmer profile found in database. Please register or log in via '🌾 My Farms & Crops'.")
+    if not current_farmer:
+        st.warning("🔒 No Farmer Profile Found: Please log in with a registered farmer account via '🌾 My Farms & Crops'.")
+        st.info("Dashboard land holdings, phenology, and tasks are isolated strictly to your authenticated farmer profile.")
         return
+
+    farmer_id = current_farmer.farmer_id
 
     try:
         # Check if farmer has multiple farms
@@ -327,9 +332,12 @@ def _render_farmer_dashboard(orchestrator, current_farmer, force_refresh: bool) 
 
 def _render_field_officer_dashboard(orchestrator, current_user, force_refresh: bool) -> None:
     """Render regional monitoring, case register, and agronomist follow-up interface."""
-    # Resolve officer ID
-    officer_id = current_user.user_id if current_user else "usr_officer_demo"
-    officer_name = current_user.username if current_user else "Field Officer (Regional North)"
+    if not current_user or current_user.role not in (UserRole.FIELD_OFFICER, UserRole.ADMINISTRATOR):
+        st.error("⛔ Access Forbidden: Field Officer or Administrator credentials required.")
+        return
+
+    officer_id = current_user.user_id
+    officer_name = current_user.username
 
     # Filter Bar
     st.markdown("### 🔍 Regional Telemetry Filters")
@@ -348,14 +356,10 @@ def _render_field_officer_dashboard(orchestrator, current_user, force_refresh: b
         days_map = {"Last 7 Days": 7, "Last 30 Days": 30, "Last 90 Days": 90, "All Time": 0}
         days_param = days_map.get(date_range, 30)
 
-    # Ensure demo officer has an assigned territory if none exists
+    # Check officer assigned territory without automatic demo assignment
     territories = orchestrator.get_officer_territory(officer_id)
-    if not territories:
-        try:
-            orchestrator.assign_officer_territory(officer_id=officer_id, state="Haryana", district="Karnal")
-            orchestrator.assign_officer_territory(officer_id=officer_id, state="Uttar Pradesh", district="Meerut")
-        except Exception:
-            pass
+    if not territories and current_user.role != UserRole.ADMINISTRATOR:
+        st.warning("⚠️ No Geographic Territory Assigned: You have not yet been assigned an administrative territory. Please contact a platform administrator.")
 
     overview: FieldOfficerDashboardOverview = orchestrator.get_field_officer_dashboard(
         officer_id=officer_id,
@@ -515,17 +519,19 @@ def _render_field_officer_dashboard(orchestrator, current_user, force_refresh: b
         with st.form(f"follow_up_form_{selected_case_id}"):
             col_fu1, col_fu2 = st.columns([2, 1])
             with col_fu1:
-                notes = st.text_area("Field Visit / Expert Diagnostic Notes", placeholder="e.g. Visited plot. Confirmed leaf blight symptoms. Prescribed recommended fungicide.")
-                action = st.text_input("Prescribed Action / Treatment", placeholder="e.g. Apply Mancozeb 75% WP @ 2.5g/L; reassess in 7 days")
+                notes = st.text_area("Field Visit Observations", placeholder="e.g. Visited plot in Karnal. Observed foliar lesions on lower canopy. Collected sample for local Krishi Vigyan Kendra.")
+                action = st.text_input("Reported Action / Immediate Cultural Advisory", placeholder="e.g. Advised farmer to improve drainage and await formal expert diagnostic review.")
+                st.caption("ℹ️ Note: Agronomic diagnosis verification and chemical treatment approvals are reserved for verified Agricultural Experts under Phase 8.")
             with col_fu2:
                 new_st = st.selectbox("Update Case Status", ["pending", "in_progress", "reviewed", "resolved"], index=1)
-                submit_fu = st.form_submit_button("📝 Record Follow-Up & Audit Note")
+                submit_fu = st.form_submit_button("📝 Record Field Visit & Observations")
 
             if submit_fu:
                 if not notes.strip():
                     st.error("Please enter observation notes before submitting.")
                 else:
                     try:
+                        is_admin_actor = (current_user.role == UserRole.ADMINISTRATOR)
                         record = orchestrator.record_case_follow_up(
                             case_id=selected_case_id,
                             officer_id=officer_id,
@@ -533,7 +539,7 @@ def _render_field_officer_dashboard(orchestrator, current_user, force_refresh: b
                             notes=notes.strip(),
                             action_taken=action.strip() if action else None,
                             new_status=new_st,
-                            is_admin=True,
+                            is_admin=is_admin_actor,
                         )
                         st.success(f"✅ Follow-up recorded! Status updated to '{new_st}'.")
                         st.rerun()
@@ -541,7 +547,8 @@ def _render_field_officer_dashboard(orchestrator, current_user, force_refresh: b
                         st.error(f"Failed to record follow up: {e}")
 
         # Historical Follow-up Audit Trail
-        history = orchestrator.list_case_follow_ups(selected_case_id, officer_id=officer_id, is_admin=True)
+        is_admin_actor = (current_user.role == UserRole.ADMINISTRATOR)
+        history = orchestrator.list_case_follow_ups(selected_case_id, officer_id=officer_id, is_admin=is_admin_actor)
         if history:
             st.markdown("##### 📜 Chronological Follow-Up Audit Log")
             for h in history:
@@ -567,8 +574,12 @@ def _render_field_officer_dashboard(orchestrator, current_user, force_refresh: b
 
 def _render_administrator_dashboard(orchestrator, current_user, force_refresh: bool) -> None:
     """Render platform health, integration telemetry, and administrative governance interface."""
-    admin_id = current_user.user_id if current_user else "adm_system"
-    admin_name = current_user.username if current_user else "System Administrator"
+    if not current_user or current_user.role != UserRole.ADMINISTRATOR:
+        st.error("⛔ Access Forbidden: Platform Administrator credentials required.")
+        return
+
+    admin_id = current_user.user_id
+    admin_name = current_user.username
 
     overview: AdminDashboardOverview = orchestrator.get_platform_admin_dashboard(
         admin_id=admin_id,

@@ -214,3 +214,4 @@ class AdminDashboardOverview(BaseModel):
     security_events_count: int = 0
     system_alerts: List[InsightItem] = Field(default_factory=list)
     data_freshness: str = "Live Operational Telemetry"
+

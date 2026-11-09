@@ -48,3 +48,4 @@ class AnalyticsCache:
         """Flush the entire cache."""
         with self._lock:
             self._store.clear()
+

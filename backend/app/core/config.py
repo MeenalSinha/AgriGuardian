@@ -1,6 +1,7 @@
 """Centralized application and integration configuration for AgriGuardian."""
 
 import os
+import secrets
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -184,7 +185,10 @@ class Settings(BaseSettings):
     enam_api_key: Optional[str] = Field(default=None, description="Institutional e-NAM APMC API Key")
 
     # --- Phase 6: Farmer Authentication & Security Settings ---
-    jwt_secret_key: str = "agri-guardian-secure-phase6-secret-key-3848201"
+    jwt_secret_key: str = Field(
+        default_factory=lambda: os.getenv("JWT_SECRET_KEY") or secrets.token_hex(32),
+        description="Cryptographic HMAC signing key for JWT session tokens (loaded from JWT_SECRET_KEY or generated dynamically)",
+    )
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440  # 24 hours
     farm_db_path: str = "data/farm_guardian.db"

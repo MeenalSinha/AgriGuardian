@@ -69,6 +69,26 @@ from backend.app.schemas.analytics import (
     OfficerTerritoryAssignRequest,
     OfficerTerritoryScope,
 )
+from backend.app.schemas.expert import (
+    CaseDossier,
+    CaseReviewStatus,
+    ExpertAccountStatus,
+    ExpertCredentialCreate,
+    ExpertCredentialRecord,
+    ExpertDecisionSubmission,
+    ExpertProfile,
+    ExpertProfileCreate,
+    ExpertProfileUpdate,
+    ExpertProvisionRequest,
+    ExpertReviewComment,
+    ExpertSpecializationDomain,
+    ExpertSpecializationItem,
+    ExpertVerificationAction,
+    FarmerVerificationBadgeInfo,
+    KnowledgeImprovementProposal,
+    ReviewPriority,
+    SecondaryReviewSubmission,
+)
 from backend.app.services.analytics.metric_definitions import METRIC_CATALOG
 from backend.app.services.auth.auth_service import AuthService, AuthenticationError
 from backend.app.services.farm.crop_calendar_service import CropCalendarService
@@ -1392,6 +1412,345 @@ def get_my_officer_territory(
 ):
     """Retrieve geographic territory assigned to current field officer."""
     return system.analytics_orchestrator.get_officer_territory(user.user_id)
+
+
+# =========================================================================
+# PHASE 8: AGRICULTURAL EXPERT VERIFICATION & HUMAN-IN-THE-LOOP ENDPOINTS
+# =========================================================================
+
+class ReviewCommentCreate(BaseModel):
+    content: str = Field(..., min_length=1)
+
+
+class ProposalStatusUpdate(BaseModel):
+    status: str = Field(..., min_length=3)
+
+
+@app.get("/api/v1/experts/me", response_model=ExpertProfile, tags=["Agricultural Expert Verification"])
+def get_my_expert_profile(
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST])),
+):
+    """Retrieve verified profile and specializations for logged-in agronomist."""
+    profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Expert profile not found for this account.",
+        )
+    return profile
+
+
+@app.put("/api/v1/experts/me", response_model=ExpertProfile, tags=["Agricultural Expert Verification"])
+def update_my_expert_profile(
+    req: ExpertProfileUpdate,
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST])),
+):
+    """Update profile attributes and agricultural specializations."""
+    profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expert profile not found.")
+    
+    updated = system.farm_context.repo.update_expert_profile(
+        expert_id=profile.expert_id,
+        updates=req.model_dump(exclude_unset=True),
+    )
+    return updated or profile
+
+
+@app.post("/api/v1/experts/me/credentials", response_model=ExpertCredentialRecord, status_code=status.HTTP_201_CREATED, tags=["Agricultural Expert Verification"])
+def add_my_credential(
+    req: ExpertCredentialCreate,
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST])),
+):
+    """Attach an academic degree, ICAR certification, or government accreditation."""
+    profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expert profile not found.")
+
+    import uuid
+    cred = ExpertCredentialRecord(
+        credential_id=f"crd_{uuid.uuid4().hex[:12]}",
+        expert_id=profile.expert_id,
+        institution_name=req.institution_name,
+        degree_or_certification=req.degree_or_certification,
+        registration_number=req.registration_number,
+        document_url=req.document_url,
+        issued_date=req.issued_date,
+        expiry_date=req.expiry_date,
+        is_verified=False,
+    )
+    return system.farm_context.repo.add_expert_credential(cred)
+
+
+@app.get("/api/v1/experts/me/credentials", response_model=List[ExpertCredentialRecord], tags=["Agricultural Expert Verification"])
+def get_my_credentials(
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST])),
+):
+    """List all credentials associated with the authenticated agronomist."""
+    profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expert profile not found.")
+    return system.farm_context.repo.get_expert_credentials(profile.expert_id)
+
+
+@app.post("/api/v1/admin/experts/provision", response_model=ExpertProfile, status_code=status.HTTP_201_CREATED, tags=["Admin & Expert Governance"])
+def admin_provision_expert(
+    req: ExpertProvisionRequest,
+    admin: UserRecord = Depends(require_roles([UserRole.ADMINISTRATOR])),
+):
+    """Administrative provisioning of accredited Agricultural Expert accounts."""
+    import uuid
+    # Provision privileged user account
+    user, _ = auth_service.provision_privileged_user(
+        username=req.username,
+        password=req.password,
+        role=UserRole.AGRONOMIST,
+    )
+    
+    expert_id = f"exp_{uuid.uuid4().hex[:12]}"
+    domains = []
+    for d in req.domains:
+        try:
+            domains.append(ExpertSpecializationDomain(d))
+        except Exception:
+            pass
+    if not domains:
+        domains = [ExpertSpecializationDomain.GENERAL_AGRONOMY]
+
+    specializations = ExpertSpecializationItem(
+        crop_types=req.crop_types or ["Wheat", "Rice", "Tomato", "Potato"],
+        domains=domains,
+        states=req.states or ["Haryana", "Punjab", "Uttar Pradesh"],
+        languages=req.languages,
+    )
+
+    now_str = datetime.now().isoformat()
+    credentials = []
+    if req.initial_credential_institution and req.initial_credential_reg_num:
+        cred = ExpertCredentialRecord(
+            credential_id=f"crd_{uuid.uuid4().hex[:12]}",
+            expert_id=expert_id,
+            institution_name=req.initial_credential_institution,
+            degree_or_certification=req.initial_credential_degree or "M.Sc. Plant Pathology",
+            registration_number=req.initial_credential_reg_num,
+            is_verified=True,
+            verified_by_admin=admin.user_id,
+            verified_at=now_str,
+        )
+        credentials.append(cred)
+
+    profile = ExpertProfile(
+        expert_id=expert_id,
+        user_id=user.user_id,
+        full_name=req.full_name,
+        email=req.email,
+        phone_number=req.phone_number,
+        institution=req.institution,
+        designation=req.designation,
+        experience_years=req.experience_years,
+        specializations=specializations,
+        credentials=credentials,
+        verification_status=ExpertAccountStatus.ACTIVE_VERIFIED,
+        verified_by_admin_id=admin.user_id,
+        verified_at=now_str,
+        created_at=now_str,
+        updated_at=now_str,
+    )
+
+    created = system.farm_context.repo.create_expert_profile(profile)
+    logger.info(f"Admin '{admin.username}' provisioned verified expert '{req.full_name}' ({expert_id})")
+    return created
+
+
+@app.get("/api/v1/admin/experts", response_model=List[ExpertProfile], tags=["Admin & Expert Governance"])
+def list_experts(
+    status: Optional[str] = None,
+    admin: UserRecord = Depends(require_roles([UserRole.ADMINISTRATOR])),
+):
+    """List all registered agricultural experts with optional status filter."""
+    return system.farm_context.repo.list_expert_profiles(status=status)
+
+
+@app.put("/api/v1/admin/experts/{expert_id}/verify", tags=["Admin & Expert Governance"])
+def admin_verify_expert(
+    expert_id: str,
+    action: ExpertVerificationAction,
+    admin: UserRecord = Depends(require_roles([UserRole.ADMINISTRATOR])),
+):
+    """Admin action to verify, reject, or suspend an expert."""
+    success = system.farm_context.repo.verify_expert(
+        expert_id=expert_id,
+        admin_id=admin.user_id,
+        status=action.action,
+        rejection_reason=action.rejection_reason,
+    )
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expert profile not found.")
+    return {"message": f"Expert '{expert_id}' status updated to '{action.action.value}'."}
+
+
+@app.get("/api/v1/experts/reviews", response_model=List[Dict[str, Any]], tags=["Agricultural Expert Verification"])
+def list_review_cases(
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST, UserRole.ADMINISTRATOR])),
+):
+    """Query review cases in the expert queue."""
+    expert_id = None
+    if user.role == UserRole.AGRONOMIST and status != "queued":
+        profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+        if profile:
+            expert_id = profile.expert_id
+    return system.farm_context.repo.list_review_cases(status=status, priority=priority, expert_id=expert_id)
+
+
+@app.get("/api/v1/experts/reviews/{review_id}", response_model=Dict[str, Any], tags=["Agricultural Expert Verification"])
+def get_review_case_details(
+    review_id: str,
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST, UserRole.ADMINISTRATOR])),
+):
+    """Retrieve metadata and lifecycle status for a review case."""
+    rev = system.farm_context.repo.get_review_case(review_id)
+    if not rev:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review case not found.")
+    return rev
+
+
+@app.get("/api/v1/experts/cases/{case_id}/dossier", response_model=CaseDossier, tags=["Agricultural Expert Verification"])
+def get_case_dossier(
+    case_id: str,
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST, UserRole.ADMINISTRATOR, UserRole.FIELD_OFFICER])),
+):
+    """Assemble complete agricultural case dossier for expert review."""
+    try:
+        return system.expert_review_service.build_case_dossier(case_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@app.post("/api/v1/experts/reviews/{review_id}/claim", tags=["Agricultural Expert Verification"])
+def claim_case(
+    review_id: str,
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST])),
+):
+    """Claim an unassigned queued case for review."""
+    profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expert profile not found.")
+    try:
+        claimed = system.expert_review_service.claim_case(review_id, profile.expert_id)
+        if not claimed:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not claim case (already claimed or inactive).")
+        return {"message": "Case successfully claimed.", "expert_id": profile.expert_id}
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+@app.post("/api/v1/experts/reviews/decision", tags=["Agricultural Expert Verification"])
+def submit_expert_decision(
+    req: ExpertDecisionSubmission,
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST])),
+):
+    """Submit diagnosis assessment and versioned treatment recommendation."""
+    profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expert profile not found.")
+    try:
+        return system.expert_review_service.submit_expert_decision(req, profile.expert_id)
+    except (ValueError, PermissionError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.post("/api/v1/experts/reviews/secondary-review", tags=["Agricultural Expert Verification"])
+def submit_secondary_review(
+    req: SecondaryReviewSubmission,
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST])),
+):
+    """Submit secondary agronomist sign-off on dual-review cases."""
+    profile = system.farm_context.repo.get_expert_profile_by_user_id(user.user_id)
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expert profile not found.")
+    try:
+        return system.expert_review_service.submit_secondary_review(req, profile.expert_id)
+    except (ValueError, PermissionError) as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get("/api/v1/experts/reviews/{review_id}/versions", tags=["Agricultural Expert Verification"])
+def list_recommendation_versions(
+    review_id: str,
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST, UserRole.ADMINISTRATOR])),
+):
+    """List immutable recommendation versions for a case audit trail."""
+    return system.farm_context.repo.list_recommendation_versions(review_id)
+
+
+@app.post("/api/v1/experts/reviews/{review_id}/comments", tags=["Agricultural Expert Verification"])
+def add_review_comment(
+    review_id: str,
+    req: ReviewCommentCreate,
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST, UserRole.ADMINISTRATOR, UserRole.FIELD_OFFICER])),
+):
+    """Add a collaboration comment to the review timeline."""
+    import uuid
+    comment = ExpertReviewComment(
+        comment_id=f"cmt_{uuid.uuid4().hex[:12]}",
+        review_id=review_id,
+        author_id=user.user_id,
+        author_name=user.username,
+        author_role=user.role.value,
+        content=req.content,
+    )
+    system.farm_context.repo.add_review_comment(comment)
+    return {"message": "Comment added successfully."}
+
+
+@app.get("/api/v1/experts/reviews/{review_id}/comments", response_model=List[ExpertReviewComment], tags=["Agricultural Expert Verification"])
+def list_review_comments(
+    review_id: str,
+    user: UserRecord = Depends(require_roles([UserRole.AGRONOMIST, UserRole.ADMINISTRATOR, UserRole.FIELD_OFFICER])),
+):
+    """List chronological collaboration comments for a case."""
+    return system.farm_context.repo.list_review_comments(review_id)
+
+
+@app.get("/api/v1/farmer/cases/{case_id}/badge", response_model=FarmerVerificationBadgeInfo, tags=["Agricultural Expert Verification"])
+def get_farmer_verification_badge(
+    case_id: str,
+    user: UserRecord = Depends(require_roles([UserRole.FARMER, UserRole.FIELD_OFFICER, UserRole.AGRONOMIST, UserRole.ADMINISTRATOR])),
+):
+    """Retrieve farmer verification badge, accredited provenance, and audio scripts."""
+    try:
+        return system.expert_review_service.get_farmer_verification_badge(case_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@app.get("/api/v1/admin/proposals", response_model=List[KnowledgeImprovementProposal], tags=["Admin & Expert Governance"])
+def list_knowledge_proposals(
+    status: Optional[str] = None,
+    admin: UserRecord = Depends(require_roles([UserRole.ADMINISTRATOR])),
+):
+    """List knowledge improvement proposals generated from expert overrides."""
+    return system.farm_context.repo.list_knowledge_proposals(status=status)
+
+
+@app.put("/api/v1/admin/proposals/{proposal_id}", tags=["Admin & Expert Governance"])
+def update_knowledge_proposal_status(
+    proposal_id: str,
+    req: ProposalStatusUpdate,
+    admin: UserRecord = Depends(require_roles([UserRole.ADMINISTRATOR])),
+):
+    """Admin action to approve, integrate, or reject a knowledge improvement proposal."""
+    success = system.farm_context.repo.update_knowledge_proposal_status(
+        proposal_id=proposal_id,
+        status=req.status,
+        admin_id=admin.user_id,
+    )
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proposal not found.")
+    return {"message": f"Proposal '{proposal_id}' status updated to '{req.status}'."}
+
 
 
 

@@ -91,3 +91,9 @@ def ui_status_badge(status: str) -> str:
     bg, fg = color_map.get(status, ("#F5F5F5", "#666666"))
     return f"<span style='background-color:{bg}; color:{fg}; padding:2px 8px; border-radius:12px; font-size:0.8rem; font-weight:600;'>{status}</span>"
 
+
+def ui_badge(text: str, color: str = "#2E7D32", bg_color: str = "#E8F5E9") -> str:
+    """Return colored HTML inline badge."""
+    return f"<span style='background-color:{bg_color}; color:{color}; padding:2px 8px; border-radius:12px; font-size:0.8rem; font-weight:600;'>{text}</span>"
+
+

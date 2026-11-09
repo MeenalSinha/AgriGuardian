@@ -20,6 +20,7 @@ from frontend.components.ui_widgets import ui_divider
 from frontend.views.about_view import render_about_view
 from frontend.views.dashboard_view import render_dashboard_view
 from frontend.views.demo_cases_view import render_demo_cases_view
+from frontend.views.disease_diagnosis_view import render_disease_diagnosis_view
 from frontend.views.home_view import render_home_view
 from frontend.views.voice_assistant_view import render_voice_assistant_view
 
@@ -86,6 +87,7 @@ with st.sidebar:
         "Navigation",
         [
             "🎙️ Voice Assistant",
+            "🔬 Crop Disease Diagnosis",
             "🏠 Farm Advisory",
             "📊 Dashboard",
             "👨‍🌾 Demo Cases",
@@ -102,6 +104,7 @@ with st.sidebar:
     llm_status = "🟢 Active" if settings.is_llm_configured else "🟡 Fallback Mode"
 
     st.markdown(f"**Gnani AI (STT/TTS):** {gnani_status}")
+    st.markdown("**Crop Vision (PyTorch):** 🟢 Active (MobileNetV3)")
     st.markdown(f"**LLM Reasoning:** {llm_status}")
     st.markdown("**Weather (Open-Meteo):** 🟢 Active")
     st.markdown("**Mandi Intelligence:** 🟢 Active")
@@ -132,6 +135,8 @@ with st.sidebar:
 
 if page == "🎙️ Voice Assistant":
     render_voice_assistant_view()
+elif page == "🔬 Crop Disease Diagnosis":
+    render_disease_diagnosis_view()
 elif page == "🏠 Farm Advisory":
     render_home_view()
 elif page == "📊 Dashboard":

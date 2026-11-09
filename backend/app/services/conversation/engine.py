@@ -79,6 +79,7 @@ class ConversationEngine:
         user_query: str,
         input_type: str = "voice",
         original_transcript: Optional[str] = None,
+        image_path: Optional[str] = None,
         crop: Optional[str] = None,
         location: Optional[str] = None,
         lat: Optional[float] = None,
@@ -92,6 +93,7 @@ class ConversationEngine:
             user_query: Confirmed farmer question text.
             input_type: 'voice' or 'text'.
             original_transcript: Pre-edited transcript (if voice input).
+            image_path: Optional path to uploaded or captured crop photograph.
             crop: Mentioned crop name (e.g. 'Tomato').
             location: Mentioned location (e.g. 'Meerut').
             lat: Farm latitude.
@@ -104,22 +106,57 @@ class ConversationEngine:
         turn_id = str(uuid.uuid4())
         lang = session.language or self.settings.gnani_timbre_default_language
         intent = self.classify_intent(user_query)
+        if image_path:
+            intent = "disease"
 
-        effective_crop = crop or session.crop or "Crop"
+        effective_crop = crop or session.crop or "Tomato"
         effective_location = location or session.location or self.settings.default_location_name
 
-        logger.info(f"Processing turn #{len(session.turns) + 1} for session {session.session_id} (Intent: {intent}, Lang: {lang})")
+        logger.info(f"Processing turn #{len(session.turns) + 1} for session {session.session_id} (Intent: {intent}, Lang: {lang}, Image: {bool(image_path)})")
 
         # 1. Fetch relevant environmental context
         weather = self.system.weather_service.get_weather(lat=lat, lon=lon, location_name=effective_location)
         market = self.system.market_service.get_market_data(crop=effective_crop)
-        rule_eval = self.system.rule_engine.evaluate(user_query, weather.model_dump())
 
-        # 2. Generate agricultural guidance using LLMAdvisor with conversation context
+        # 2. Vision Diagnosis if Image Provided
+        image_diag = None
+        effective_query = user_query
+        image_diag_dict = None
+
+        if image_path and os.path.exists(image_path):
+            try:
+                diag_result = self.system.disease_detector.diagnose(
+                    image_path=image_path,
+                    weather_context=weather.model_dump(),
+                )
+                image_diag = diag_result
+                image_diag_dict = diag_result.model_dump()
+
+                if diag_result.is_confident and not diag_result.is_uncertain:
+                    effective_query = (
+                        f"{user_query}. Visual Leaf Diagnosis: {diag_result.common_name} ({diag_result.scientific_name or ''}) "
+                        f"with {diag_result.confidence * 100:.1f}% confidence. "
+                        f"Foliage damage severity: {diag_result.severity_assessment.severity_stage} "
+                        f"({diag_result.severity_assessment.severity_score_percent}% surface area). "
+                        f"Cultural control: {' '.join(diag_result.management_guidelines.cultural_practices[:1])}. "
+                        f"Biological: {' '.join(diag_result.management_guidelines.biological_controls[:1])}. "
+                        f"Chemical precaution: {' '.join(diag_result.management_guidelines.chemical_precautions[:1])}."
+                    )
+                else:
+                    effective_query = (
+                        f"{user_query}. Visual Diagnosis: Symptoms uncertain or low confidence ({diag_result.confidence * 100:.1f}%). "
+                        f"Quality note: {diag_result.quality_assessment.farmer_advice}."
+                    )
+            except Exception as e:
+                logger.error(f"Image diagnosis in conversation turn failed: {e}", exc_info=True)
+
+        rule_eval = self.system.rule_engine.evaluate(effective_query, weather.model_dump())
+
+        # 3. Generate agricultural guidance using LLMAdvisor with conversation context
         history = session.get_conversation_history(limit=4)
         advisory = self.system.llm_advisor.generate_advisory(
             crop=effective_crop,
-            symptoms=user_query,
+            symptoms=effective_query,
             weather=weather.model_dump(),
             market=market.model_dump(),
             rule_results=rule_eval,
@@ -127,7 +164,7 @@ class ConversationEngine:
             conversation_history=history,
         )
 
-        # 3. Select response text matching farmer's preferred language
+        # 4. Select response text matching farmer's preferred language
         is_hindi = lang.startswith("hi")
         response_text = advisory.get("advisory_hi" if is_hindi else "advisory_en")
         if not response_text:
@@ -192,6 +229,7 @@ class ConversationEngine:
                 "weather": weather.summary,
                 "market": market.summary,
                 "field_visit_required": advisory.get("field_visit_required", False),
+                "image_diagnosis": image_diag_dict,
             },
         )
 

@@ -107,6 +107,24 @@ def render_voice_assistant_view() -> None:
     # Speech / Query Input Section
     st.markdown("### 🌾 Ask Your Question / अपना प्रश्न पूछें")
 
+    # Multimodal Leaf Image Attachment
+    with st.expander("📸 Attach Plant / Leaf Photo for Visual Diagnosis (Optional)", expanded=False):
+        uploaded_leaf = st.file_uploader(
+            "Upload leaf photograph (JPEG, PNG, WEBP):",
+            type=["jpg", "jpeg", "png", "webp"],
+            key="voice_leaf_uploader",
+        )
+        if uploaded_leaf:
+            temp_dir = settings.audio_temp_dir or tempfile.gettempdir()
+            os.makedirs(temp_dir, exist_ok=True)
+            leaf_path = os.path.join(temp_dir, f"voice_leaf_{uploaded_leaf.name}")
+            with open(leaf_path, "wb") as f:
+                f.write(uploaded_leaf.read())
+            st.session_state.voice_attached_image = leaf_path
+            st.image(leaf_path, caption="Attached Leaf Photo for Diagnosis", width=220)
+        elif "voice_attached_image" in st.session_state and not uploaded_leaf:
+            st.session_state.voice_attached_image = None
+
     input_mode = st.radio(
         "Choose Input Method:",
         ["🎙️ Record Voice", "📁 Upload Audio File", "⌨️ Type Question"],
@@ -174,6 +192,7 @@ def render_voice_assistant_view() -> None:
                         user_query=confirmed_query,
                         input_type="voice",
                         original_transcript=st.session_state.get("original_transcript"),
+                        image_path=st.session_state.get("voice_attached_image"),
                         crop=session.crop,
                         location=session.location,
                         synthesize_voice=True,
@@ -206,6 +225,7 @@ def render_voice_assistant_view() -> None:
                         session=session,
                         user_query=typed_query.strip(),
                         input_type="text",
+                        image_path=st.session_state.get("voice_attached_image"),
                         crop=session.crop,
                         location=session.location,
                         synthesize_voice=True,
@@ -283,6 +303,25 @@ def render_voice_assistant_view() -> None:
                 )
 
                 st.markdown(turn.response_text or "No response generated.")
+
+                # Image Diagnosis Card if turn included visual leaf input
+                if turn.context_used and turn.context_used.get("image_diagnosis"):
+                    img_diag = turn.context_used["image_diagnosis"]
+                    sev_info = img_diag.get("severity_assessment", {})
+                    st.markdown(
+                        f"""
+                        <div style="background-color: #F1F8E9; border: 1px solid #C5E1A5; padding: 0.8rem; border-radius: 6px; margin: 0.6rem 0;">
+                            <b>🔬 Leaf Visual Diagnosis:</b> {img_diag.get('common_name', 'Diagnosed')} 
+                            ({img_diag.get('confidence', 0) * 100:.1f}% confidence) • 
+                            <b>Severity:</b> {sev_info.get('severity_stage', 'Unknown')} ({sev_info.get('severity_score_percent', 0):.1f}% damaged area)
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    gradcam_p = img_diag.get("gradcam_image_path")
+                    if gradcam_p and os.path.exists(gradcam_p):
+                        with st.expander("🔥 View Grad-CAM Diagnostic Salience Overlay", expanded=False):
+                            st.image(gradcam_p, caption="Convolutional Attention Map", width=340)
 
                 # Audio Playback
                 if turn.audio_available and turn.audio_file_path and os.path.exists(turn.audio_file_path):

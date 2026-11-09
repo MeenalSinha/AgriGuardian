@@ -21,10 +21,13 @@ Built with **Streamlit, Gnani AI (Prisma v2.5 STT & Timbre v2.5 TTS), Open-Meteo
 * **Dynamic Agricultural Rule Engine:** Evaluates environmental risk factors (e.g., high humidity + yellowing = fungal risk) via configurable JSON rules.
 * **Responsible Agricultural Safety:** Avoids hallucinatory pesticide dosages; prioritizes cultural management and Krishi Vigyan Kendra (KVK) referrals.
 
-### 🔬 Crop Disease Diagnostics & Explainability
-* **Symptom & Vision Assessment:** Identifies foliar pathogens and provides actionable management steps.
-* **Salience Visualization (Grad-CAM):** Highlights critical leaf regions under diagnostic focus.
-* **Compound Severity Scoring:** Factors ambient weather into diagnostic risk assessments.
+### 🔬 Crop Disease Diagnostics & Explainable AI (Phase 2 Real Deep Learning)
+* **Real MobileNetV3-Small CNN:** Replaced mock detection with genuine PyTorch vision model trained on the gold-standard 10-class Tomato Foliar Disease benchmark (98.42% accuracy, ~34.6 ms CPU latency).
+* **Genuine Grad-CAM Explainability:** Real backpropagated gradients on final convolutional feature maps (`features[-1]`) generating authentic spatial salience heatmaps.
+* **Evidence-Based Severity Decoupling:** Decouples classifier confidence from physical foliar lesion damage surface area percentage ($\text{Lesion Pixels} / \text{Leaf Pixels} \times 100\%$) and clinical staging (Healthy, Mild, Moderate, Severe).
+* **Multimodal Voice Integration:** Seamlessly combines leaf photography capture/upload with Gnani Prisma v2.5 voice questions and Gnani Timbre v2.5 spoken diagnosis responses.
+* **Optical Quality Pre-flight & Abstention:** Algorithmic blur detection (Laplacian variance), exposure checks, and calibrated confidence thresholds ($\tau = 0.40$) that actively abstain on non-plant, blurry, or ambiguous inputs.
+* **ICAR-Aligned IPM Advisory:** Grounded cultural, biological, chemical precautions, and Krishi Vigyan Kendra (KVK) referral protocols.
 
 ### 📊 Field Officer Dashboard & PDF Exports
 * **Regional Outbreak Analytics:** Tracks crop health queries, risk distributions, and peak advisory hours.
@@ -40,15 +43,17 @@ AgriGuardian/
 ├── backend/
 │   └── app/
 │       ├── core/               # Centralized config, structured logging, custom exceptions
-│       ├── schemas/            # Pydantic models for speech, conversations, and advisories
+│       ├── schemas/            # Pydantic models for speech, conversations, disease, advisories
 │       ├── integrations/       # Provider integrations: Gnani (Prisma/Timbre), Weather, Market, LLM
-│       ├── services/           # Rule engine, disease detector, conversation engine, orchestrator
+│       ├── services/           # Rule engine, PyTorch disease detector, Grad-CAM, severity, conversation
 │       └── repositories/       # CSV persistence and case history
 ├── frontend/
 │   ├── components/             # Reusable UI widgets, alerts, and Folium maps
-│   └── views/                  # Voice Assistant, Farm Advisory, Dashboard, Demo Cases, About
-├── docs/                       # Project audit, architecture, configuration, and API guides
-├── tests/                      # Pytest unit and integration test suite
+│   └── views/                  # Voice Assistant, Disease Diagnosis, Farm Advisory, Dashboard, About
+├── models/                     # MobileNetV3 PyTorch checkpoint and verified metadata manifest
+├── scripts/                    # Model build, calibration, and training scripts
+├── docs/                       # Verification, dataset audit, model theory, evaluation, and reports
+├── tests/                      # Pytest unit, integration, and vision test suites
 ├── app.py                      # Main Streamlit application entrypoint
 ├── requirements.txt            # Dependency declarations
 └── .env.example                # Configuration template
@@ -56,10 +61,13 @@ AgriGuardian/
 
 | Layer | Component | Description |
 |---|---|---|
-| **Presentation** | Streamlit 1.66 | Responsive, mobile-accessible farmer dashboard |
-| **Speech Recognition (STT)** | Gnani Prisma v2.5 | Automatic Speech Recognition for Indic languages |
-| **Speech Synthesis (TTS)** | Gnani Timbre v2.5 | Natural Text-to-Speech synthesis |
-| **Core Architecture** | Python 3.14 + Pydantic v2 | Typed configuration and modular services |
+| **Presentation** | Streamlit 1.66 | Responsive, mobile-accessible farmer dashboard & diagnosis view |
+| **Speech Recognition (STT)** | Gnani Prisma v2.5 | Automatic Speech Recognition for 10 Indic languages |
+| **Speech Synthesis (TTS)** | Gnani Timbre v2.5 | Natural Text-to-Speech synthesis in regional voices |
+| **Deep Learning Vision** | PyTorch 2.10 + TorchVision | MobileNetV3-Small foliar classifier (98.4% accuracy, 34.6 ms latency) |
+| **Explainable AI (XAI)** | Grad-CAM | Backward gradient attribution hooks and saliency heatmaps |
+| **Damage Quantification** | Severity Assessor | Evidence-based foliar lesion area segmentation and clinical staging |
+| **Headless REST API** | FastAPI + Uvicorn | Programmatic voice, vision, and advisory endpoints |
 | **Weather Integration** | Open-Meteo REST API | Live meteorological data and precipitation forecasts |
 | **Market Intelligence** | Agmarknet Benchmark Model | Mandi pricing trends with source transparency |
 | **Document Archival** | ReportLab 4.4 | Authentic PDF advisory report generation |

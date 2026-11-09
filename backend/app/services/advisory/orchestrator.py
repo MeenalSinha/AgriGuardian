@@ -68,11 +68,15 @@ class AgriGuardianSystem:
 
         if image_path:
             t0 = time.time()
-            image_analysis = self.disease_detector.predict(image_path, confidence_threshold)
+            image_analysis = self.disease_detector.predict(
+                image_path,
+                confidence_threshold=confidence_threshold,
+                weather_context=weather.model_dump(),
+            )
             timing["image_ml"] = time.time() - t0
 
-            if image_analysis.get("disease") != "Unable to detect":
-                effective_symptoms = f"{symptoms}. Image analysis reveals: {image_analysis['disease']}"
+            if image_analysis.get("disease") not in ("Unable to detect", "Invalid or Unreadable Image", "Uncertain / Unrecognized Foliar Symptom"):
+                effective_symptoms = f"{symptoms}. Image analysis reveals: {image_analysis['disease']} (Severity: {image_analysis.get('severity', 'Unknown')})"
                 severity_explanation = self.disease_detector.calculate_severity(
                     image_analysis["disease"],
                     image_analysis["confidence"],

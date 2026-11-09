@@ -17,12 +17,14 @@ from backend.app.core.logging import get_logger, setup_logging
 from backend.app.integrations.gnani.audio_utils import save_temporary_audio
 from backend.app.schemas.advisory import AdvisoryResult
 from backend.app.schemas.conversation import ConversationSession, ConversationTurn
+from backend.app.schemas.disease import DiagnosisResult
 from backend.app.schemas.speech import (
     SpeechSynthesisRequest,
     SpeechSynthesisResult,
     TranscriptionResult,
 )
 from backend.app.services.advisory.orchestrator import AgriGuardianSystem
+from backend.app.services.agriculture.disease_detector import PlantDiseaseDetector
 from backend.app.services.agriculture.knowledge_service import KnowledgeService
 from backend.app.services.conversation.engine import ConversationEngine
 
@@ -67,10 +69,11 @@ class ConversationTurnRequest(BaseModel):
     session_id: Optional[str] = None
     farmer_name: str = "Farmer"
     user_query: str
-    crop: Optional[str] = "Wheat"
+    crop: Optional[str] = "Tomato"
     location: Optional[str] = "Delhi, India"
     language_code: str = "hi-IN"
     input_type: str = "text"
+    image_path: Optional[str] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
     synthesize_voice: bool = True
@@ -189,6 +192,7 @@ def process_conversation_turn(req: ConversationTurnRequest):
         session=session,
         user_query=req.user_query,
         input_type=req.input_type,
+        image_path=req.image_path,
         crop=req.crop,
         location=req.location,
         lat=req.lat,
@@ -242,3 +246,43 @@ def get_crop_knowledge(crop: str):
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No profile found for crop: {crop}")
     return profile
+
+
+@app.get("/api/v1/disease/classes", tags=["Disease Intelligence"])
+def get_disease_classes():
+    """Retrieve list of supported crop disease classes with agronomic taxonomy."""
+    manifest = system.disease_detector.manifest
+    return {
+        "classes": manifest.get("classes", []),
+        "total_classes": len(manifest.get("classes", [])),
+        "target_crop": "Tomato (Solanum lycopersicum)",
+    }
+
+
+@app.get("/api/v1/disease/model-info", tags=["Disease Intelligence"])
+def get_model_info():
+    """Retrieve diagnostic vision model metadata, checksum, and evaluation metrics."""
+    return system.disease_detector.manifest
+
+
+@app.post("/api/v1/disease/diagnose", response_model=DiagnosisResult, tags=["Disease Intelligence"])
+async def diagnose_disease(
+    image_file: UploadFile = File(...),
+    confidence_threshold: Optional[float] = Form(None),
+):
+    """Diagnose crop disease from uploaded leaf photo with genuine Grad-CAM and severity."""
+    try:
+        content = await image_file.read()
+        ext = os.path.splitext(image_file.filename or "leaf.jpg")[1] or ".jpg"
+        temp_img_path = save_temporary_audio(content, prefix="leaf_diag", ext=ext)
+
+        result = system.disease_detector.diagnose(
+            image_path=temp_img_path,
+            confidence_threshold=confidence_threshold,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"API diagnosis error: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+

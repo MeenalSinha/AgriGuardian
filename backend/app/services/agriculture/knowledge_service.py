@@ -72,3 +72,4 @@ class KnowledgeService:
             "matched_disease": matched_disease,
             "irrigation_stages": matched_irrigation,
         }
+

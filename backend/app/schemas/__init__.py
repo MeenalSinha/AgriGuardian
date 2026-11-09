@@ -15,6 +15,14 @@ from backend.app.schemas.advisory import (
     ImageAnalysisResult,
     AdvisoryResult,
 )
+from backend.app.schemas.disease import (
+    ImageValidationResult,
+    QualityAssessmentResult,
+    ClassPrediction,
+    SeverityAssessmentResult,
+    ManagementGuidelines,
+    DiagnosisResult,
+)
 
 __all__ = [
     "AudioValidationResult",
@@ -29,5 +37,11 @@ __all__ = [
     "RuleEvaluationResult",
     "ImageAnalysisResult",
     "AdvisoryResult",
+    "ImageValidationResult",
+    "QualityAssessmentResult",
+    "ClassPrediction",
+    "SeverityAssessmentResult",
+    "ManagementGuidelines",
+    "DiagnosisResult",
 ]
 

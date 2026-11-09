@@ -30,13 +30,29 @@ Built with **Streamlit, Gnani AI (Prisma v2.5 STT & Timbre v2.5 TTS), Open-Meteo
 * **ICAR-Aligned IPM Advisory:** Grounded cultural, biological, chemical precautions, and Krishi Vigyan Kendra (KVK) referral protocols.
 
 ### 📚 Evidence-Grounded Knowledge Base & Recommendation Engine (Phase 3)
-* **Authoritative Source Registry:** Registered statutory Tier-1 (ICAR, CIBRC, IMD) and Tier-2 (TNAU) publications with cryptographic SHA-256 integrity digests.
+* **Authoritative Source Registry:** Registered statutory Tier-1 (ICAR, CIBRC, IMD) and Tier-2 (TNAU) publications with cryptographic SHA-256 integrity digests computed from on-disk source text bytes.
 * **Atomic Knowledge Graph & Traceable Excerpts:** Stores verified atomic facts paired with verbatim source excerpts, page/section citations, and lifecycle tracking.
 * **Hybrid Lexical BM25 Retrieval:** In-memory search ranking candidate facts with multilingual Indic synonym expansion (Hindi, Hinglish, English) and authority weighting.
 * **Context Applicability & Conflict Arbitration:** Dynamic evaluation of crop growth stage, days after sowing (DAS), weather factors, and authority tier hierarchy (Tier-1 > Tier-2 > Tier-3).
 * **Agricultural Safety Guardrails:** Defenses against prompt injection, automatic query blocking of banned lethal agrochemicals (Monocrotophos, Endosulfan, Paraquat), and automatic downgrading of unconfirmed chemical advice to local Krishi Vigyan Kendra (KVK) referrals.
 * **Grounded LLM Advisory:** Strict grounding prompts preventing fabricated dosages, with deterministic fallback generating citations directly from retrieved facts.
 * **Interactive Knowledge Admin View:** Dedicated Streamlit governance console for inspecting sources, facts, safety rules, and testing retrieval queries.
+
+### 🌦️ Intelligent Weather Monitoring & Crop Climate Risk Assessment (Phase 4)
+* **Standardized Agro-Meteorological Ingestion:** Upgraded Open-Meteo pipeline ingesting real-time ambient conditions, 24-72h hourly forecasts, 7-14 day daily forecasts, and FAO-56 reference evapotranspiration ($\text{ET}_0$).
+* **Spatial Grid Discretization Caching:** In-memory `WeatherCache` snapping farm coordinates to a $0.05^\circ \approx 5.5\text{ km}$ grid with 30-min forecast TTL and 24-hour reanalysis TTL, reducing API requests by >90% while respecting local microclimates.
+* **Evidence-Grounded Risk Engine:** Evaluates crop-specific physiological thresholds strictly tied to Phase 3 scientific facts:
+  * **Tomato Heat Stress:** $T_{\max} \ge 35^\circ\text{C}$ causing flower drop and pollen sterility (`FCT-TOM-HEAT-STRESS-01`).
+  * **Wheat Terminal Heat:** $T_{\max} \ge 30^\circ\text{C}$ during milking/grain filling forcing premature ripening (`FCT-WHEAT-TERM-HEAT-01`).
+  * **Tomato Chilling & Frost:** $T_{\min} \le 10^\circ\text{C}$ (chilling injury) and $T_{\min} \le 2.0^\circ\text{C}$ (radiation ground frost) enforcing mulch/smoke protection (`FCT-TOM-CHILL-FROST-01`).
+  * **Heavy Rain & Waterlogging:** Daily precipitation $\ge 25\text{ mm}$ enforcing field drainage within 12-24h and strictly **prohibiting foliar sprays and urea top-dressing** (`FCT-GEN-DRAIN-RAIN-01`).
+  * **Dry-Spell & Drought Stress:** $\ge 7$ consecutive rainless days with elevated $\text{ET}_0$ triggering protective irrigation (`FCT-GEN-DRYSPELL-IMD-01`).
+  * **Disease-Conducive Microclimate:** Favorable moisture/thermal windows (Late Blight 15-22°C + RH>80%; Yellow Rust 10-15°C + dew), strictly labeled as **environmental risk forecasts, NOT disease diagnosis**.
+  * **High Wind & Lodging:** Sustained winds $\ge 35\text{ km/h}$ enforcing **mandatory irrigation suspension** to prevent cereal stem lodging (`FCT-WHEAT-LODGE-WIND-01`).
+* **5-Year ERA5 Modeled Reanalysis Baselines:** Calculates temperature departures ($\Delta T$), cumulative rainfall departure %, and consecutive dry days against historical climatological normals.
+* **In-App WeatherAlert Lifecycle:** Deterministic lifecycle manager (`NEW`, `ACTIVE`, `UPDATED`, `EXPIRED`, `RESOLVED`, `DISMISSED`) with alert deduplication and farmer acknowledgment.
+* **Privacy-First Location Architecture:** Curated district presets across 12 Indian states, interactive map pin selection, and transparent spatial accuracy labels with explicit GPS consent.
+* **Interactive Weather Dashboard View:** Visual Streamlit dashboard with hourly/daily forecast cards, active hazard banners, ERA5 anomaly gauges, and irrigation/spraying decision matrices.
 
 ### 📊 Field Officer Dashboard & PDF Exports
 * **Regional Outbreak Analytics:** Tracks crop health queries, risk distributions, and peak advisory hours.
@@ -132,6 +148,9 @@ python -m pytest tests/integration/test_gnani_live.py -v
 ---
 
 ## 📚 Documentation Links
+* [Phase 4 Final Engineering Report (`docs/PHASE_4_FINAL_REPORT.md`)](file:///docs/PHASE_4_FINAL_REPORT.md)
+* [Weather Risk Evaluation & Calibration Report (`docs/WEATHER_RISK_EVALUATION.md`)](file:///docs/WEATHER_RISK_EVALUATION.md)
+* [Phase 3 Verification & Remediation Audit (`docs/PHASE_3_VERIFICATION.md`)](file:///docs/PHASE_3_VERIFICATION.md)
 * [Phase 3 Final Engineering Report (`docs/PHASE_3_FINAL_REPORT.md`)](file:///docs/PHASE_3_FINAL_REPORT.md)
 * [Knowledge Architecture Specification (`docs/KNOWLEDGE_ARCHITECTURE.md`)](file:///docs/KNOWLEDGE_ARCHITECTURE.md)
 * [Authoritative Source Registry (`docs/SOURCE_REGISTRY.md`)](file:///docs/SOURCE_REGISTRY.md)

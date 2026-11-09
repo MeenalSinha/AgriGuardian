@@ -1,7 +1,7 @@
 {
-  "version": "1.0.0",
-  "last_compiled": "2026-11-09T08:29:38.642155+00:00",
-  "total_facts": 10,
+  "version": "1.1.0",
+  "last_compiled": "2026-11-09T09:30:10.341374+00:00",
+  "total_facts": 16,
   "facts": [
     {
       "fact_id": "FCT-TOM-EBLIGHT-CULT-01",
@@ -192,6 +192,73 @@
       "safety_classification": "low_risk_cultural"
     },
     {
+      "fact_id": "FCT-TOM-HEAT-STRESS-01",
+      "category": "weather_risk",
+      "subject": "tomato",
+      "predicate": "susceptible_to_weather_risk",
+      "value": "Daytime temperatures consistently exceeding 35°C during flowering and fruit setting (35-65 DAS) cause flower abortion, pollen sterility, and poor fruit set. Provide light frequent furrow or drip irrigation to cool the root zone.",
+      "conditions": {
+        "temp_celsius_gt": 35.0,
+        "crop_stage": "flowering_fruit_set"
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": []
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-TOM-005",
+          "source_id": "SRC-ICAR-TOMATO-2024",
+          "source_title": "Package of Practices for Commercial Tomato Cultivation in India",
+          "organization": "ICAR - Indian Institute of Horticultural Research (IIHR)",
+          "page": 10,
+          "section": "Agro-climatic Requirements & Temperature Sensitivity",
+          "quote_or_excerpt": "Daytime temperatures consistently exceeding 35°C (especially during flowering and fruit setting stages, 35-65 DAS) cause severe flower abortion, pollen sterility, style elongation, and poor fruit set.",
+          "confidence_score": 0.98,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "advisory_only"
+    },
+    {
+      "fact_id": "FCT-TOM-CHILL-FROST-01",
+      "category": "weather_risk",
+      "subject": "tomato",
+      "predicate": "susceptible_to_weather_risk",
+      "value": "Tomato foliage is sensitive to chilling injury when ambient night temperatures drop below 10°C, and ground frost (≤ 2°C) causes rapid foliar blackening and plant death. Use straw mulching or low agro-net tunnels for cold defense.",
+      "conditions": {
+        "temp_celsius_lt": 10.0,
+        "frost_risk": true
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": [
+          "Punjab",
+          "Haryana",
+          "Uttar Pradesh",
+          "Rajasthan",
+          "Madhya Pradesh",
+          "Himachal Pradesh"
+        ]
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-TOM-006",
+          "source_id": "SRC-ICAR-TOMATO-2024",
+          "source_title": "Package of Practices for Commercial Tomato Cultivation in India",
+          "organization": "ICAR - Indian Institute of Horticultural Research (IIHR)",
+          "page": 11,
+          "section": "Chilling & Frost Sensitivity",
+          "quote_or_excerpt": "Tomato foliage is highly tender and susceptible to chilling injury when ambient night temperatures drop below 10°C. Direct ground frost (temperatures ≤ 2°C) causes irreversible cellular freezing, leaf blackening, and plant death.",
+          "confidence_score": 0.97,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "advisory_only"
+    },
+    {
       "fact_id": "FCT-WHEAT-IRRIG-CRI-01",
       "category": "irrigation",
       "subject": "wheat",
@@ -225,6 +292,78 @@
           "section": "Water Management & Critical Growth Stages",
           "quote_or_excerpt": "If only one irrigation is available, it must be applied at Crown Root Initiation (21-25 DAS) to secure root anchoring and tiller primordia.",
           "confidence_score": 0.99,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "low_risk_cultural"
+    },
+    {
+      "fact_id": "FCT-WHEAT-TERM-HEAT-01",
+      "category": "weather_risk",
+      "subject": "wheat",
+      "predicate": "susceptible_to_weather_risk",
+      "value": "Terminal heat spikes exceeding 30-32°C during milking and grain filling stages (March-April) accelerate maturity and cause grain shrivelling. Light sprinkler or furrow irrigation during warm spells provides essential micro-climatic cooling.",
+      "conditions": {
+        "temp_celsius_gt": 30.0,
+        "crop_stage": "grain_filling"
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": [
+          "Punjab",
+          "Haryana",
+          "Uttar Pradesh",
+          "Bihar",
+          "Rajasthan",
+          "Madhya Pradesh"
+        ]
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-WHEAT-003",
+          "source_id": "SRC-ICAR-WHEAT-2023",
+          "source_title": "Wheat Production Technology & Rust Resistance Management for Indo-Gangetic Plains",
+          "organization": "ICAR - Indian Agricultural Research Institute (IARI)",
+          "page": 19,
+          "section": "Terminal Heat Stress",
+          "quote_or_excerpt": "In Northern and Central India, sudden temperature spikes during the grain filling and milking stages (March-April) exceeding 30°C to 32°C accelerate crop maturity, curtail assimilate translocation, reduce thousand-grain weight, and cause shrivelled grains.",
+          "confidence_score": 0.98,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "advisory_only"
+    },
+    {
+      "fact_id": "FCT-WHEAT-LODGE-WIND-01",
+      "category": "weather_risk",
+      "subject": "wheat",
+      "predicate": "susceptible_to_weather_risk",
+      "value": "Do not irrigate wheat fields when strong convective winds (>35-40 km/h) are forecast within 24-48 hours. Irrigating saturated soil under high winds induces severe stem and root lodging.",
+      "conditions": {
+        "wind_speed_kmh_gt": 35.0,
+        "crop_stage": "heading_to_grain_filling"
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": [
+          "Punjab",
+          "Haryana",
+          "Uttar Pradesh",
+          "Bihar"
+        ]
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-WHEAT-004",
+          "source_id": "SRC-ICAR-WHEAT-2023",
+          "source_title": "Wheat Production Technology & Rust Resistance Management for Indo-Gangetic Plains",
+          "organization": "ICAR - Indian Agricultural Research Institute (IARI)",
+          "page": 21,
+          "section": "Lodging Risk & Wind Hazards",
+          "quote_or_excerpt": "Never irrigate wheat fields when high winds or gusty rainstorms are forecast within 24-48 hours.",
+          "confidence_score": 0.97,
           "verification_status": "approved"
         }
       ],
@@ -327,6 +466,66 @@
           "section": "Post-Rain Field Remediation Protocols",
           "quote_or_excerpt": "Excess surface stagnation must be drained within 12-24 hours to prevent anoxic root damage and secondary collar rot complexes.",
           "confidence_score": 0.96,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "low_risk_cultural"
+    },
+    {
+      "fact_id": "FCT-GEN-HEATWAVE-IMD-01",
+      "category": "weather_risk",
+      "subject": "general",
+      "predicate": "susceptible_to_weather_risk",
+      "value": "Agricultural Heatwave alert is triggered when maximum temperature reaches ≥ 40°C in plains (≥ 30°C in hills) or departure is ≥ 4.5°C from normal. High night temperatures (≥ 25°C) exacerbate crop respiration loss.",
+      "conditions": {
+        "temp_celsius_gt": 40.0,
+        "temp_departure_gt": 4.5
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": []
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-IMD-003",
+          "source_id": "SRC-IMD-AGROMET-2024",
+          "source_title": "Standard Operating Procedure for Weather-Based Crop Risk Warnings",
+          "organization": "India Meteorological Department (IMD)",
+          "page": 35,
+          "section": "Heatwave & Dry Spell Criteria in Agriculture",
+          "quote_or_excerpt": "Agricultural Heatwave: Maximum temperature reaching ≥ 40°C in plains (or ≥ 30°C in hilly regions), or a departure of ≥ 4.5°C from normal maximum temperature sustained over 2 consecutive days.",
+          "confidence_score": 0.99,
+          "verification_status": "approved"
+        }
+      ],
+      "verification_status": "approved",
+      "safety_classification": "advisory_only"
+    },
+    {
+      "fact_id": "FCT-GEN-DRYSPELL-IMD-01",
+      "category": "weather_risk",
+      "subject": "general",
+      "predicate": "susceptible_to_weather_risk",
+      "value": "A dry spell is defined as 7 to 10 consecutive rainless days during active crop growth in rainfed tracts, creating acute root-zone moisture deficits and elevated reference evapotranspiration (ET0). Prioritize moisture conservation mulching.",
+      "conditions": {
+        "dry_days_gt": 7,
+        "drought_risk": true
+      },
+      "geographic_scope": {
+        "country": "India",
+        "states": []
+      },
+      "evidence": [
+        {
+          "evidence_id": "EVD-IMD-004",
+          "source_id": "SRC-IMD-AGROMET-2024",
+          "source_title": "Standard Operating Procedure for Weather-Based Crop Risk Warnings",
+          "organization": "India Meteorological Department (IMD)",
+          "page": 37,
+          "section": "Dry Spell Criteria in Rainfed Crops",
+          "quote_or_excerpt": "A period of at least 7 to 10 consecutive rainless days during the active Kharif monsoon season in rainfed tracts, creating acute root-zone soil moisture deficits and accelerating reference evapotranspiration (ET0).",
+          "confidence_score": 0.98,
           "verification_status": "approved"
         }
       ],

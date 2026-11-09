@@ -71,3 +71,4 @@ class PersonalizedRecommendation(BaseModel):
     knowledge_manifest_version: str = Field("3.0.0", description="Version of knowledge base utilized")
     response_language: str = Field("hi-IN", description="Language of generated guidance")
     generated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+

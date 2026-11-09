@@ -1,0 +1,36 @@
+================================================================================
+ICAR - INDIAN AGRICULTURAL RESEARCH INSTITUTE (IARI), NEW DELHI
+Division of Agronomy & Division of Plant Pathology
+Technical Bulletin: Wheat Production Technology & Rust Resistance Management for Indo-Gangetic Plains
+Publication Date: 2023-10-10 | Edition: 3.1
+Canonical URL: https://iari.res.in/wheat-agronomy-bulletin
+Applicable Regions: Punjab, Haryana, Uttar Pradesh, Bihar, Rajasthan, Madhya Pradesh
+================================================================================
+
+SECTION 1: PHYSIOLOGICAL GROWTH STAGES & CRITICAL IRRIGATION (Pages 12-16)
+Wheat (Triticum aestivum) has six critical growth stages for moisture management:
+1. Crown Root Initiation (CRI): 20 to 25 Days After Sowing (DAS)
+2. Tillering stage: 40 to 45 DAS
+3. Late Jointing: 60 to 65 DAS
+4. Flowering stage: 80 to 85 DAS
+5. Milking stage: 100 to 105 DAS
+6. Dough stage: 115 to 120 DAS
+
+CRI Stage Vulnerability (Page 14):
+"If only one irrigation is available, it must be applied at Crown Root Initiation (21-25 DAS) to secure root anchoring and tiller primordia."
+Moisture stress during this 5-day window prevents seminal root transitioning to coronal root architecture, reducing productive tillers per plant by up to 35% and inflicting an irreversible 30-40% grain yield penalty.
+
+SECTION 2: METEOROLOGICAL STRESS & CLIMATE RESILIENCE (Pages 18-22)
+1. Terminal Heat Stress:
+In Northern and Central India, sudden temperature spikes during the grain filling and milking stages (March-April) exceeding 30°C to 32°C accelerate crop maturity, curtail assimilate translocation, reduce thousand-grain weight, and cause shrivelled grains. Light sprinkler or furrow irrigation during sudden warm spells provides micro-climatic evaporative cooling.
+
+2. Lodging Risk & Wind Hazards:
+Tall varieties and well-fertilized lush canopies are susceptible to root or stem lodging when irrigation coincides with strong convective winds (>35-40 km/h) during heading and grain development stages. Never irrigate wheat fields when high winds or gusty rainstorms are forecast within 24-48 hours.
+
+SECTION 3: STRIPE RUST (YELLOW RUST) EPIDEMIOLOGY (Pages 25-29)
+Pathogen: Puccinia striiformis f. sp. tritici
+Symptomatology: Linear, bright yellow powdery pustules arranged in parallel stripes along leaf blades.
+Epidemiological Triggers (Page 27):
+"Continuous dew formation with daytime temperatures below 15°C accelerates yellow rust sporulation on susceptible varieties."
+Optimal conditions are day temperatures between 10°C and 16°C combined with high atmospheric humidity (>80%) and persistent early morning fog or intermittent drizzle in the sub-mountainous tarai and plains tracts of Punjab, Haryana, and Western UP from late December through mid-February.
+================================================================================

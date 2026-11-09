@@ -74,3 +74,4 @@ When contradictory recommendations exist between sources:
 - **Quarterly Audit:** Automatic scan of all registered sources against `next_review_date`.
 - **Statutory Sync:** Bi-annual reconciliation against the Ministry of Agriculture & Farmers Welfare CIBRC gazette updates.
 - **Index Rebuild:** Any update to `registry.json` or `facts.json` triggers cryptographic regeneration of `data/knowledge_manifest.json`.
+

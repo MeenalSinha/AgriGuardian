@@ -97,3 +97,4 @@ The `RecommendationEngine` (`backend/app/services/agriculture/recommendation_eng
   - `precautions`: Environmental and handling warnings.
   - `supporting_evidence`: Traceable quotes and citations.
   - `confidence_assessment`: Final qualitative confidence level and rationale.
+

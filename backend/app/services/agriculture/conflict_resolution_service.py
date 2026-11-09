@@ -71,3 +71,4 @@ class ConflictResolutionService:
                 if "Tier-3" in src.authority_tier:
                     return 1
         return 0
+

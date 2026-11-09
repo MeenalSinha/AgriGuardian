@@ -181,6 +181,24 @@ class RecommendationEngine:
                 elif fact.predicate == "susceptible_to_weather_risk":
                     precautions.append(fact.value)
 
+        # Incorporate proactive weather hazard precautions and urgent mitigations
+        if weather_context and "active_alerts" in weather_context:
+            for alert_dict in weather_context.get("active_alerts", []):
+                for prohibited in alert_dict.get("prohibited_actions", []):
+                    if prohibited not in precautions:
+                        precautions.append(f"⚠️ Weather Alert Warning: {prohibited}")
+                for rec_action in alert_dict.get("recommended_actions", [])[:1]:
+                    actions.insert(
+                        0,
+                        ActionItem(
+                            priority="immediate",
+                            action=f"[Weather Risk Action] {rec_action}",
+                            reason=f"Proactive climate mitigation for {alert_dict.get('title', 'adverse weather')}.",
+                            evidence_ids=alert_dict.get("evidence_ids", []),
+                            safety_level="low",
+                        ),
+                    )
+
         # 8. Apply Safety Guardrails to Chemical Interventions
         sanitized_actions = self.safety_service.sanitize_action_items(
             actions=actions,
@@ -246,3 +264,4 @@ class RecommendationEngine:
             expert_referral_details=expert_details,
             response_language=language,
         )
+

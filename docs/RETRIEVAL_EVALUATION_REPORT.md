@@ -59,3 +59,4 @@ The test suite evaluates:
 1. **Indic Token Expansion Efficiency:** Synonym expansion in `RetrievalService` achieved 100% equivalence between Hindi (`झुलसा`, `सीआरआई`) and English scientific terms (`blight`, `CRI stage`).
 2. **Authority Boost Impact:** The 1.4x multiplier for Tier-1 institutions (ICAR / CIBRC / IMD) consistently elevated national statutory recommendations above localized university bulletins when national guidelines were applicable.
 3. **Chemical Safety Guardrails:** Unconfirmed visual diagnoses were successfully intercepted, downgrading restricted chemical interventions to physical KVK referrals with 100% compliance.
+

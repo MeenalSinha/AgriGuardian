@@ -228,3 +228,4 @@ def render_knowledge_admin_view():
                             st.caption(f"**Issuing Authority:** {fact.evidence[0].organization} (Source: {fact.evidence[0].source_id})")
             else:
                 st.warning("No matching facts found for this query and crop filter.")
+

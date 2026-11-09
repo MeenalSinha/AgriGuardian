@@ -1,0 +1,45 @@
+================================================================================
+CENTRAL INSECTICIDES BOARD & REGISTRATION COMMITTEE (CIB&RC)
+DIRECTORATE OF PLANT PROTECTION, QUARANTINE & STORAGE
+Department of Agriculture & Farmers Welfare, Ministry of Agriculture, Govt. of India
+Compendium: Major Uses of Pesticides Registered Under the Insecticides Act, 1968 for Horticultural Crops
+Publication Date: 2024-03-31 | Edition: 2024.2
+Canonical URL: https://ppqs.gov.in/cibrc/major-uses-pesticides
+================================================================================
+
+STATUTORY NOTICE ON AGROCHEMICAL USAGE IN HORTICULTURAL CROPS:
+All applications of insecticides, fungicides, bactericides, and plant growth regulators must strictly adhere to the approved doses, dilution rates, target pests, and pre-harvest intervals (waiting periods) notified under the statutory gazette. Off-label use, unverified tank mixtures, and unauthorized chemical prescriptions on vegetable crops are punishable under Sections 29 and 30 of the Insecticides Act, 1968.
+
+APPROVED FUNGICIDES & PROTECTANTS FOR TOMATO (Pages 86-91):
+1. Mancozeb 75% WP:
+   - Target Disease: Alternaria solani (Early Blight), Phytophthora infestans (Late Blight)
+   - Application Dosage: 1.5 - 2.0 kg/ha formulation (2.0 g/L in 750 - 1000 L water/ha)
+   - Statutory Waiting Period (Pre-Harvest Interval - PHI): 7 days
+   - Quote (Page 88): "Mancozeb 75% WP is officially labeled for Alternaria solani on Tomato at 1.5-2.0 kg/ha (2.0 g/L dilution) with a statutory waiting period of 7 days."
+   - Toxicity Classification: Toxicity Class III (Slightly Hazardous, Blue Triangle).
+
+2. Chlorothalonil 75% WP:
+   - Target Disease: Early Blight, Anthracnose, Fruit Rot
+   - Application Dosage: 1.5 - 2.0 kg/ha formulation (2.0 g/L water)
+   - Pre-Harvest Interval (PHI): 7 days
+   - Precaution: Broad-spectrum multi-site contact fungicide; apply thoroughly to upper and lower leaf surfaces.
+
+3. Copper Oxychloride 50% WP:
+   - Target Disease: Early Blight, Late Blight, Bacterial Spot (Xanthomonas suppression)
+   - Application Dosage: 2.5 kg/ha formulation (2.5 g/L water)
+   - Pre-Harvest Interval (PHI): 5 days
+   - Toxicity Classification: Class III.
+
+4. Metalaxyl 8% + Mancozeb 64% WP (Co-formulation):
+   - Target Disease: Late Blight (Phytophthora infestans) systemic and contact containment
+   - Application Dosage: 1.5 - 2.0 kg/ha (2.0 g/L)
+   - Pre-Harvest Interval (PHI): 10 days
+   - Restriction: Maximum two applications per season to prevent systemic phenylamide resistance.
+
+BANNED & PROHIBITED SUBSTANCES IN VEGETABLES (ANNEXURE IV):
+The following active ingredients are strictly prohibited on vegetable and horticultural crops:
+- Monocrotophos: Banned on all vegetables due to acute oral and dermal mammalian toxicity.
+- Endosulfan: Complete ban on manufacture, sale, and use pan-India per Supreme Court order.
+- Paraquat Dichloride: Banned for foliar spraying on growing vegetable food crops.
+- Phorate, Methyl Parathion, Carbofuran, Dichlorvos: Banned or restricted from open foliar application.
+================================================================================

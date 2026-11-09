@@ -63,3 +63,4 @@ def test_retrieval_ranking_favors_tier1():
     # High ranked facts should have substantial authority weight (>= 1.2)
     top_fact, _ = results[0]
     assert top_fact.authority_weight >= 1.2
+

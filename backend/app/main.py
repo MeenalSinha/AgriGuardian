@@ -354,4 +354,109 @@ def generate_recommendation(req: RecommendationRequest):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
+# ==============================================================================
+# PHASE 4: WEATHER INTELLIGENCE & AGRICULTURAL CLIMATE RISKS
+# ==============================================================================
+
+@app.get("/api/v1/location/presets", tags=["Weather Intelligence"])
+def get_location_presets():
+    """Retrieve supported Indian agricultural states and preset district centroids."""
+    return {
+        "presets": system.weather_intel.location_manager.presets,
+        "states": system.weather_intel.location_manager.get_supported_states(),
+    }
+
+
+@app.get("/api/v1/location/resolve", tags=["Weather Intelligence"])
+def resolve_location(
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    source: str = "manual",
+    consent: bool = False,
+):
+    """Resolve location metadata and precision classification."""
+    try:
+        if state and district:
+            loc = system.weather_intel.location_manager.resolve_preset_district(state, district)
+        elif lat is not None and lon is not None:
+            loc = system.weather_intel.location_manager.resolve_coordinates(
+                latitude=lat,
+                longitude=lon,
+                source=source,
+                consent_granted=consent,
+            )
+        else:
+            loc = system.weather_intel.location_manager.get_default_location()
+        return loc.model_dump()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get("/api/v1/weather/intelligence", tags=["Weather Intelligence"])
+def get_weather_intelligence(
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    crop: Optional[str] = None,
+    crop_stage: Optional[str] = None,
+    forecast_days: int = 7,
+):
+    """Get complete agricultural weather report, risk assessment, and active alerts."""
+    try:
+        loc = None
+        if state and district:
+            loc = system.weather_intel.location_manager.resolve_preset_district(state, district)
+        elif lat is not None and lon is not None:
+            loc = system.weather_intel.location_manager.resolve_coordinates(latitude=lat, longitude=lon)
+        else:
+            loc = system.weather_intel.location_manager.get_default_location()
+
+        intel = system.weather_intel.get_weather_intelligence(
+            location=loc,
+            crop=crop,
+            crop_stage=crop_stage,
+            forecast_days=forecast_days,
+        )
+        return {
+            "location": intel["location"].model_dump(),
+            "report": intel["report"].model_dump(),
+            "risk_assessment": intel["risk_assessment"].model_dump(),
+            "active_alerts": [a.model_dump() for a in intel["active_alerts"]],
+        }
+    except Exception as e:
+        logger.error(f"Weather intelligence error: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@app.get("/api/v1/weather/alerts", tags=["Weather Intelligence"])
+def get_weather_alerts(district: Optional[str] = None):
+    """Retrieve active and updated agricultural weather alerts."""
+    alerts = system.weather_intel.alert_manager.get_active_alerts(district=district)
+    return {
+        "alerts": [a.model_dump() for a in alerts],
+        "count": len(alerts),
+    }
+
+
+@app.post("/api/v1/weather/alerts/{alert_id}/acknowledge", tags=["Weather Intelligence"])
+def acknowledge_weather_alert(alert_id: str):
+    """Acknowledge an in-app agricultural weather alert."""
+    success = system.weather_intel.alert_manager.acknowledge_alert(alert_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Alert '{alert_id}' not found.")
+    return {"status": "acknowledged", "alert_id": alert_id}
+
+
+@app.post("/api/v1/weather/alerts/{alert_id}/dismiss", tags=["Weather Intelligence"])
+def dismiss_weather_alert(alert_id: str):
+    """Dismiss an in-app agricultural weather alert."""
+    success = system.weather_intel.alert_manager.dismiss_alert(alert_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Alert '{alert_id}' not found.")
+    return {"status": "dismissed", "alert_id": alert_id}
+
+
 

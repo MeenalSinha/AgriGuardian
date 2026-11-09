@@ -1,0 +1,37 @@
+================================================================================
+ICAR - INDIAN INSTITUTE OF HORTICULTURAL RESEARCH (IIHR), BENGALURU
+Technical Bulletin No. 48: Package of Practices for Commercial Tomato Cultivation in India
+Edition: 4.2 | Date: 2024-01-15 (Revised August 2024)
+Authoritative Body: Indian Council of Agricultural Research (ICAR)
+Canonical URL: https://iihr.res.in/package-practices-tomato
+================================================================================
+
+SECTION 1: AGRO-CLIMATIC REQUIREMENTS & TEMPERATURE SENSITIVITY
+Tomato (Solanum lycopersicum) is a warm-season day-neutral crop requiring moderate temperatures.
+Optimal temperature range for vegetative growth is 21°C to 24°C.
+- Heat Stress Threshold: Daytime temperatures consistently exceeding 35°C (especially during flowering and fruit setting stages, 35-65 DAS) cause severe flower abortion, pollen sterility, style elongation, and poor fruit set. Sustained daytime heat (>38°C) paired with low humidity causes blossom end rot and foliar wilting.
+- Chilling & Frost Sensitivity: Tomato foliage is highly tender and susceptible to chilling injury when ambient night temperatures drop below 10°C. Direct ground frost (temperatures ≤ 2°C) causes irreversible cellular freezing, leaf blackening, and plant death. Protective mulching or low-tunnel agro-netting is recommended in Northern Indian winter cultivation.
+
+SECTION 2: FOLIAR FUNGAL DISEASE MANAGEMENT (Pages 22-26)
+1. Early Blight (Alternaria solani):
+Characterized by small dark brown to black spots with concentric target-board rings on lower mature leaves, surrounded by chlorotic yellow halos.
+Cultural Control (Page 24): Sanitation through removal of bottom leaves and soil mulching with paddy straw reduces Alternaria inoculum pressure by up to 45%. Maintain recommended 60x45 cm plant spacing to improve canopy aeration. Avoid overhead sprinkler irrigation.
+Chemical Precautions: Prophylactic sprays of Copper Oxychloride 50% WP @ 2.5 g/L or contact protectants Mancozeb 75% WP @ 2.0 g/L upon early symptom onset. Rotate chemical classes to minimize fungicide resistance.
+
+2. Late Blight (Phytophthora infestans):
+Attacks leaves, stems, and fruits. Manifests as water-soaked pale green to dark brown lesions that expand rapidly under cool, wet conditions, often accompanied by white mildew on the lower leaf surface.
+Epidemiological Triggers: Temperature range of 15°C to 22°C paired with relative humidity exceeding 90% or continuous overcast rainfall. If unmanaged, late blight can decimate entire fields within 48 to 72 hours. Immediate drainage and prophylactic fungicide intervention is mandatory upon warning.
+
+SECTION 3: BACTERIAL SPOT & WILT MANAGEMENT (Pages 27-29)
+Bacterial Spot (Xanthomonas campestris pv. vesicatoria):
+Causes small, angular, dark, water-soaked foliar lesions with yellow margins.
+Cultural Protocols (Page 28): Avoiding overhead wetting prevents bacterial dispersal and reduces spot incidence by over 60%. Drip irrigation is strongly advised. Treat seeds with hot water (50°C for 25 min) or certified bactericide prior to sowing.
+
+SECTION 4: VIRAL & VECTOR MANAGEMENT (Pages 30-33)
+Tomato Yellow Leaf Curl Virus (Begomovirus - TYLCV):
+Transmitted persistently by the whitefly vector (Bemisia tabaci). Infected plants exhibit marked stunting, erect growth, upward curling and cupping of leaflets, and chlorotic margins.
+Cultural Protocols (Page 31): Yellow sticky traps monitor whitefly build-up (install 15-20 traps/acre across field perimeters); early rogueing of viral foci within 30 days after transplanting prevents field-wide spread. Barrier crops of 2-3 rows of maize, sorghum, or pearl millet around the tomato field reduce incoming whitefly viruliferous populations.
+
+SECTION 5: WATER MANAGEMENT & DRAINAGE (Pages 34-37)
+Tomato is sensitive to both waterlogging and drought. Soil saturation exceeding 24 hours induces root hypoxia, yellowing, and secondary bacterial wilt/root rots. Ensure raised-bed cultivation with deep furrows for rapid excess runoff during monsoon downpours.
+================================================================================

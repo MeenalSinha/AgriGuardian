@@ -95,3 +95,4 @@ def test_recommendation_clarifying_questions_on_missing_prereqs():
     assert len(rec.actions) >= 1
     # Check if actions or clarifying questions are generated
     assert len(rec.actions) > 0 or len(rec.clarifying_questions) > 0
+

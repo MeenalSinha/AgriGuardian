@@ -252,3 +252,4 @@ Benchmark results: Precision@1 = 100%, Retrieval Latency = 2.4 ms, Injection Blo
 2. **Dense Vector Embeddings:** Integrate dense embedding models (e.g. IndicBERT / multilingual-e5) into a hybrid dense-lexical ensemble with reciprocal rank fusion (RRF).
 3. **Automated Scraping Pipeline:** Scheduled crawlers for Ministry of Agriculture gazette notifications and SAU advisories.
 4. **Offline Mobile Synchronization:** SQLite / DuckDB export for local offline edge device retrieval in remote agricultural villages without mobile internet.
+

@@ -14,6 +14,7 @@ from backend.app.services.agriculture.recommendation_engine import Recommendatio
 from backend.app.services.agriculture.rule_engine import DynamicRuleEngine
 from backend.app.services.analytics.dashboard import EnhancedDashboardAnalytics
 from backend.app.services.reporting.pdf_generator import PDFReportGenerator
+from backend.app.services.weather.weather_intelligence import WeatherIntelligenceService
 
 logger = get_logger("Orchestrator")
 
@@ -25,6 +26,7 @@ class AgriGuardianSystem:
         self.settings = settings or get_settings()
         self.rule_engine = DynamicRuleEngine(settings=self.settings)
         self.weather_service = WeatherService(settings=self.settings)
+        self.weather_intel = WeatherIntelligenceService(settings=self.settings, weather_service=self.weather_service)
         self.market_service = MarketService(settings=self.settings)
         self.disease_detector = PlantDiseaseDetector(settings=self.settings)
         self.recommendation_engine = RecommendationEngine(settings=self.settings)
@@ -53,9 +55,33 @@ class AgriGuardianSystem:
         timing = {}
         overall_start = time.time()
 
-        # Step 1: Weather data
+        # Step 1: Weather Intelligence & Crop Climate Risk Assessment
         t0 = time.time()
-        weather = self.weather_service.get_weather(lat=lat, lon=lon, location_name=location)
+        loc = None
+        if lat is not None and lon is not None:
+            loc = self.weather_intel.location_manager.resolve_coordinates(
+                latitude=lat, longitude=lon, source="manual_pin"
+            )
+        elif location:
+            for state_name, dists in self.weather_intel.location_manager.presets.items():
+                for dist_name in dists:
+                    if dist_name.lower() in location.lower():
+                        loc = self.weather_intel.location_manager.resolve_preset_district(state_name, dist_name)
+                        break
+                if loc:
+                    break
+        if not loc:
+            loc = self.weather_intel.location_manager.get_default_location()
+
+        weather_intel = self.weather_intel.get_weather_intelligence(
+            location=loc,
+            crop=crop,
+            forecast_days=7,
+        )
+        weather_report = weather_intel["report"]
+        weather_risk = weather_intel["risk_assessment"]
+        weather_alerts = weather_intel["active_alerts"]
+        weather = weather_report.to_legacy_context()
         timing["weather"] = time.time() - t0
 
         # Step 2: Market data
@@ -107,12 +133,16 @@ class AgriGuardianSystem:
         # Step 5: Phase 3 Recommendation Engine (Evidence Retrieval, Applicability, Conflict Arbitration & Safety)
         t0 = time.time()
         diag_dict = image_analysis.get("diagnosis_result") if image_analysis else None
+        weather_ctx_dict = {
+            **weather.model_dump(),
+            "active_alerts": [a.model_dump() for a in weather_alerts],
+        }
         recommendation = self.recommendation_engine.generate_recommendation(
             query=effective_symptoms,
             crop=crop.lower(),
             language=language,
             state=None,
-            weather_context=weather.model_dump(),
+            weather_context=weather_ctx_dict,
             image_diagnosis=diag_dict,
         )
         timing["recommendation"] = time.time() - t0
@@ -152,6 +182,9 @@ class AgriGuardianSystem:
             "weather_summary": weather.summary,
             "market_summary": market.summary,
             "weather_details": weather.model_dump(),
+            "weather_report": weather_report.model_dump(),
+            "weather_risk_assessment": weather_risk.model_dump(),
+            "weather_alerts": [a.model_dump() for a in weather_alerts],
             "market_details": market.model_dump(),
             "rule_results": rule_results,
             "image_analysis": image_analysis,

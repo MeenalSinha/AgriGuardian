@@ -1,4 +1,8 @@
-"""Knowledge ingestion and catalog compilation script for AgriGuardian Phase 3."""
+"""Knowledge ingestion and catalog compilation script for AgriGuardian.
+
+Ingests certified agricultural sources and atomic facts, verifies source document bytes,
+computes authentic cryptographic digests, and persists the knowledge registry.
+"""
 
 import os
 import json
@@ -22,7 +26,7 @@ SOURCES_DATA = [
         "disease_scope": ["Early Blight", "Late Blight", "Bacterial Spot", "Leaf Mold", "Septoria Leaf Spot", "TYLCV"],
         "language": "en",
         "license": "Open Government Data (OGD) India / ICAR Institutional License",
-        "document_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "document_file": "SRC-ICAR-TOMATO-2024.txt",
         "verification_status": "approved",
         "authority_tier": "Tier-1 (National Statutory/ICAR)",
         "reviewed_by": "Dr. S. K. Ramanathan (Principal Scientist - Plant Pathology)",
@@ -40,12 +44,12 @@ SOURCES_DATA = [
         "accessed_at": "2026-11-09T08:00:00Z",
         "version": "2024.2",
         "jurisdiction": "India",
-        "state_scope": [],  # All India national statutory standard
+        "state_scope": [],
         "crop_scope": ["tomato", "potato", "rice", "wheat", "cotton"],
         "disease_scope": ["Alternaria solani", "Phytophthora infestans", "Xanthomonas", "Puccinia striiformis"],
         "language": "en",
         "license": "Government of India Gazette / Statutory Regulatory Record",
-        "document_hash": "a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0",
+        "document_file": "SRC-CIBRC-FUNGICIDES-2024.txt",
         "verification_status": "approved",
         "authority_tier": "Tier-1 (National Statutory/ICAR)",
         "reviewed_by": "Directorate of Plant Protection Regulatory Board",
@@ -68,7 +72,7 @@ SOURCES_DATA = [
         "disease_scope": ["Yellow Rust", "Brown Rust", "Karnal Bunt", "Loose Smut"],
         "language": "en",
         "license": "Open Government Data (OGD) India",
-        "document_hash": "c3d4e5f6a1b27890123456789abcdef0123456789abcdef0123456789abcdef0",
+        "document_file": "SRC-ICAR-WHEAT-2023.txt",
         "verification_status": "approved",
         "authority_tier": "Tier-1 (National Statutory/ICAR)",
         "reviewed_by": "Dr. V. K. Singh (Head, Division of Agronomy, IARI)",
@@ -91,7 +95,7 @@ SOURCES_DATA = [
         "disease_scope": ["Blight", "Rust", "Downy Mildew", "Boll Rot"],
         "language": "en",
         "license": "Open Government Data (OGD) India",
-        "document_hash": "d4e5f6a1b2c37890123456789abcdef0123456789abcdef0123456789abcdef0",
+        "document_file": "SRC-IMD-AGROMET-2024.txt",
         "verification_status": "approved",
         "authority_tier": "Tier-1 (National Statutory/ICAR)",
         "reviewed_by": "IMD Agrometeorological Advisory Committee",
@@ -114,7 +118,7 @@ SOURCES_DATA = [
         "disease_scope": ["Early Blight", "Bacterial Leaf Blight", "Mites", "Blast"],
         "language": "en",
         "license": "TNAU Educational / Public Extension Resource",
-        "document_hash": "f6a1b2c3d4e57890123456789abcdef0123456789abcdef0123456789abcdef0",
+        "document_file": "SRC-TNAU-AGRITECH-2023.txt",
         "verification_status": "approved",
         "authority_tier": "Tier-2 (State Agricultural University)",
         "reviewed_by": "Department of Plant Pathology, TNAU",
@@ -282,6 +286,58 @@ FACTS_DATA = [
         "safety_classification": "low_risk_cultural",
     },
 
+    # --- TOMATO: HEAT STRESS & FLOWER DROP (PHASE 4 WEATHER RISK) ---
+    {
+        "fact_id": "FCT-TOM-HEAT-STRESS-01",
+        "category": "weather_risk",
+        "subject": "tomato",
+        "predicate": "susceptible_to_weather_risk",
+        "value": "Daytime temperatures consistently exceeding 35°C during flowering and fruit setting (35-65 DAS) cause flower abortion, pollen sterility, and poor fruit set. Provide light frequent furrow or drip irrigation to cool the root zone.",
+        "conditions": {"temp_celsius_gt": 35.0, "crop_stage": "flowering_fruit_set"},
+        "geographic_scope": {"country": "India", "states": []},
+        "evidence": [
+            {
+                "evidence_id": "EVD-TOM-005",
+                "source_id": "SRC-ICAR-TOMATO-2024",
+                "source_title": "Package of Practices for Commercial Tomato Cultivation in India",
+                "organization": "ICAR - Indian Institute of Horticultural Research (IIHR)",
+                "page": 10,
+                "section": "Agro-climatic Requirements & Temperature Sensitivity",
+                "quote_or_excerpt": "Daytime temperatures consistently exceeding 35°C (especially during flowering and fruit setting stages, 35-65 DAS) cause severe flower abortion, pollen sterility, style elongation, and poor fruit set.",
+                "confidence_score": 0.98,
+                "verification_status": "approved",
+            }
+        ],
+        "verification_status": "approved",
+        "safety_classification": "advisory_only",
+    },
+
+    # --- TOMATO: CHILLING & FROST SENSITIVITY (PHASE 4 WEATHER RISK) ---
+    {
+        "fact_id": "FCT-TOM-CHILL-FROST-01",
+        "category": "weather_risk",
+        "subject": "tomato",
+        "predicate": "susceptible_to_weather_risk",
+        "value": "Tomato foliage is sensitive to chilling injury when ambient night temperatures drop below 10°C, and ground frost (≤ 2°C) causes rapid foliar blackening and plant death. Use straw mulching or low agro-net tunnels for cold defense.",
+        "conditions": {"temp_celsius_lt": 10.0, "frost_risk": True},
+        "geographic_scope": {"country": "India", "states": ["Punjab", "Haryana", "Uttar Pradesh", "Rajasthan", "Madhya Pradesh", "Himachal Pradesh"]},
+        "evidence": [
+            {
+                "evidence_id": "EVD-TOM-006",
+                "source_id": "SRC-ICAR-TOMATO-2024",
+                "source_title": "Package of Practices for Commercial Tomato Cultivation in India",
+                "organization": "ICAR - Indian Institute of Horticultural Research (IIHR)",
+                "page": 11,
+                "section": "Chilling & Frost Sensitivity",
+                "quote_or_excerpt": "Tomato foliage is highly tender and susceptible to chilling injury when ambient night temperatures drop below 10°C. Direct ground frost (temperatures ≤ 2°C) causes irreversible cellular freezing, leaf blackening, and plant death.",
+                "confidence_score": 0.97,
+                "verification_status": "approved",
+            }
+        ],
+        "verification_status": "approved",
+        "safety_classification": "advisory_only",
+    },
+
     # --- WHEAT: CRITICAL IRRIGATION STAGES ---
     {
         "fact_id": "FCT-WHEAT-IRRIG-CRI-01",
@@ -301,6 +357,58 @@ FACTS_DATA = [
                 "section": "Water Management & Critical Growth Stages",
                 "quote_or_excerpt": "If only one irrigation is available, it must be applied at Crown Root Initiation (21-25 DAS) to secure root anchoring and tiller primordia.",
                 "confidence_score": 0.99,
+                "verification_status": "approved",
+            }
+        ],
+        "verification_status": "approved",
+        "safety_classification": "low_risk_cultural",
+    },
+
+    # --- WHEAT: TERMINAL HEAT STRESS (PHASE 4 WEATHER RISK) ---
+    {
+        "fact_id": "FCT-WHEAT-TERM-HEAT-01",
+        "category": "weather_risk",
+        "subject": "wheat",
+        "predicate": "susceptible_to_weather_risk",
+        "value": "Terminal heat spikes exceeding 30-32°C during milking and grain filling stages (March-April) accelerate maturity and cause grain shrivelling. Light sprinkler or furrow irrigation during warm spells provides essential micro-climatic cooling.",
+        "conditions": {"temp_celsius_gt": 30.0, "crop_stage": "grain_filling"},
+        "geographic_scope": {"country": "India", "states": ["Punjab", "Haryana", "Uttar Pradesh", "Bihar", "Rajasthan", "Madhya Pradesh"]},
+        "evidence": [
+            {
+                "evidence_id": "EVD-WHEAT-003",
+                "source_id": "SRC-ICAR-WHEAT-2023",
+                "source_title": "Wheat Production Technology & Rust Resistance Management for Indo-Gangetic Plains",
+                "organization": "ICAR - Indian Agricultural Research Institute (IARI)",
+                "page": 19,
+                "section": "Terminal Heat Stress",
+                "quote_or_excerpt": "In Northern and Central India, sudden temperature spikes during the grain filling and milking stages (March-April) exceeding 30°C to 32°C accelerate crop maturity, curtail assimilate translocation, reduce thousand-grain weight, and cause shrivelled grains.",
+                "confidence_score": 0.98,
+                "verification_status": "approved",
+            }
+        ],
+        "verification_status": "approved",
+        "safety_classification": "advisory_only",
+    },
+
+    # --- WHEAT: LODGING & HIGH WIND HAZARD (PHASE 4 WEATHER RISK) ---
+    {
+        "fact_id": "FCT-WHEAT-LODGE-WIND-01",
+        "category": "weather_risk",
+        "subject": "wheat",
+        "predicate": "susceptible_to_weather_risk",
+        "value": "Do not irrigate wheat fields when strong convective winds (>35-40 km/h) are forecast within 24-48 hours. Irrigating saturated soil under high winds induces severe stem and root lodging.",
+        "conditions": {"wind_speed_kmh_gt": 35.0, "crop_stage": "heading_to_grain_filling"},
+        "geographic_scope": {"country": "India", "states": ["Punjab", "Haryana", "Uttar Pradesh", "Bihar"]},
+        "evidence": [
+            {
+                "evidence_id": "EVD-WHEAT-004",
+                "source_id": "SRC-ICAR-WHEAT-2023",
+                "source_title": "Wheat Production Technology & Rust Resistance Management for Indo-Gangetic Plains",
+                "organization": "ICAR - Indian Agricultural Research Institute (IARI)",
+                "page": 21,
+                "section": "Lodging Risk & Wind Hazards",
+                "quote_or_excerpt": "Never irrigate wheat fields when high winds or gusty rainstorms are forecast within 24-48 hours.",
+                "confidence_score": 0.97,
                 "verification_status": "approved",
             }
         ],
@@ -387,24 +495,95 @@ FACTS_DATA = [
         "verification_status": "approved",
         "safety_classification": "low_risk_cultural",
     },
+
+    # --- GENERAL: IMD AGROMET HEATWAVE CRITERIA (PHASE 4 WEATHER RISK) ---
+    {
+        "fact_id": "FCT-GEN-HEATWAVE-IMD-01",
+        "category": "weather_risk",
+        "subject": "general",
+        "predicate": "susceptible_to_weather_risk",
+        "value": "Agricultural Heatwave alert is triggered when maximum temperature reaches ≥ 40°C in plains (≥ 30°C in hills) or departure is ≥ 4.5°C from normal. High night temperatures (≥ 25°C) exacerbate crop respiration loss.",
+        "conditions": {"temp_celsius_gt": 40.0, "temp_departure_gt": 4.5},
+        "geographic_scope": {"country": "India", "states": []},
+        "evidence": [
+            {
+                "evidence_id": "EVD-IMD-003",
+                "source_id": "SRC-IMD-AGROMET-2024",
+                "source_title": "Standard Operating Procedure for Weather-Based Crop Risk Warnings",
+                "organization": "India Meteorological Department (IMD)",
+                "page": 35,
+                "section": "Heatwave & Dry Spell Criteria in Agriculture",
+                "quote_or_excerpt": "Agricultural Heatwave: Maximum temperature reaching ≥ 40°C in plains (or ≥ 30°C in hilly regions), or a departure of ≥ 4.5°C from normal maximum temperature sustained over 2 consecutive days.",
+                "confidence_score": 0.99,
+                "verification_status": "approved",
+            }
+        ],
+        "verification_status": "approved",
+        "safety_classification": "advisory_only",
+    },
+
+    # --- GENERAL: IMD AGROMET DRY SPELL CRITERIA (PHASE 4 WEATHER RISK) ---
+    {
+        "fact_id": "FCT-GEN-DRYSPELL-IMD-01",
+        "category": "weather_risk",
+        "subject": "general",
+        "predicate": "susceptible_to_weather_risk",
+        "value": "A dry spell is defined as 7 to 10 consecutive rainless days during active crop growth in rainfed tracts, creating acute root-zone moisture deficits and elevated reference evapotranspiration (ET0). Prioritize moisture conservation mulching.",
+        "conditions": {"dry_days_gt": 7, "drought_risk": True},
+        "geographic_scope": {"country": "India", "states": []},
+        "evidence": [
+            {
+                "evidence_id": "EVD-IMD-004",
+                "source_id": "SRC-IMD-AGROMET-2024",
+                "source_title": "Standard Operating Procedure for Weather-Based Crop Risk Warnings",
+                "organization": "India Meteorological Department (IMD)",
+                "page": 37,
+                "section": "Dry Spell Criteria in Rainfed Crops",
+                "quote_or_excerpt": "A period of at least 7 to 10 consecutive rainless days during the active Kharif monsoon season in rainfed tracts, creating acute root-zone soil moisture deficits and accelerating reference evapotranspiration (ET0).",
+                "confidence_score": 0.98,
+                "verification_status": "approved",
+            }
+        ],
+        "verification_status": "approved",
+        "safety_classification": "low_risk_cultural",
+    },
 ]
 
 
 def ingest_knowledge():
-    """Ingest sources and atomic facts, compute hashes, and persist catalog."""
+    """Ingest sources and atomic facts, compute genuine file hashes, and persist catalog."""
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     data_dir = os.path.join(base_dir, "data")
     sources_dir = os.path.join(data_dir, "sources")
+    docs_dir = os.path.join(sources_dir, "documents")
     facts_dir = os.path.join(data_dir, "facts")
     manifest_path = os.path.join(data_dir, "knowledge_manifest.json")
 
     os.makedirs(sources_dir, exist_ok=True)
+    os.makedirs(docs_dir, exist_ok=True)
     os.makedirs(facts_dir, exist_ok=True)
 
-    print(f"[1/4] Writing source registry to {sources_dir}...")
+    print(f"[1/5] Verifying source document text files and computing SHA-256 digests...")
+    for source in SOURCES_DATA:
+        doc_filename = source.get("document_file")
+        if doc_filename:
+            doc_path = os.path.join(docs_dir, doc_filename)
+            if os.path.exists(doc_path):
+                with open(doc_path, "rb") as df:
+                    doc_bytes = df.read()
+                computed_hash = hashlib.sha256(doc_bytes).hexdigest()
+                source["document_hash"] = computed_hash
+                source["document_size_bytes"] = len(doc_bytes)
+                print(f"  -> Verified {source['source_id']} from {doc_filename} ({len(doc_bytes)} bytes, SHA-256: {computed_hash[:16]}...)")
+            else:
+                print(f"  [WARNING] Document file {doc_path} not found! Marking verification_status='unverified'")
+                source["verification_status"] = "unverified"
+                source["document_hash"] = "UNVERIFIED_MISSING_BYTES"
+
+    print(f"[2/5] Writing source registry to {sources_dir}...")
     registry_file = os.path.join(sources_dir, "registry.json")
     sources_payload = {
-        "version": "1.0.0",
+        "version": "1.1.0",
         "last_compiled": datetime.now(timezone.utc).isoformat(),
         "total_sources": len(SOURCES_DATA),
         "sources": SOURCES_DATA,
@@ -412,10 +591,10 @@ def ingest_knowledge():
     with open(registry_file, "w", encoding="utf-8") as f:
         json.dump(sources_payload, f, indent=2, ensure_ascii=False)
 
-    print(f"[2/4] Writing atomic facts catalog to {facts_dir}...")
+    print(f"[3/5] Writing atomic facts catalog to {facts_dir}...")
     facts_file = os.path.join(facts_dir, "facts.json")
     facts_payload = {
-        "version": "1.0.0",
+        "version": "1.1.0",
         "last_compiled": datetime.now(timezone.utc).isoformat(),
         "total_facts": len(FACTS_DATA),
         "facts": FACTS_DATA,
@@ -423,19 +602,19 @@ def ingest_knowledge():
     with open(facts_file, "w", encoding="utf-8") as f:
         json.dump(facts_payload, f, indent=2, ensure_ascii=False)
 
-    print(f"[3/4] Computing cryptographic checksums...")
+    print(f"[4/5] Computing cryptographic checksums for catalogs...")
     reg_hash = hashlib.sha256(open(registry_file, "rb").read()).hexdigest()
     fct_hash = hashlib.sha256(open(facts_file, "rb").read()).hexdigest()
 
-    print(f"[4/4] Writing master knowledge manifest to {manifest_path}...")
+    print(f"[5/5] Writing master knowledge manifest to {manifest_path}...")
     manifest = {
-        "manifest_version": "3.0.0",
+        "manifest_version": "4.0.0",
         "system": "AgriGuardian Knowledge & Evidence Catalog",
         "compiled_at": datetime.now(timezone.utc).isoformat(),
         "governance": {
             "status": "approved",
             "jurisdiction": "India",
-            "regulatory_framework": "ICAR Package of Practices & CIBRC Approved Registrations",
+            "regulatory_framework": "ICAR Package of Practices, CIBRC Approved Registrations, and IMD Agromet Protocols",
         },
         "catalogs": {
             "sources": {

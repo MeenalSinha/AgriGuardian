@@ -80,3 +80,4 @@ class ApplicabilityService:
                 return False, [], ["Chemical intervention reserved for moderate/severe stage; current foliage damage is mild."]
 
         return True, match_reasons, missing_prereqs
+

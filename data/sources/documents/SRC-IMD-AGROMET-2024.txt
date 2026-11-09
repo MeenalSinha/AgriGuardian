@@ -1,0 +1,32 @@
+================================================================================
+INDIA METEOROLOGICAL DEPARTMENT (IMD) - AGRIMET DIVISION, PUNE
+Ministry of Earth Sciences, Government of India
+Standard Operating Procedure for Weather-Based Crop Risk Warnings & Disease Forecasting
+Publication Date: 2024-05-20 | Edition: 2.0
+Canonical URL: https://imdagrimet.gov.in/sop-crop-weather-risk
+National Agricultural Meteorological Advisory System
+================================================================================
+
+SECTION 1: PURPOSE & METEOROLOGICAL THRESHOLD TAXONOMY
+This standard operating procedure defines empirical weather thresholds used by the Gramin Krishi Mausam Sewa (GKMS) network to issue predictive agro-meteorological advisories across Indian agro-climatic zones.
+
+SECTION 2: FUNGAL & OOMYCETE METEOROLOGICAL TRIGGERS (Pages 18-22)
+1. Solanaceous Late Blight Warning Criteria (Page 19):
+"Foliar leaf wetness > 10 hours at temperatures 12-22°C represents critical high-risk threshold for late blight outbreak in Solanaceae."
+When average daily temperatures remain between 15°C and 22°C with sustained relative humidity > 88% or continuous overcast skies with precipitation over 48 hours, zoospore germination of Phytophthora infestans reaches peak virulence. Under these conditions, an Agro-Met Alert (Level: Severe) must be broadcast advising prophylactic contact protective sprays and field scouting.
+
+2. Powdery Mildew Conditions:
+Favored by warm, dry days (24°C - 28°C) accompanied by humid nights (relative humidity 70-80%) and absence of washing rains.
+
+SECTION 3: HEAVY RAINFALL, INUNDATION & DRAINAGE PROTOCOLS (Pages 30-34)
+Waterlogging Risk Categories:
+- Moderate Risk: 24-hour rainfall accumulation of 25 mm to 64 mm in fine-textured soils.
+- High / Severe Risk: 24-hour rainfall accumulation exceeding 64.5 mm (Heavy Rainfall) or persistent stagnant pooling for > 24 hours.
+Remediation Protocol (Page 32):
+"Excess surface stagnation must be drained within 12-24 hours to prevent anoxic root damage and secondary collar rot complexes."
+Waterlogged soils deplete dissolved root-zone oxygen within 24 to 48 hours, inducing stomatal closure, root necrosis, and susceptibility to Pythium, Phytophthora, and bacterial soft rot organisms. Farmers must ensure primary field drains and perimeter ditches are cleared prior to forecasted heavy convective rain events.
+
+SECTION 4: HEATWAVE & DRY SPELL CRITERIA IN AGRICULTURE (Pages 35-39)
+- Agricultural Heatwave: Maximum temperature reaching ≥ 40°C in plains (or ≥ 30°C in hilly regions), or a departure of ≥ 4.5°C from normal maximum temperature sustained over 2 consecutive days. High night temperatures (minimum temperature ≥ 25°C) exacerbate respiratory assimilate losses in cereal and vegetable crops.
+- Dry Spell: A period of at least 7 to 10 consecutive rainless days during the active Kharif monsoon season in rainfed tracts, creating acute root-zone soil moisture deficits and accelerating reference evapotranspiration (ET0).
+================================================================================

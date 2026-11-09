@@ -114,8 +114,32 @@ class ConversationEngine:
 
         logger.info(f"Processing turn #{len(session.turns) + 1} for session {session.session_id} (Intent: {intent}, Lang: {lang}, Image: {bool(image_path)})")
 
-        # 1. Fetch relevant environmental context
-        weather = self.system.weather_service.get_weather(lat=lat, lon=lon, location_name=effective_location)
+        # 1. Fetch relevant environmental context with Phase 4 Weather Intelligence
+        loc = None
+        if lat is not None and lon is not None:
+            loc = self.system.weather_intel.location_manager.resolve_coordinates(
+                latitude=lat, longitude=lon, source="manual_pin"
+            )
+        elif effective_location:
+            for state_name, dists in self.system.weather_intel.location_manager.presets.items():
+                for dist_name in dists:
+                    if dist_name.lower() in effective_location.lower():
+                        loc = self.system.weather_intel.location_manager.resolve_preset_district(state_name, dist_name)
+                        break
+                if loc:
+                    break
+        if not loc:
+            loc = self.system.weather_intel.location_manager.get_default_location()
+
+        weather_intel = self.system.weather_intel.get_weather_intelligence(
+            location=loc,
+            crop=effective_crop,
+            forecast_days=7,
+        )
+        weather_report = weather_intel["report"]
+        weather_risk = weather_intel["risk_assessment"]
+        weather_alerts = weather_intel["active_alerts"]
+        weather = weather_report.to_legacy_context()
         market = self.system.market_service.get_market_data(crop=effective_crop)
 
         # 2. Vision Diagnosis if Image Provided
@@ -152,13 +176,18 @@ class ConversationEngine:
 
         rule_eval = self.system.rule_engine.evaluate(effective_query, weather.model_dump())
 
+        weather_ctx_dict = {
+            **weather.model_dump(),
+            "active_alerts": [a.model_dump() for a in weather_alerts],
+        }
+
         # 3. Generate grounded recommendation using RecommendationEngine
         rec = self.system.recommendation_engine.generate_recommendation(
             query=effective_query,
             crop=effective_crop.lower(),
             language=lang,
             state=None,
-            weather_context=weather.model_dump(),
+            weather_context=weather_ctx_dict,
             image_diagnosis=image_diag_dict,
         )
 
@@ -248,6 +277,8 @@ class ConversationEngine:
             context_used={
                 "risk": advisory.get("risk"),
                 "weather": weather.summary,
+                "weather_alerts": [a.model_dump() for a in weather_alerts],
+                "weather_risk_level": weather_risk.overall_risk_level.value,
                 "market": market.summary,
                 "field_visit_required": advisory.get("field_visit_required", False) or rec.expert_referral_required,
                 "image_diagnosis": image_diag_dict,

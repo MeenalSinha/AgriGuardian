@@ -130,3 +130,4 @@ Enables cross-lingual semantic matching between English scientific terminology a
 3. **Conflict Arbitration:**
    - Tier 1 statutory guidance (ICAR / CIBRC / IMD) arbitrates over state or district advisories.
    - If two Tier-1 guidelines offer differing controls, the system presents cultural and biological controls first, flagging chemical alternatives for KVK review.
+

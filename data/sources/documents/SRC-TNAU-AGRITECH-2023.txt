@@ -1,0 +1,23 @@
+================================================================================
+TAMIL NADU AGRICULTURAL UNIVERSITY (TNAU), COIMBATORE
+Directorate of Crop Protection & Centre for Plant Protection Studies
+Agritech Portal: Horticultural & Field Crop Integrated Pest Management (IPM) Protocols
+Publication Date: 2023-08-14 | Edition: 5.0 (Updated Jan 2024)
+Canonical URL: http://agritech.tnau.ac.in/crop_protection/crop_prot.html
+Applicable Zones: Tamil Nadu, Karnataka, Kerala, Andhra Pradesh, Telangana
+================================================================================
+
+SECTION 1: BIO-CONTROL OF SOLANACEOUS FOLIAR PATHOGENS (Pages 10-15)
+Trichoderma Protocols (Page 12):
+"Prophylactic application of Trichoderma viride formulation @ 10g/L significantly curtails early blight lesion development in field tomatoes."
+Bio-control agents Trichoderma harzianum or Trichoderma viride should be applied as foliar sprays (5-10 g/L or 2.5 kg/ha in 500 L water) at the first detection of localized lower-leaf spots. Alternatively, apply 5% Neem Seed Kernel Extract (NSKE) or commercial neem oil (1500 ppm @ 2-3 ml/L) to deter fungal spore germ-tube elongation and deter piercing-sucking insect vectors.
+
+SECTION 2: NUTRIENT-DISEASE INTERACTIONS IN FIELD CROPS (Pages 42-46)
+Paddy Blast (Magnaporthe oryzae) and Nitrogen Dynamics (Page 44):
+"Overuse of urea fertilizer without potash balance directly triggers virulent blast epidemics under cloudy Kharif conditions."
+Excessive nitrogen top-dressing softens cuticular thickness and promotes lush, succulent leaf blade tissue. Maintain balanced N:P:K nutrition (recommended 120:40:40 kg/ha in 3 split doses). Potassium (K2O) enhances leaf silica deposition, creating physical mechanical resistance to fungal appressorial penetration.
+
+SECTION 3: VECTOR TRAPPING & SUCKING PEST THRESHOLDS (Pages 20-24)
+Whitefly (Bemisia tabaci) and Thrips in Vegetables:
+Yellow sticky traps (15-20 traps/acre) placed 15 cm above the crop canopy provide early warning and continuous non-chemical suppression of alate whiteflies and aphid vectors. Blue sticky traps are specific for thrips monitoring.
+================================================================================

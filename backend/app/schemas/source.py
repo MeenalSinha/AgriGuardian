@@ -26,6 +26,8 @@ class SourceRecord(BaseModel):
     language: str = Field("en", description="Source document publication language")
     license: Optional[str] = Field("Open Government Data (OGD) India / Public Domain", description="Document copyright license")
     document_hash: str = Field(..., description="SHA-256 cryptographic digest of raw document text")
+    document_file: Optional[str] = Field(None, description="Local reference document text filename in data/sources/documents/")
+    document_size_bytes: Optional[int] = Field(None, description="Byte size of verified source text document")
     verification_status: str = Field(
         "approved",
         description="Governance status: 'approved', 'pending_review', 'retired', 'rejected'"

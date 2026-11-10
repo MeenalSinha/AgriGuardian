@@ -227,8 +227,8 @@ uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 
 Execute the comprehensive test suite with `pytest`:
 ```bash
-# Run all unit, integration, offline sync, economics, and security tests (315 passed, 2 skipped)
-python -m pytest tests -v
+# Run all unit, integration, offline sync, economics, and security tests (326 passed, 2 skipped)
+python -m pytest tests -q
 
 # Run dedicated Phase 12 security hardening, privacy, and e2e test suite (22 passed)
 python -m pytest tests/security tests/e2e -v
@@ -239,13 +239,19 @@ python -m pytest tests/economics -v
 # Run dedicated Phase 10 synchronization test suite (20 passed)
 python -m pytest tests/sync -v
 
-# Run with integration tests against live Gnani APIs (requires GNANI_API_KEY)
+# Run storage security & database migration test suites (9 passed)
+python -m pytest tests/unit/test_storage_service.py tests/unit/test_migration.py -v
+
+# Run with integration tests against live Gnani APIs (requires live GNANI_API_KEY)
 python -m pytest tests/integration/test_gnani_live.py -v
 ```
 
 ---
 
 ## 📚 Documentation Links
+* [Final Audit Report (`docs/FINAL_AUDIT_REPORT.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/FINAL_AUDIT_REPORT.md)
+* [Final Test Execution Report (`docs/FINAL_TEST_REPORT.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/FINAL_TEST_REPORT.md)
+* [Final Production Release Checklist (`docs/FINAL_RELEASE_CHECKLIST.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/FINAL_RELEASE_CHECKLIST.md)
 * [Phase 12 Final Engineering Report (`docs/PHASE_12_FINAL_ENGINEERING_REPORT.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_12_FINAL_ENGINEERING_REPORT.md)
 * [Phase 12 Security Hardening Report (`docs/SECURITY_HARDENING_REPORT.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/SECURITY_HARDENING_REPORT.md)
 * [Phase 12 Privacy & Data Governance (`docs/PRIVACY_AND_DATA_GOVERNANCE.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PRIVACY_AND_DATA_GOVERNANCE.md)

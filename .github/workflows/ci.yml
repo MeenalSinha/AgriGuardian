@@ -7,14 +7,14 @@ on:
     branches: [ main, master ]
 
 jobs:
-  test-and-verify:
-    name: Build, Lint & Automated Regression Tests
+  build-test-and-verify:
+    name: Build, Quality, Security & Automated Regression Tests
     runs-on: ubuntu-latest
 
     env:
       APP_ENV: test
       DEBUG: "false"
-      JWT_SECRET_KEY: ci_test_high_entropy_secret_key_minimum_32_chars_ok
+      JWT_SECRET_KEY: ci_signing_token_with_sufficient_entropy_64characters_long_abcdef123456
 
     steps:
       - name: Checkout Codebase
@@ -32,7 +32,11 @@ jobs:
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
 
-      - name: Validate Production Configuration
+      - name: Python Bytecode Compilation Verification
+        run: |
+          python -m compileall backend frontend app.py scripts tests
+
+      - name: Validate Production Configuration Invariants
         run: |
           python -c "from backend.app.core.config import get_settings; from backend.app.core.production_validator import validate_production_configuration; validate_production_configuration(get_settings())"
 
@@ -58,3 +62,20 @@ jobs:
           LATEST_BACKUP=$(ls -t backups/*.db | head -1)
           python scripts/restore_database.py --backup-file "$LATEST_BACKUP" --verify-only
 
+      - name: Verify SQLite-to-PostgreSQL Migration Dry-Run
+        run: |
+          python scripts/migrate_sqlite_to_postgres.py --dry-run
+
+      - name: Validate Docker Image Build
+        run: |
+          docker build -t agriguardian:test .
+
+      - name: Container Health Smoke Test
+        run: |
+          docker run -d --name test_app -p 8000:8000 \
+            -e APP_ENV=test \
+            -e JWT_SECRET_KEY=ci_signing_token_with_sufficient_entropy_64characters_long_abcdef123456 \
+            agriguardian:test
+          sleep 5
+          curl -f http://localhost:8000/api/v1/health/live || exit 1
+          docker stop test_app && docker rm test_app

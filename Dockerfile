@@ -52,6 +52,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 EXPOSE 8000 8501
 
-# Default command launches FastAPI headless backend + PWA static server
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Default command launches FastAPI headless backend + PWA static server with single worker for deterministic SQLite and in-memory state concurrency
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 

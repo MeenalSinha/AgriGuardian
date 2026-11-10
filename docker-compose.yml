@@ -15,17 +15,14 @@ services:
       - APP_ENV=production
       - DEBUG=false
       - LOG_LEVEL=INFO
-      - JWT_SECRET_KEY=production_compose_secret_key_minimum_32_characters_long
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?Error: JWT_SECRET_KEY must be set in production environment or .env file}
       - ALLOWED_ORIGINS=http://localhost:8501,http://localhost:8000,http://127.0.0.1:8501,http://127.0.0.1:8000
-      - DATABASE_URL=postgresql://agri_user:agri_secure_pass@db:5432/agriguardian_db
+      - DATABASE_URL=${DATABASE_URL:-}
       - BACKUP_DIR=/app/backups
     volumes:
       - agriguardian_data:/app/data
       - agriguardian_logs:/app/logs
       - agriguardian_backups:/app/backups
-    depends_on:
-      db:
-        condition: service_healthy
     networks:
       - agriguardian_net
 
@@ -52,21 +49,21 @@ services:
     networks:
       - agriguardian_net
 
-  # 3. PostgreSQL Database (Production Engine)
+  # 3. PostgreSQL Database (Optional External Relational Storage / Migration Target)
   db:
     image: postgres:16-alpine
     container_name: agriguardian_postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
-      - POSTGRES_USER=agri_user
-      - POSTGRES_PASSWORD=agri_secure_pass
-      - POSTGRES_DB=agriguardian_db
+      - POSTGRES_USER=${POSTGRES_USER:-agri_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
+      - POSTGRES_DB=${POSTGRES_DB:-agriguardian_db}
     volumes:
       - agriguardian_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agri_user -d agriguardian_db"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-agri_user} -d $${POSTGRES_DB:-agriguardian_db}"]
       interval: 10s
       timeout: 5s
       retries: 5

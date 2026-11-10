@@ -120,6 +120,8 @@ class FarmDatabaseRepository:
     def __init__(self, db_path: Optional[str] = None):
         self.settings = get_settings()
         self.db_path = db_path or self.settings.farm_db_path
+        if self.settings.database_url and ("postgres" in self.settings.database_url.lower()):
+            logger.info("External PostgreSQL DATABASE_URL detected. Local operations use SQLite WAL engine; run 'scripts/migrate_sqlite_to_postgres.py' for PostgreSQL migration.")
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_database()
 

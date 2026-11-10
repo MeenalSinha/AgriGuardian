@@ -51,9 +51,14 @@ class LocalStorageService(BaseStorageService):
 
     def _resolve_safe_path(self, relative_path: str) -> Path:
         """Resolve path and ensure it does not escape base_dir."""
-        clean_rel = os.path.normpath(relative_path.lstrip("/\\"))
+        if not relative_path or os.path.isabs(relative_path) or relative_path.startswith("/") or relative_path.startswith("\\"):
+            raise ValueError(f"Path traversal detected: {relative_path} is an absolute or invalid path.")
+
+        clean_rel = os.path.normpath(relative_path)
         target = (self.base_dir / clean_rel).resolve()
-        if not str(target).startswith(str(self.base_dir)):
+        try:
+            target.relative_to(self.base_dir)
+        except ValueError:
             raise ValueError(f"Path traversal detected: {relative_path} attempts to escape storage root.")
         return target
 
@@ -94,21 +99,47 @@ class S3StorageService(BaseStorageService):
     def __init__(self, bucket_name: str, region: str = "ap-south-1"):
         self.bucket_name = bucket_name
         self.region = region
-        # Lazy initialization of boto3 when cloud credentials are provided
+        self._client = None
+        try:
+            import boto3
+            if os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"):
+                self._client = boto3.client("s3", region_name=region)
+        except ImportError:
+            pass
+
+    def _ensure_configured(self) -> None:
+        if not self._client:
+            raise RuntimeError(
+                "S3 cloud storage is not configured. Provide AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, "
+                "and ensure 'boto3' is installed to use S3StorageService."
+            )
 
     def save(self, relative_path: str, data: bytes) -> str:
-        # Production hook for boto3 s3 client put_object
-        logger.info(f"Uploading {len(data)} bytes to s3://{self.bucket_name}/{relative_path}")
+        self._ensure_configured()
+        self._client.put_object(Bucket=self.bucket_name, Key=relative_path.lstrip("/"), Body=data)
+        logger.info(f"Uploaded {len(data)} bytes to s3://{self.bucket_name}/{relative_path}")
         return f"s3://{self.bucket_name}/{relative_path.lstrip('/')}"
 
     def read(self, relative_path: str) -> bytes:
-        raise NotImplementedError("S3 retrieval requires configured cloud credentials in production.")
+        self._ensure_configured()
+        obj = self._client.get_object(Bucket=self.bucket_name, Key=relative_path.lstrip("/"))
+        return obj["Body"].read()
 
     def exists(self, relative_path: str) -> bool:
-        return False
+        self._ensure_configured()
+        try:
+            self._client.head_object(Bucket=self.bucket_name, Key=relative_path.lstrip("/"))
+            return True
+        except Exception:
+            return False
 
     def delete(self, relative_path: str) -> bool:
-        return True
+        self._ensure_configured()
+        try:
+            self._client.delete_object(Bucket=self.bucket_name, Key=relative_path.lstrip("/"))
+            return True
+        except Exception:
+            return False
 
     def get_url(self, relative_path: str) -> str:
         return f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/{relative_path.lstrip('/')}"

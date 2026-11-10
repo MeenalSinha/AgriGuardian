@@ -1,6 +1,6 @@
 """Service for identifying and arbitrating conflicting agricultural guidance."""
 
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from backend.app.core.logging import get_logger
 from backend.app.repositories.source_repository import SourceRepository
 from backend.app.schemas.knowledge import AtomicFact

@@ -1,7 +1,7 @@
 """Service for validating agricultural source authority, currency, and geographic scope."""
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from backend.app.core.logging import get_logger
 from backend.app.repositories.source_repository import SourceRepository
 from backend.app.schemas.source import SourceRecord

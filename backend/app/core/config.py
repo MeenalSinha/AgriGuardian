@@ -4,7 +4,7 @@ import os
 import secrets
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -193,7 +193,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 1440  # 24 hours
     farm_db_path: str = "data/farm_guardian.db"
     database_url: Optional[str] = Field(default=None, description="Optional PostgreSQL URI (e.g. postgresql://user:pass@host:5432/db)")
-    allowed_origins: List[str] = Field(
+    allowed_origins: Union[List[str], str] = Field(
         default_factory=lambda: [
             "http://localhost:8501",
             "http://localhost:8000",
@@ -221,8 +221,15 @@ class Settings(BaseSettings):
     @field_validator("allowed_origins", mode="before")
     @classmethod
     def parse_allowed_origins(cls, v: Any) -> List[str]:
-        """Support comma-separated string or list for allowed origins."""
+        """Support comma-separated string, JSON string, or list for allowed origins."""
         if isinstance(v, str):
+            v_str = v.strip()
+            if v_str.startswith("[") and v_str.endswith("]"):
+                import json
+                try:
+                    return json.loads(v_str)
+                except Exception:
+                    pass
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         if isinstance(v, list):
             return v

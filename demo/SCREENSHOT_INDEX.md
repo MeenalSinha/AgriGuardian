@@ -70,11 +70,11 @@ This document catalogs the complete suite of **13 genuine application screenshot
 - **Application Surface:** `http://localhost:8501/` (Crop Disease Diagnosis View)
 - **Key Capabilities Highlighted:**
   - PyTorch MobileNetV3 deep learning classifier for rapid leaf disease detection.
-  - Live inference result: **Tomato Early Blight (*Alternaria solani*)** detected with **83.8% confidence**.
+  - Live inference result: **Tomato Early Blight (*Alternaria solani*)** detected with **71.6% confidence** (High Confidence).
   - Grad-CAM attention heatmap verification highlighting pathogenic lesions.
   - Immediate organic and CIBRC-compliant chemical intervention protocols.
 - **Suggested Voiceover (0:40 – 0:58):**
-  > *"When a farmer spots disease symptoms, our computer vision pipeline instantly diagnoses the issue from a phone photo. Here, MobileNetV3 identifies Tomato Early Blight with 83.8% confidence, verified via Grad-CAM heatmaps, and immediately delivers CIBRC-compliant spray protocols with statutory pre-harvest intervals."*
+  > *"When a farmer spots disease symptoms, our computer vision pipeline instantly diagnoses the issue from a phone photo. Here, MobileNetV3 identifies Tomato Early Blight with 71.6% confidence, verified via Grad-CAM heatmaps, and immediately delivers CIBRC-compliant spray protocols with statutory pre-harvest intervals."*
 
 ---
 

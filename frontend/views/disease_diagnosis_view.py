@@ -112,24 +112,28 @@ def render_disease_diagnosis_view() -> None:
             os.makedirs(temp_dir, exist_ok=True)
             temp_image_path = os.path.join(temp_dir, "demo_leaf.jpg")
 
-            # Generate structured synthetic demonstration leaflet
-            arr = np.zeros((320, 320, 3), dtype=np.uint8)
+            # Generate realistic diagnostic demonstration leaflet
+            import cv2
+            arr = np.full((320, 320, 3), 245, dtype=np.uint8)
             if "Healthy" in sample_choice:
-                arr[:, :] = [38, 148, 48]
+                cv2.ellipse(arr, (160, 160), (120, 80), 30, 0, 360, (40, 150, 48), -1)
+                cv2.line(arr, (70, 110), (250, 210), (30, 120, 38), 2)
             elif "Early Blight" in sample_choice:
-                arr[:, :] = [45, 140, 50]
-                arr[100:190, 100:190] = [70, 45, 25]  # Concentric dark lesion
-                arr[120:170, 120:170] = [40, 25, 15]  # Center
+                cv2.ellipse(arr, (160, 160), (120, 80), 30, 0, 360, (45, 140, 50), -1)
+                cv2.line(arr, (70, 110), (250, 210), (35, 110, 40), 2)
+                for r, c in [(38, (30, 60, 100)), (28, (45, 80, 130)), (18, (25, 45, 80)), (8, (15, 25, 50))]:
+                    cv2.circle(arr, (150, 150), r, c, -1)
             elif "Late Blight" in sample_choice:
-                arr[:, :] = [40, 130, 45]
-                arr[80:240, 90:230] = [50, 35, 20]  # Large water-soaked patch
+                cv2.ellipse(arr, (160, 160), (120, 80), 30, 0, 360, (40, 130, 45), -1)
+                cv2.ellipse(arr, (140, 150), (60, 40), 20, 0, 360, (35, 50, 65), -1)
             else:
-                arr[:, :] = [50, 150, 55]
-                # Small bacterial speckles
-                arr[60:80, 60:80] = [60, 30, 10]
-                arr[180:200, 150:170] = [60, 30, 10]
+                cv2.ellipse(arr, (160, 160), (120, 80), 30, 0, 360, (50, 150, 55), -1)
+                for pt in [(130, 140), (170, 160), (150, 180), (120, 160)]:
+                    cv2.circle(arr, pt, 6, (20, 40, 80), -1)
 
-            demo_img = Image.fromarray(arr)
+            noise = np.random.normal(0, 10, arr.shape).astype(np.int16)
+            arr = np.clip(arr.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+            demo_img = Image.fromarray(cv2.cvtColor(arr, cv2.COLOR_BGR2RGB))
             demo_img.save(temp_image_path, format="JPEG")
             original_pil_image = demo_img
 
@@ -213,11 +217,11 @@ def render_disease_diagnosis_view() -> None:
         col_orig, col_cam = st.columns(2)
         with col_orig:
             if original_pil_image is not None:
-                st.image(original_pil_image, caption="Original Input Photograph", use_column_width=True)
+                st.image(original_pil_image, caption="Original Input Photograph", use_container_width=True)
 
         with col_cam:
             if diag.gradcam_image_path and os.path.exists(diag.gradcam_image_path):
-                st.image(diag.gradcam_image_path, caption="Grad-CAM Diagnostic Attention Overlay", use_column_width=True)
+                st.image(diag.gradcam_image_path, caption="Grad-CAM Diagnostic Attention Overlay", use_container_width=True)
             else:
                 st.info("Grad-CAM overlay not generated due to low prediction confidence or invalid input.")
 

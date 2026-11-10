@@ -144,3 +144,16 @@ def get_circuit_breaker(service_name: str) -> CircuitBreaker:
             _breakers[service_name] = CircuitBreaker(name=service_name)
         return _breakers[service_name]
 
+
+def reset_circuit_breakers() -> None:
+    """Reset all registered circuit breakers to CLOSED state (for tests and administrative recovery)."""
+    with _registry_lock:
+        for breaker in _breakers.values():
+            with breaker._lock:
+                breaker._state = CircuitBreakerState.CLOSED
+                breaker._failure_count = 0
+                breaker._success_count = 0
+                breaker._last_state_change = time.time()
+                breaker._last_error = None
+
+

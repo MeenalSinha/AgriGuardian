@@ -185,3 +185,4 @@ Implemented in [`backend/app/core/circuit_breaker.py`](file:///c:/Users/Meenal%2
 | `agriguardian_latency_p95_ms` | > 1,000 ms | > 2,500 ms | Check database indexing (`PRAGMA compile_options`), query plans, or CPU limits. |
 | `circuit_breaker_state` | State = 1 (HALF_OPEN) | State = 2 (OPEN) | Check upstream provider status pages (Open-Meteo / Gnani AI). |
 | Disk Usage (`data/`) | > 75% | > 90% | Run backup rotation or archive historical sync attachments to S3/GCS. |
+

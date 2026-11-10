@@ -115,3 +115,4 @@ All privacy operations were verified against unit and integration tests in [`tes
 - `test_consent_withdrawal`: PASSED (0.24s)
 - `test_farmer_full_data_export`: PASSED (0.25s)
 - `test_farmer_account_anonymized_deletion`: PASSED (0.27s)
+

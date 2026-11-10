@@ -39,7 +39,10 @@ def compute_sha256(file_path: Path) -> str:
 def backup_sqlite(source_path: Path, backup_dir: Path) -> Path:
     """Perform atomic online backup of SQLite database without blocking concurrent readers/writers."""
     if not source_path.exists():
-        raise FileNotFoundError(f"Source database not found at {source_path}")
+        logger.info(f"Source database not found at {source_path}. Initializing database schema...")
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        from backend.app.repositories.farm_db import FarmDatabase
+        FarmDatabase(db_path=str(source_path))
 
     timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     backup_filename = f"farm_guardian_backup_{timestamp_str}.db"

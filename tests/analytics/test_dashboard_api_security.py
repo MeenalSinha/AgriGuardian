@@ -4,6 +4,7 @@ from datetime import datetime
 import uuid
 from fastapi import HTTPException
 import pytest
+from pydantic import ValidationError
 
 from backend.app.main import (
     assign_officer_territory,
@@ -228,14 +229,11 @@ def test_admin_dashboard_endpoint(auth_fixture):
 def test_public_registration_blocks_privileged_role_escalation():
     """Verify that attempting to self-register as an administrator or officer is strictly blocked."""
     rand_sfx = uuid.uuid4().hex[:6]
-    # Attempting to supply ADMINISTRATOR role in public registration
-    user, profile, _ = auth_service.register_farmer(UserRegistrationRequest(
-        username=f"hacker_adm_{rand_sfx}",
-        password="ValidPassword123!",
-        full_name="Attacker Attempting Escalation",
-        role=UserRole.ADMINISTRATOR,
-    ))
-    # Must be forced to ordinary FARMER!
-    assert user.role == UserRole.FARMER
-    fetched = auth_service.repo.get_user_by_username(f"hacker_adm_{rand_sfx}")
-    assert fetched.role == UserRole.FARMER
+    # Attempting to supply ADMINISTRATOR role in public registration must raise ValidationError
+    with pytest.raises(ValidationError):
+        UserRegistrationRequest(
+            username=f"hacker_adm_{rand_sfx}",
+            password="ValidPassword123!",
+            full_name="Attacker Attempting Escalation",
+            role=UserRole.ADMINISTRATOR,
+        )

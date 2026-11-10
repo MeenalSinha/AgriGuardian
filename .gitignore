@@ -24,6 +24,9 @@ temp/
 # Reports and generated data
 reports/
 logs/
+backups/*.db
+backups/*.sha256
+!backups/.gitkeep
 data/*.csv
 data/*.db
 data/*.db-wal

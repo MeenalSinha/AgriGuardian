@@ -49,6 +49,15 @@ def test_data_manager(test_settings):
     return DataManager(settings=test_settings)
 
 
+@pytest.fixture(autouse=True)
+def reset_all_circuit_breakers():
+    """Autouse fixture to guarantee external service circuit breakers are reset between test runs."""
+    from backend.app.core.circuit_breaker import reset_circuit_breakers
+    reset_circuit_breakers()
+    yield
+    reset_circuit_breakers()
+
+
 @pytest.fixture
 def test_rule_engine(test_settings):
     """Provide isolated RuleEngine."""

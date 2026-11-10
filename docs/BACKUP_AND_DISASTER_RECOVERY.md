@@ -118,3 +118,4 @@ flowchart TD
 - **Checksum Verification:** SHA-256 generated and verified matching bit-for-bit.
 - **Restoration Integrity:** `PRAGMA integrity_check` returned `ok`.
 - **RTO Achievement:** Complete cold recovery simulated in under **30 seconds** (well within 15-minute RTO target).
+

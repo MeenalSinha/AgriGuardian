@@ -211,3 +211,4 @@ server {
   - Recommended minimum replicas: 3 pods. Maximum replicas: 20 pods.
 - **Read Replicas:** Read queries (market intelligence, crop knowledge profiles) can be offloaded to PostgreSQL read replicas.
 - **Model Invariant:** The MobileNetV3 CNN model checkpoint (`data/models/mobilenetv3_plantvillage.pth`) is loaded into read-only process memory per worker thread during startup, ensuring thread-safe inference without lock contention.
+

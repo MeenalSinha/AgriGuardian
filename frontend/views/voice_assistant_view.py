@@ -32,6 +32,7 @@ def render_voice_assistant_view() -> None:
         title="AI Voice & Vernacular Assistant",
         subtitle="Spoken and conversational agricultural advisory powered by Gnani Prisma speech recognition and Timbre speech synthesis across 10 Indian languages.",
         pills=["Gnani Prisma v2.5 STT", "Gnani Timbre v2.5 TTS", "10 Indian Languages", "Agronomic Grounding"],
+        icon_name="bot",
     )
 
     # Initialize Engine & Session in Streamlit session state

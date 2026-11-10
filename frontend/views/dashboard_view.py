@@ -49,6 +49,7 @@ def render_dashboard_view():
     ui_page_header(
         title="Unified Agricultural Intelligence & Monitoring",
         subtitle="Role-grounded operational analytics for Farmers, Regional Agronomists & Platform Administrators.",
+        pills=["Role-Based Telemetry", "DPDP Privacy Shield", "Phenology Distribution", "System Health Matrix"],
         icon_name="layout-dashboard",
     )
 

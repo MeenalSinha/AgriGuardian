@@ -33,6 +33,7 @@ def render_disease_diagnosis_view() -> None:
         title="Intelligent Crop Disease Diagnosis",
         subtitle="Deep learning foliar diagnostics with genuine Grad-CAM explainability, clinical surface severity quantification, and ICAR-aligned IPM advisory.",
         pills=["MobileNetV3-Small CNN", "Grad-CAM Attention Overlay", "Surface Severity %", "ICAR IPM Advisory"],
+        icon_name="microscope",
     )
 
     if "disease_detector" not in st.session_state:

@@ -30,6 +30,7 @@ def render_weather_dashboard_view():
     ui_page_header(
         title="Agricultural Weather Intelligence & Climate Risk",
         subtitle="Precision microclimate monitoring, phenology-aware weather risk indexing, and proactive spray advisories.",
+        pills=["IMD Agromet Protocols", "7-Day Hourly Forecast", "Spray Window Matrix", "Terminal Heat & Frost"],
         icon_name="cloud-rain",
     )
 

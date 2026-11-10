@@ -29,6 +29,7 @@ def render_home_view() -> None:
         title="Farm Advisory & Decision Support",
         subtitle="Multi-source agricultural synthesis combining localized weather telemetry, mandi benchmark pricing, ICAR agronomic rules, and computer vision diagnosis.",
         pills=["Multi-Source Synthesis", "CIBRC Aligned", "ICAR Validated", "Bilingual Support"],
+        icon_name="leaf",
     )
 
     if "system" not in st.session_state:

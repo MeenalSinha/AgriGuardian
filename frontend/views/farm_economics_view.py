@@ -56,6 +56,7 @@ def render_farm_economics_view():
     ui_page_header(
         title="Farm Economics & Profitability Intelligence",
         subtitle="Decimal-exact cost accounting, labor allocation, multi-event harvest tracking, actual sales realization, and break-even analytics.",
+        pills=["Decimal-Exact Precision", "Break-Even Analytics", "Harvest & Sales Tracking", "Budget Variance"],
         icon_name="dollar-sign",
     )
 

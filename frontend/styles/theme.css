@@ -267,64 +267,181 @@ section[data-testid="stSidebar"] .stRadio > div[role="radiogroup"] > label:has(i
    REUSABLE UI COMPONENTS
    ============================================================================== */
 
-/* Professional Page Header */
+/* Multi-layer refined green gradient background with ambient depth */
 .ag-page-header {
-    background: linear-gradient(135deg, var(--ag-brand-deep) 0%, var(--ag-brand-primary) 100%);
-    border-radius: var(--ag-radius-lg);
-    padding: 1.5rem 1.75rem;
-    color: var(--ag-text-inverse);
-    margin-bottom: 1.5rem;
-    box-shadow: var(--ag-shadow-md);
+    background: radial-gradient(circle at 85% 15%, rgba(16, 185, 129, 0.28) 0%, transparent 55%),
+                radial-gradient(circle at 10% 90%, rgba(5, 150, 105, 0.20) 0%, transparent 45%),
+                linear-gradient(135deg, #072314 0%, #0F3B22 45%, #16532D 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    border-radius: 16px !important;
+    padding: 1.85rem 2.25rem !important;
+    color: #FFFFFF !important;
+    margin-bottom: 1.75rem !important;
+    box-shadow: 0 10px 25px -5px rgba(7, 35, 20, 0.35), 0 8px 12px -6px rgba(7, 35, 20, 0.25) !important;
     position: relative;
     overflow: hidden;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
 }
 
-.ag-page-header::after {
+.ag-page-header:hover {
+    box-shadow: 0 14px 30px -4px rgba(7, 35, 20, 0.42), 0 10px 16px -6px rgba(7, 35, 20, 0.3) !important;
+}
+
+/* Elegant top highlight sheen */
+.ag-page-header::before {
     content: "";
     position: absolute;
-    right: -20px;
-    bottom: -30px;
-    width: 160px;
-    height: 160px;
-    background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%);
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(110, 231, 183, 0.7) 25%, rgba(52, 211, 153, 0.9) 50%, rgba(110, 231, 183, 0.7) 75%, transparent 100%);
     pointer-events: none;
 }
 
-.ag-page-header h1 {
+/* Atmospheric subtle corner glow */
+.ag-page-header::after {
+    content: "";
+    position: absolute;
+    right: -30px;
+    bottom: -40px;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(52, 211, 153, 0.22) 0%, transparent 70%);
+    pointer-events: none;
+}
+
+/* High-contrast crisp typography - override all Streamlit heading defaults */
+div[data-testid="stMarkdownContainer"] .ag-page-header h1,
+.stMarkdown .ag-page-header h1,
+.ag-page-header h1,
+.ag-page-header .ag-header-title {
     color: #FFFFFF !important;
-    margin: 0;
-    font-size: 1.75rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    margin: 0 !important;
+    font-size: 1.75rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.025em !important;
+    line-height: 1.25 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
-.ag-page-header p {
-    color: rgba(255, 255, 255, 0.88) !important;
-    margin-top: 0.35rem;
-    font-size: 0.95rem;
-    max-width: 800px;
-    line-height: 1.45;
+div[data-testid="stMarkdownContainer"] .ag-page-header h1 span,
+.stMarkdown .ag-page-header h1 span,
+.ag-page-header h1 span {
+    color: #FFFFFF !important;
 }
 
+div[data-testid="stMarkdownContainer"] .ag-page-header p,
+.stMarkdown .ag-page-header p,
+.ag-page-header p,
+.ag-page-header .ag-header-subtitle {
+    color: rgba(255, 255, 255, 0.92) !important;
+    margin-top: 0.5rem !important;
+    margin-bottom: 0 !important;
+    font-size: 0.95rem !important;
+    font-weight: 400 !important;
+    max-width: 900px !important;
+    line-height: 1.55 !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Header icon container */
+.ag-header-icon {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 10px !important;
+    background: rgba(255, 255, 255, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.24) !important;
+    color: #6EE7B7 !important;
+    flex-shrink: 0 !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Feature tags / Pill Badges */
 .ag-page-header-pills {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 0.9rem;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 10px !important;
+    margin-top: 1.15rem !important;
 }
 
 .ag-header-pill {
-    background: rgba(255, 255, 255, 0.14);
-    backdrop-filter: blur(4px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: #FFFFFF;
-    font-size: 0.78rem;
-    font-weight: 500;
-    padding: 3px 10px;
-    border-radius: var(--ag-radius-full);
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+    background: rgba(255, 255, 255, 0.12) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.24) !important;
+    color: #FFFFFF !important;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.015em !important;
+    padding: 5px 13px !important;
+    border-radius: 9999px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 7px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    cursor: default;
+    user-select: none;
+}
+
+.ag-header-pill:hover {
+    background: rgba(255, 255, 255, 0.22) !important;
+    border-color: rgba(255, 255, 255, 0.45) !important;
+    color: #FFFFFF !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2) !important;
+}
+
+.ag-pill-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #34D399;
+    box-shadow: 0 0 6px rgba(52, 211, 153, 0.8);
+    flex-shrink: 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .ag-page-header {
+        padding: 1.35rem 1.25rem !important;
+        margin-bottom: 1.25rem !important;
+        border-radius: 12px !important;
+    }
+    div[data-testid="stMarkdownContainer"] .ag-page-header h1,
+    .ag-page-header h1,
+    .ag-page-header .ag-header-title {
+        font-size: 1.35rem !important;
+        gap: 8px !important;
+    }
+    .ag-header-icon {
+        width: 32px !important;
+        height: 32px !important;
+    }
+    div[data-testid="stMarkdownContainer"] .ag-page-header p,
+    .ag-page-header p,
+    .ag-page-header .ag-header-subtitle {
+        font-size: 0.88rem !important;
+    }
+    .ag-page-header-pills {
+        gap: 6px !important;
+        margin-top: 0.8rem !important;
+    }
+    .ag-header-pill {
+        font-size: 0.74rem !important;
+        padding: 4px 10px !important;
+    }
 }
 
 /* Structured Card */

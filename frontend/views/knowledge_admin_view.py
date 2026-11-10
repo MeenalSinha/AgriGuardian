@@ -30,6 +30,7 @@ def render_knowledge_admin_view():
     ui_page_header(
         title="Agricultural Knowledge Governance",
         subtitle="Audit Tier-1 statutory sources, inspect atomic agronomic facts, and verify evidence-grounded safety policies.",
+        pills=["Tier-1 Statutory Sources", "Atomic Fact Registry", "Pesticide Governance", "Evidence Grounding"],
         icon_name="book-open",
     )
 

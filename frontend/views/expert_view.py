@@ -38,6 +38,7 @@ def render_expert_view():
     ui_page_header(
         title="Agricultural Expert Verification Portal",
         subtitle="Human-in-the-Loop AI Decision Support, Plant Pathology Review, CIBRC Chemical Safety & Knowledge Governance",
+        pills=["Human-in-the-Loop", "CIBRC Dosage Verification", "Agronomist Audit Trail", "Territory Scoping"],
         icon_name="user-check",
     )
 

@@ -44,6 +44,7 @@ def render_demo_cases_view() -> None:
     ui_page_header(
         title="Reference Benchmark Cases",
         subtitle="Pre-configured agricultural field scenarios reflecting typical Indian smallholder cultivation challenges.",
+        pills=["ICAR Crop Profiles", "Verified Weather Scenarios", "Real Mandi Benchmarks"],
         icon_name="file-text",
     )
 

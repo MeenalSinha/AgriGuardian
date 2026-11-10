@@ -32,21 +32,34 @@ def ui_page_header(
     """Render a premium, consistent page header banner across agricultural views."""
     actual_icon = icon_name or icon
     icon_svg = (
-        f'<span style="display:inline-flex; align-items:center; margin-right:12px; vertical-align:middle; color:var(--ag-brand-primary);">{render_icon(actual_icon, size=28)}</span>'
+        f'<span class="ag-header-icon" style="display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:10px; background:rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.24); color:#6EE7B7; flex-shrink:0; box-shadow:0 2px 6px rgba(0,0,0,0.15);">'
+        f'{render_icon(actual_icon, size=22, color="#6EE7B7")}'
+        f'</span>'
         if actual_icon
         else ""
     )
 
     pills_html = ""
     if pills:
-        pill_spans = "".join(f'<span class="ag-header-pill">{p}</span>' for p in pills)
+        pill_spans = "".join(
+            f'<span class="ag-header-pill" style="color:#FFFFFF !important;">'
+            f'<span class="ag-pill-dot" style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#34D399; box-shadow:0 0 6px rgba(52,211,153,0.8); margin-right:2px; flex-shrink:0;"></span>'
+            f'{p}'
+            f'</span>'
+            for p in pills
+        )
         pills_html = f'<div class="ag-page-header-pills">{pill_spans}</div>'
 
     st.markdown(
         f"""
         <div class="ag-page-header">
-            <h1 style="display:flex; align-items:center;">{icon_svg}<span>{title}</span></h1>
-            <p>{subtitle}</p>
+            <h1 class="ag-header-title" style="color:#FFFFFF !important; margin:0 !important; font-size:1.75rem !important; font-weight:700 !important; letter-spacing:-0.025em !important; line-height:1.25 !important; display:flex !important; align-items:center !important; gap:12px !important; text-shadow:0 1px 3px rgba(0,0,0,0.35);">
+                {icon_svg}
+                <span style="color:#FFFFFF !important;">{title}</span>
+            </h1>
+            <p class="ag-header-subtitle" style="color:rgba(255,255,255,0.92) !important; margin-top:0.5rem !important; margin-bottom:0 !important; font-size:0.95rem !important; font-weight:400 !important; max-width:900px !important; line-height:1.55 !important; text-shadow:0 1px 2px rgba(0,0,0,0.2);">
+                {subtitle}
+            </p>
             {pills_html}
         </div>
         """,
@@ -55,14 +68,20 @@ def ui_page_header(
 
 
 def ui_section_header(title: str, subtitle: Optional[str] = None, icon: Optional[str] = None, **kwargs) -> None:
-    """Render a clean section header with optional Lucide icon."""
-    icon_svg = f'<span style="color:var(--ag-brand-primary); margin-right:8px;">{render_icon(icon, size=20)}</span>' if icon else ""
-    sub_html = f'<div style="font-size:0.85rem; color:var(--ag-text-muted); margin-top:2px;">{subtitle}</div>' if subtitle else ""
+    """Render a clean, modern section header with optional Lucide icon."""
+    icon_svg = (
+        f'<span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:7px; background:#ECFDF5; border:1px solid #A7F3D0; color:#059669; margin-right:10px; flex-shrink:0;">'
+        f'{render_icon(icon, size=16, color="#059669")}'
+        f'</span>'
+        if icon
+        else ""
+    )
+    sub_html = f'<div style="font-size:0.86rem; color:#64748B; margin-top:3px; margin-left:38px;">{subtitle}</div>' if (subtitle and icon) else (f'<div style="font-size:0.86rem; color:#64748B; margin-top:3px;">{subtitle}</div>' if subtitle else "")
     
     st.markdown(
         f"""
-        <div style="margin: 1.5rem 0 0.8rem 0;">
-            <div style="display:flex; align-items:center; font-size:1.18rem; font-weight:700; color:var(--ag-text-primary);">
+        <div style="margin: 1.75rem 0 0.9rem 0; padding-bottom: 0.5rem; border-bottom: 1px solid #F1F5F9;">
+            <div style="display:flex; align-items:center; font-size:1.22rem; font-weight:700; color:#0F172A; letter-spacing:-0.015em;">
                 {icon_svg}
                 <span>{title}</span>
             </div>

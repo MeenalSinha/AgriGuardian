@@ -24,6 +24,7 @@ def render_market_intelligence_view():
     ui_page_header(
         title="Agricultural Market Intelligence",
         subtitle="Real-Time APMC Mandi Rates, Nearby Spatial Comparisons, Official MSP Benchmarks & Time-Series Forecasting.",
+        pills=["Agmarknet Live Feeds", "Spatial Mandi Radius", "MSP Floor Compliance", "Price Volatility Analytics"],
         icon_name="trending-up",
     )
     st.caption("Official Data Grounding: AGMARKNET Daily Bulletins | e-NAM Trade Network | CACP / DA&FW Statutory MSP")

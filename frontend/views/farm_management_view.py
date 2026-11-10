@@ -75,6 +75,7 @@ def render_farm_management_view():
         title="Farmer Identity & Farm Operations",
         subtitle="Manage agricultural holdings, plot zoning, crop phenological cycles, soil health diagnostics, and automated stage-based task schedules.",
         pills=["Multi-Farm Holdings", "Phenological Tracking", "Soil Fertility Diagnostics", "Operational Calendar"],
+        icon_name="sprout",
     )
 
     auth_srv, profile_srv, farm_srv, plot_srv, cycle_srv, soil_srv, calendar_srv, context_srv = get_services()

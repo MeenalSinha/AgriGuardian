@@ -13,6 +13,7 @@ def render_about_view() -> None:
     ui_page_header(
         title="System Architecture & Platform Overview",
         subtitle="Intelligent Agricultural Companion for Indian Farmers — Technical Architecture, Capabilities & Research Standards.",
+        pills=["Production Architecture", "Bilingual Support", "Zero Silent Data Loss"],
         icon_name="info",
     )
 

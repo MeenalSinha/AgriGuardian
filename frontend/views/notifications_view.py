@@ -52,6 +52,7 @@ def render_notifications_view():
     ui_page_header(
         title="Proactive Notifications & Smart Farm Reminders",
         subtitle="Real-Time Weather Risk Warnings | Market Price Surges | Agronomic Milestones | Multi-Channel Outbox Telemetry",
+        pills=["Agromet Risk Warnings", "Smart Farm Reminders", "DPDP Consent Audit", "Priority Outbox"],
         icon_name="bell",
     )
 

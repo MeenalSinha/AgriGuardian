@@ -38,6 +38,7 @@ def render_offline_sync_view():
     ui_page_header(
         title="Offline-First Synchronization & PWA Companion",
         subtitle="Zero data loss during network disruptions, durable IndexedDB journals, monotonic change-feed replication, and conflict resolution.",
+        pills=["IndexedDB Storage", "Idempotent Queue", "Two-Way Sync Center", "Conflict Resolution Desk"],
         icon_name="refresh-cw",
     )
 

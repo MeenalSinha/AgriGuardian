@@ -21,8 +21,22 @@ def load_custom_css() -> None:
         st.markdown(f"<style>\n{css_content}\n</style>", unsafe_allow_html=True)
 
 
-def ui_page_header(title: str, subtitle: str, pills: Optional[List[str]] = None) -> None:
+def ui_page_header(
+    title: str,
+    subtitle: str = "",
+    pills: Optional[List[str]] = None,
+    icon_name: Optional[str] = None,
+    icon: Optional[str] = None,
+    **kwargs,
+) -> None:
     """Render a premium, consistent page header banner across agricultural views."""
+    actual_icon = icon_name or icon
+    icon_svg = (
+        f'<span style="display:inline-flex; align-items:center; margin-right:12px; vertical-align:middle; color:var(--ag-brand-primary);">{render_icon(actual_icon, size=28)}</span>'
+        if actual_icon
+        else ""
+    )
+
     pills_html = ""
     if pills:
         pill_spans = "".join(f'<span class="ag-header-pill">{p}</span>' for p in pills)
@@ -31,7 +45,7 @@ def ui_page_header(title: str, subtitle: str, pills: Optional[List[str]] = None)
     st.markdown(
         f"""
         <div class="ag-page-header">
-            <h1>{title}</h1>
+            <h1 style="display:flex; align-items:center;">{icon_svg}<span>{title}</span></h1>
             <p>{subtitle}</p>
             {pills_html}
         </div>
@@ -40,7 +54,7 @@ def ui_page_header(title: str, subtitle: str, pills: Optional[List[str]] = None)
     )
 
 
-def ui_section_header(title: str, subtitle: Optional[str] = None, icon: Optional[str] = None) -> None:
+def ui_section_header(title: str, subtitle: Optional[str] = None, icon: Optional[str] = None, **kwargs) -> None:
     """Render a clean section header with optional Lucide icon."""
     icon_svg = f'<span style="color:var(--ag-brand-primary); margin-right:8px;">{render_icon(icon, size=20)}</span>' if icon else ""
     sub_html = f'<div style="font-size:0.85rem; color:var(--ag-text-muted); margin-top:2px;">{subtitle}</div>' if subtitle else ""
@@ -59,7 +73,7 @@ def ui_section_header(title: str, subtitle: Optional[str] = None, icon: Optional
     )
 
 
-def ui_divider(text: Optional[str] = None, style: str = "default") -> None:
+def ui_divider(text: Optional[str] = None, style: str = "default", **kwargs) -> None:
     """Render stylized divider with optional centered label."""
     if style == "gradient":
         st.markdown(
@@ -94,6 +108,7 @@ def ui_card(
     icon: str = "file-text",
     color: str = "#FFFFFF",
     border_color: str = "#E2E8F0",
+    **kwargs,
 ) -> None:
     """Render structured information card with consistent SVG icon and typography."""
     legacy_icon_map = {
@@ -197,14 +212,14 @@ def ui_alert(message: str, type: str = "info", level: Optional[str] = None, **kw
     )
 
 
-def ui_badge(text: str, color: str = "#16532D", bg_color: str = "#ECFDF5", variant: Optional[str] = None) -> str:
+def ui_badge(text: str, color: str = "#16532D", bg_color: str = "#ECFDF5", variant: Optional[str] = None, **kwargs) -> str:
     """Return colored HTML inline pill badge."""
     if variant:
         return f'<span class="ag-badge ag-badge-{variant}">{text}</span>'
     return f'<span class="ag-badge" style="background-color:{bg_color}; color:{color}; border:1px solid rgba(0,0,0,0.06);">{text}</span>'
 
 
-def ui_status_badge(status: str) -> str:
+def ui_status_badge(status: str, **kwargs) -> str:
     """Return professional HTML status badge based on clinical/operational state."""
     status_lower = str(status).lower().strip()
     
@@ -218,7 +233,7 @@ def ui_status_badge(status: str) -> str:
         return f'<span class="ag-badge ag-badge-neutral">{status}</span>'
 
 
-def ui_status_pill(is_active: bool, label: str) -> str:
+def ui_status_pill(is_active: bool, label: str, **kwargs) -> str:
     """Return a compact status pill with pulsing indicator dot."""
     dot_class = "ag-dot-active" if is_active else "ag-dot-warning"
     text_color = "#166534" if is_active else "#9A3412"
@@ -232,7 +247,7 @@ def ui_status_pill(is_active: bool, label: str) -> str:
     )
 
 
-def ui_empty_state(title: str, description: str = "", icon: str = "layers") -> None:
+def ui_empty_state(title: str, description: str = "", icon: str = "layers", **kwargs) -> None:
     """Render an elegant empty state placeholder."""
     icon_svg = render_icon(icon, size=28, color="#94A3B8")
     desc_html = f'<div class="ag-empty-desc">{description}</div>' if description else ""

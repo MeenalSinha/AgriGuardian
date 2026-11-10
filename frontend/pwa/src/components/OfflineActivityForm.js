@@ -74,8 +74,8 @@ export class OfflineActivityForm {
     this.container.innerHTML = `
       <div class="form-card">
         <div class="form-header">
-          <h2>🚜 ${lang === 'hi' ? 'नया कृषि कार्य दर्ज करें' : 'Record Farm Activity'}</h2>
-          <span class="pill-badge pill-pending_sync">⏳ ${lang === 'hi' ? 'ऑफ़लाइन सुरक्षित' : 'Offline Safe'}</span>
+          <h2>${lang === 'hi' ? 'नया कृषि कार्य दर्ज करें' : 'Record Farm Activity'}</h2>
+          <span class="pill-badge pill-pending_sync">${lang === 'hi' ? 'ऑफ़लाइन सुरक्षित' : 'Offline Safe'}</span>
         </div>
 
         <form id="activity-form">
@@ -88,14 +88,14 @@ export class OfflineActivityForm {
             <div class="form-group">
               <label for="act-type"><strong>${lang === 'hi' ? 'कार्य प्रकार' : 'Activity Type'}</strong></label>
               <select id="act-type" name="activity_type" class="form-control">
-                <option value="fertilizer_application">🌿 ${lang === 'hi' ? 'उर्वरक / खाद' : 'Fertilizer Application'}</option>
-                <option value="irrigation">💧 ${lang === 'hi' ? 'सिंचाई' : 'Irrigation'}</option>
-                <option value="pest_spray">🌧️ ${lang === 'hi' ? 'कीटनाशक छिड़काव' : 'Pest Spray'}</option>
-                <option value="weeding">🌱 ${lang === 'hi' ? 'निराई-गुड़ाई' : 'Weeding'}</option>
-                <option value="sowing">🚜 ${lang === 'hi' ? 'बुवाई / रोपाई' : 'Sowing / Transplanting'}</option>
-                <option value="harvesting">🌾 ${lang === 'hi' ? 'कटाई' : 'Harvesting'}</option>
-                <option value="scouting">🔍 ${lang === 'hi' ? 'खेत निरीक्षण / अवलोकन' : 'Field Scouting'}</option>
-                <option value="general_field_work">📝 ${lang === 'hi' ? 'अन्य सामान्य कार्य' : 'General Field Work'}</option>
+                <option value="fertilizer_application">${lang === 'hi' ? 'उर्वरक / खाद' : 'Fertilizer Application'}</option>
+                <option value="irrigation">${lang === 'hi' ? 'सिंचाई' : 'Irrigation'}</option>
+                <option value="pest_spray">${lang === 'hi' ? 'कीटनाशक छिड़काव' : 'Pest Spray'}</option>
+                <option value="weeding">${lang === 'hi' ? 'निराई-गुड़ाई' : 'Weeding'}</option>
+                <option value="sowing">${lang === 'hi' ? 'बुवाई / रोपाई' : 'Sowing / Transplanting'}</option>
+                <option value="harvesting">${lang === 'hi' ? 'कटाई' : 'Harvesting'}</option>
+                <option value="scouting">${lang === 'hi' ? 'खेत निरीक्षण / अवलोकन' : 'Field Scouting'}</option>
+                <option value="general_field_work">${lang === 'hi' ? 'अन्य सामान्य कार्य' : 'General Field Work'}</option>
               </select>
             </div>
 
@@ -114,7 +114,7 @@ export class OfflineActivityForm {
             <div class="form-group checkbox-group">
               <label class="toggle-label">
                 <input type="checkbox" name="is_completed" checked>
-                <span><strong>✅ ${lang === 'hi' ? 'कार्य आज ही पूर्ण हुआ' : 'Mark as Completed'}</strong></span>
+                <span><strong>${lang === 'hi' ? 'कार्य आज ही पूर्ण हुआ' : 'Mark as Completed'}</strong></span>
               </label>
             </div>
           </div>
@@ -126,7 +126,7 @@ export class OfflineActivityForm {
 
           <div class="form-actions">
             <button type="submit" class="btn-primary">
-              💾 ${lang === 'hi' ? 'सुरक्षित करें (ऑफ़लाइन)' : 'Save Activity (Offline Safe)'}
+              ${lang === 'hi' ? 'सुरक्षित करें (ऑफ़लाइन)' : 'Save Activity (Offline Safe)'}
             </button>
           </div>
         </form>

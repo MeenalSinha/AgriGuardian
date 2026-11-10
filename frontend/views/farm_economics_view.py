@@ -29,7 +29,16 @@ from backend.app.schemas.economics import (
 )
 from backend.app.services.economics import EconomicsService, get_economics_service
 from backend.app.services.economics.unit_conversion_service import UnitConversionService
-from frontend.components.ui_widgets import ui_alert, ui_card, ui_divider, ui_metric_card
+from frontend.components.ui_widgets import (
+    ui_page_header,
+    ui_section_header,
+    ui_divider,
+    ui_card,
+    ui_metric_card,
+    ui_alert,
+    ui_badge,
+)
+from frontend.components.icons import render_icon
 
 
 def get_economics_bundle():
@@ -44,21 +53,10 @@ def render_farm_economics_view():
     repo, economics = get_economics_bundle()
     settings = get_settings()
 
-    st.markdown(
-        """
-        <div style="background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%);
-                    color: white; padding: 20px; border-radius: 12px; margin-bottom: 24px;">
-            <h1 style="color: white; margin: 0; font-size: 26px;">
-                💰 Farm Economics, Cost Tracking & Profitability Intelligence
-            </h1>
-            <p style="margin: 8px 0 0 0; opacity: 0.92; font-size: 15px;">
-                Evidence-grounded financial intelligence for Indian farmers: decimal-exact accounting,
-                labor & input tracking, multi-event harvests, actual sales realization, break-even thresholds,
-                budget variance alerting, and transparent crop scenario planning.
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    ui_page_header(
+        title="Farm Economics & Profitability Intelligence",
+        subtitle="Decimal-exact cost accounting, labor allocation, multi-event harvest tracking, actual sales realization, and break-even analytics.",
+        icon_name="dollar-sign",
     )
 
     # -------------------------------------------------------------------------
@@ -85,11 +83,11 @@ def render_farm_economics_view():
         farmer_rows = cursor.fetchall()
 
     if not farmer_rows:
-        st.warning("⚠️ No registered farmer profiles found. Please register a farmer in '🌾 My Farms & Crops' first.")
+        ui_alert("No registered farmer profiles found. Please register a farmer in 'My Farms & Crops' first.", level="warning")
         return
 
     farmer_options = {f"{r['full_name']} ({r['phone_number']} - ID: {r['farmer_id'][:8]})": r['farmer_id'] for r in farmer_rows}
-    
+
     # Select active farmer
     default_idx = 0
     if current_farmer and current_farmer.farmer_id in farmer_options.values():
@@ -108,7 +106,7 @@ def render_farm_economics_view():
     # Load Farmer's Farms & Active Cycles
     farms = repo.get_farms_by_farmer(active_farmer_id)
     farm_map = {f.farm_id: f for f in farms}
-    
+
     all_cycles = repo.get_all_crop_cycles_by_farmer(active_farmer_id)
     cycle_map = {c.cycle_id: c for c in all_cycles}
 
@@ -118,20 +116,19 @@ def render_farm_economics_view():
     # Main Economics Navigation Tabs
     # -------------------------------------------------------------------------
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "💰 Financial Overview",
-        "📝 Expenses & Labor",
-        "🌾 Harvest & Production",
-        "🏷️ Sales & Realized Revenue",
-        "📊 Profitability & Budgets",
-        "🔮 Scenarios & Crop Planning",
+        "Financial Overview",
+        "Expenses & Labor",
+        "Harvest & Production",
+        "Sales & Realized Revenue",
+        "Profitability & Budgets",
+        "Scenarios & Crop Planning",
     ])
 
     # =========================================================================
     # TAB 1: FINANCIAL OVERVIEW
     # =========================================================================
     with tab1:
-        st.subheader("🌾 Farm Financial Summary & Cash Flow")
-        st.caption("High-level overview of actual cultivation costs, payments, realized revenues, and cycle margins.")
+        ui_section_header("Farm Financial Summary & Cash Flow", "High-level overview of actual cultivation costs, payments, realized revenues, and cycle margins.", "dollar-sign")
 
         overview = economics.profitability.get_farmer_financial_overview(active_farmer_id)
 
@@ -172,9 +169,10 @@ def render_farm_economics_view():
             )
 
         if overview.provisional_cycles_count > 0:
-            st.info(
-                f"ℹ️ **Provisional Status:** You have **{overview.provisional_cycles_count}** active crop cycles currently in progress. "
-                "Final profit/loss metrics for those cycles will be confirmed once all harvesting and produce sales are concluded."
+            ui_alert(
+                f"Provisional Status: You have {overview.provisional_cycles_count} active crop cycles currently in progress. "
+                "Final profit/loss metrics for those cycles will be confirmed once all harvesting and produce sales are concluded.",
+                level="info",
             )
 
         ui_divider(style="dotted")
@@ -182,7 +180,7 @@ def render_farm_economics_view():
         # Two columns: Expenses Breakdown & Recent Transactions
         col_c1, col_c2 = st.columns([1, 1])
         with col_c1:
-            st.markdown("#### 📊 Expenditure Distribution by Category")
+            st.markdown("#### Expenditure Distribution by Category")
             all_expenses = economics.expenses.list_expenses(farmer_id=active_farmer_id, is_planned=False)
             if all_expenses:
                 cat_totals: Dict[str, float] = {}
@@ -194,12 +192,12 @@ def render_farm_economics_view():
                 st.caption("No incurred expenses recorded yet. Use the 'Expenses & Labor' tab to add your first expense.")
 
         with col_c2:
-            st.markdown("#### 🕒 Recent Financial Transactions")
+            st.markdown("#### Recent Financial Transactions")
             if overview.recent_expenses:
                 st.markdown("**Recent Expenses:**")
                 for e in overview.recent_expenses[:3]:
-                    status_badge = "🟢 Paid" if e.payment_status == PaymentStatus.PAID else "🔴 Unpaid"
-                    st.write(f"- **₹{e.total_amount:,.2f}** ({e.expense_description}) — {e.purchase_date} [{status_badge}]")
+                    status_text = "Paid" if e.payment_status == PaymentStatus.PAID else "Unpaid"
+                    st.write(f"- **₹{e.total_amount:,.2f}** ({e.expense_description}) — {e.purchase_date} [{status_text}]")
             if overview.recent_sales:
                 st.markdown("**Recent Sales:**")
                 for s in overview.recent_sales[:3]:
@@ -211,10 +209,9 @@ def render_farm_economics_view():
     # TAB 2: EXPENSES & LABOR
     # =========================================================================
     with tab2:
-        st.subheader("📝 Record & Track Agricultural Expenses")
-        st.caption("Decimal-safe tracking of seeds, fertilizers, pesticides, labor, equipment rent, fuel, and utilities.")
+        ui_section_header("Record & Track Agricultural Expenses", "Decimal-safe tracking of seeds, fertilizers, pesticides, labor, equipment rent, fuel, and utilities.", "bar-chart")
 
-        with st.expander("➕ Record New Agricultural Expense", expanded=False):
+        with st.expander("Record New Agricultural Expense", expanded=False):
             with st.form("add_expense_form"):
                 fe1, fe2, fe3 = st.columns(3)
                 with fe1:
@@ -239,7 +236,7 @@ def render_farm_economics_view():
                     cat_list = [c for c in ExpenseCategory]
                     exp_cat = st.selectbox("Expense Category *", cat_list, format_func=lambda x: x.value.replace("_", " ").title())
                 with fe5:
-                    exp_subcat = st.text_input("Subcategory (e.g. Urea, Daily Labor, Diesel)", placeholder="e.g. Sowing Labor")
+                    exp_subcat = st.text_input("Subcategory", placeholder="e.g. Sowing Labor, Urea, Diesel")
                 with fe6:
                     exp_desc = st.text_input("Description / Notes *", placeholder="e.g. 5 laborers for transplanting")
 
@@ -264,14 +261,13 @@ def render_farm_economics_view():
                 with fe14:
                     exp_vendor = st.text_input("Supplier / Vendor", placeholder="Kisan Seva Kendra")
 
-                submit_exp = st.form_submit_button("💾 Save Expense Entry", use_container_width=True)
+                submit_exp = st.form_submit_button("Save Expense Entry", use_container_width=True)
                 if submit_exp:
                     try:
-                        # Auto-align total if user left it or provided qty*unit_price
                         final_total = exp_total
                         if exp_qty > 0 and exp_price > 0 and abs(exp_total - (exp_qty * exp_price)) > 0.05:
                             final_total = float(UnitConversionService.round_currency(Decimal(str(exp_qty)) * Decimal(str(exp_price))))
-                        
+
                         payload = FarmExpenseCreate(
                             farm_id=sel_farm_id,
                             plot_id=sel_plot_id,
@@ -290,13 +286,13 @@ def render_farm_economics_view():
                             supplier_vendor=exp_vendor or None,
                         )
                         saved = economics.expenses.record_expense(farmer_id=active_farmer_id, payload=payload, user_id=user_id)
-                        st.success(f"✅ Recorded expense: {saved.expense_description} (₹{saved.total_amount:,.2f})")
+                        ui_alert(f"Recorded expense: {saved.expense_description} (₹{saved.total_amount:,.2f})", level="success")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"❌ Failed to record expense: {e}")
+                        ui_alert(f"Failed to record expense: {e}", level="error")
 
         # List Existing Expenses
-        st.markdown("#### 📋 Incurred Expenses Register")
+        st.markdown("#### Incurred Expenses Register")
         existing_expenses = economics.expenses.list_expenses(farmer_id=active_farmer_id)
         if existing_expenses:
             exp_table_data = []
@@ -316,7 +312,7 @@ def render_farm_economics_view():
             st.dataframe(df_exp, use_container_width=True, hide_index=True)
 
             # Append-Only Expense Correction Tool
-            with st.expander("🛠️ Apply Append-Only Financial Correction (Audit Trail)"):
+            with st.expander("Apply Append-Only Financial Correction (Audit Trail)"):
                 st.caption("Apply an auditable adjustment to an existing expense without destroying historical records.")
                 cor_c1, cor_c2, cor_c3 = st.columns([2, 1, 1])
                 with cor_c1:
@@ -330,7 +326,7 @@ def render_farm_economics_view():
 
                 if st.button("Apply Audited Correction"):
                     if not cor_reason:
-                        st.error("Please provide an audit reason for the correction.")
+                        ui_alert("Please provide an audit reason for the correction.", level="error")
                     else:
                         try:
                             corr_payload = ExpenseCorrectionCreate(
@@ -343,28 +339,26 @@ def render_farm_economics_view():
                                 payload=corr_payload,
                                 user_id=user_id,
                             )
-                            st.success(f"✅ Correction recorded! Previous: ₹{c_rec.previous_amount:,.2f} → New: ₹{c_rec.new_amount:,.2f}")
+                            ui_alert(f"Correction recorded! Previous: ₹{c_rec.previous_amount:,.2f} → New: ₹{c_rec.new_amount:,.2f}", level="success")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"❌ Correction failed: {e}")
+                            ui_alert(f"Correction failed: {e}", level="error")
         else:
-            st.info("No expenses registered yet.")
+            ui_alert("No expenses registered yet.", level="info")
 
     # =========================================================================
     # TAB 3: HARVEST & PRODUCTION
     # =========================================================================
     with tab3:
-        st.subheader("🌾 Crop Harvest & Production Tracking")
-        st.caption("Record harvest events, track gross yield per acre, and reconcile storage, sales, and retained seed.")
+        ui_section_header("Crop Harvest & Production Tracking", "Record harvest events, track gross yield per acre, and reconcile storage, sales, and retained seed.", "sprout")
 
-        with st.expander("➕ Record Crop Harvest Event", expanded=False):
+        with st.expander("Record Crop Harvest Event", expanded=False):
             with st.form("record_harvest_form"):
                 h1, h2 = st.columns(2)
                 with h1:
-                    # Filter cycles
                     h_cycle_opts = {f"{c.crop_name} - {c.variety_name or 'Std'} ({c.cycle_id})": c for c in all_cycles}
                     if not h_cycle_opts:
-                        st.warning("No crop cycles found. Please create a crop cycle in '🌾 My Farms & Crops' first.")
+                        ui_alert("No crop cycles found. Please create a crop cycle in 'My Farms & Crops' first.", level="warning")
                         sel_h_cycle = None
                     else:
                         sel_h_label = st.selectbox("Select Crop Cycle *", list(h_cycle_opts.keys()))
@@ -380,7 +374,7 @@ def render_farm_economics_view():
                 with h5:
                     h_grade = st.selectbox("Quality Grade", ["FAQ (Fair Average Quality)", "Grade A (Premium)", "Grade B (Standard)", "Substandard"])
 
-                st.markdown("##### 📦 Post-Harvest Produce Allocation (Reconciliation)")
+                st.markdown("##### Post-Harvest Produce Allocation (Reconciliation)")
                 ha1, ha2, ha3, ha4, ha5 = st.columns(5)
                 with ha1:
                     h_sold = st.number_input("Sold Instantly", min_value=0.0, step=1.0, value=0.0)
@@ -395,7 +389,7 @@ def render_farm_economics_view():
 
                 h_notes = st.text_input("Harvest Notes", placeholder="First picking, excellent moisture levels")
 
-                submit_h = st.form_submit_button("🌾 Save Harvest Record", use_container_width=True)
+                submit_h = st.form_submit_button("Save Harvest Record", use_container_width=True)
                 if submit_h and sel_h_cycle:
                     try:
                         h_payload = FarmHarvestCreate(
@@ -416,13 +410,13 @@ def render_farm_economics_view():
                             notes=h_notes or None,
                         )
                         h_saved = economics.harvests.record_harvest(farmer_id=active_farmer_id, payload=h_payload, user_id=user_id)
-                        st.success(f"✅ Harvest recorded: {h_saved.harvested_quantity} {h_saved.quantity_unit} of {h_saved.crop_name}")
+                        ui_alert(f"Harvest recorded: {h_saved.harvested_quantity} {h_saved.quantity_unit} of {h_saved.crop_name}", level="success")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"❌ Failed to record harvest: {e}")
+                        ui_alert(f"Failed to record harvest: {e}", level="error")
 
         # Harvest Log
-        st.markdown("#### 🌾 Harvest Records Register")
+        st.markdown("#### Harvest Records Register")
         existing_harvests = economics.harvests.list_harvests(farmer_id=active_farmer_id)
         if existing_harvests:
             h_data = []
@@ -442,22 +436,21 @@ def render_farm_economics_view():
             df_h = pd.DataFrame(h_data)
             st.dataframe(df_h, use_container_width=True, hide_index=True)
         else:
-            st.info("No harvest events recorded yet.")
+            ui_alert("No harvest events recorded yet.", level="info")
 
     # =========================================================================
     # TAB 4: SALES & REALIZED REVENUE
     # =========================================================================
     with tab4:
-        st.subheader("🏷️ Produce Sales & Realized Revenue")
-        st.caption("Record actual crop sales transactions, realized prices, mandi commissions, and net receipts.")
+        ui_section_header("Produce Sales & Realized Revenue", "Record actual crop sales transactions, realized prices, mandi commissions, and net receipts.", "dollar-sign")
 
-        with st.expander("➕ Record Actual Produce Sale", expanded=False):
+        with st.expander("Record Actual Produce Sale", expanded=False):
             with st.form("record_sale_form"):
                 s1, s2 = st.columns(2)
                 with s1:
                     s_cycle_opts = {f"{c.crop_name} ({c.cycle_id})": c for c in all_cycles}
                     if not s_cycle_opts:
-                        st.warning("No crop cycles found.")
+                        ui_alert("No crop cycles found.", level="warning")
                         sel_s_cycle = None
                     else:
                         sel_s_label = st.selectbox("Crop Cycle *", list(s_cycle_opts.keys()))
@@ -473,10 +466,10 @@ def render_farm_economics_view():
                 with s5:
                     s_price = st.number_input("Realized Price per Unit (₹) *", min_value=1.0, step=50.0, value=2275.0)
 
-                st.markdown("##### 📉 Deductions, Transport & Commission")
+                st.markdown("##### Deductions, Transport & Commission")
                 sd1, sd2, sd3 = st.columns(3)
                 with sd1:
-                    s_comm = st.number_input("Commission Charges (आढ़त / Mandi Fee) (₹)", min_value=0.0, step=20.0, value=0.0)
+                    s_comm = st.number_input("Commission Charges (Mandi Fee) (₹)", min_value=0.0, step=20.0, value=0.0)
                 with sd2:
                     s_trans = st.number_input("Transport Charges (₹)", min_value=0.0, step=50.0, value=0.0)
                 with sd3:
@@ -488,7 +481,7 @@ def render_farm_economics_view():
                 with s7:
                     s_status = st.selectbox("Payment Realization Status", [PaymentStatus.PAID, PaymentStatus.PARTIAL, PaymentStatus.UNPAID])
 
-                submit_s = st.form_submit_button("💰 Save Produce Sale", use_container_width=True)
+                submit_s = st.form_submit_button("Save Produce Sale", use_container_width=True)
                 if submit_s and sel_s_cycle:
                     try:
                         gross_calc = float(UnitConversionService.round_currency(Decimal(str(s_qty)) * Decimal(str(s_price))))
@@ -511,13 +504,13 @@ def render_farm_economics_view():
                             payment_status=s_status,
                         )
                         s_saved = economics.sales.record_sale(farmer_id=active_farmer_id, payload=s_payload, user_id=user_id)
-                        st.success(f"✅ Sale recorded: {s_saved.quantity_sold} {s_saved.quantity_unit} of {s_saved.crop_name} (Gross: ₹{s_saved.gross_amount:,.2f}, Net: ₹{s_saved.net_amount_received:,.2f})")
+                        ui_alert(f"Sale recorded: {s_saved.quantity_sold} {s_saved.quantity_unit} of {s_saved.crop_name} (Gross: ₹{s_saved.gross_amount:,.2f}, Net: ₹{s_saved.net_amount_received:,.2f})", level="success")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"❌ Failed to record sale: {e}")
+                        ui_alert(f"Failed to record sale: {e}", level="error")
 
         # Sales Register
-        st.markdown("#### 🏷️ Produce Sales Register")
+        st.markdown("#### Produce Sales Register")
         existing_sales = economics.sales.list_sales(farmer_id=active_farmer_id)
         if existing_sales:
             s_data = []
@@ -537,17 +530,16 @@ def render_farm_economics_view():
             df_s = pd.DataFrame(s_data)
             st.dataframe(df_s, use_container_width=True, hide_index=True)
         else:
-            st.info("No produce sales recorded yet.")
+            ui_alert("No produce sales recorded yet.", level="info")
 
     # =========================================================================
     # TAB 5: PROFITABILITY & BUDGETS
     # =========================================================================
     with tab5:
-        st.subheader("📊 Crop Cycle Profitability & Budget Intelligence")
-        st.caption("Deep financial breakdown, break-even price/yield analysis, and planned vs actual budget variances.")
+        ui_section_header("Crop Cycle Profitability & Budget Intelligence", "Deep financial breakdown, break-even price/yield analysis, and planned vs actual budget variances.", "bar-chart")
 
         if not all_cycles:
-            st.warning("No crop cycles available for profitability evaluation.")
+            ui_alert("No crop cycles available for profitability evaluation.", level="warning")
         else:
             prof_cycle_opts = {f"{c.crop_name} ({c.variety_name or 'Std'}) - {c.cycle_id}": c.cycle_id for c in all_cycles}
             sel_prof_label = st.selectbox("Select Crop Cycle to Evaluate:", list(prof_cycle_opts.keys()))
@@ -557,10 +549,10 @@ def render_farm_economics_view():
             prof = economics.profitability.calculate_crop_cycle_profitability(target_cycle_id, active_farmer_id)
 
             if prof.is_provisional:
-                st.warning(
-                    f"⚠️ **PROVISIONAL FINANCIAL METRIC (अंतिम परिणाम प्रतीक्षित):** "
-                    f"This crop cycle has missing data or is still ongoing ({', '.join(prof.missing_data_fields)}). "
-                    "All figures represent actual costs/revenues to date and are subject to revision upon completion."
+                ui_alert(
+                    f"PROVISIONAL FINANCIAL METRIC: This crop cycle has missing data or is still ongoing ({', '.join(prof.missing_data_fields)}). "
+                    "All figures represent actual costs/revenues to date and are subject to revision upon completion.",
+                    level="warning",
                 )
 
             # Metric Cards
@@ -580,7 +572,7 @@ def render_farm_economics_view():
             ui_divider(style="dotted")
 
             # Break-Even & Unit Metrics
-            st.markdown("#### ⚖️ Break-Even & Normalized Economics")
+            st.markdown("#### Break-Even & Normalized Economics")
             be1, be2, be3, be4 = st.columns(4)
             with be1:
                 c_acre = f"₹{prof.cost_per_acre:,.2f}" if prof.cost_per_acre else "N/A"
@@ -596,14 +588,14 @@ def render_farm_economics_view():
                 st.metric("Break-Even Yield", be_yield, help="Minimum production needed at realized price to avoid financial loss.")
 
             # Bilingual Explanation
-            with st.expander("📖 Financial Methodology & Transparency Notes (English & हिंदी)"):
+            with st.expander("Financial Methodology & Transparency Notes (English & Hindi)"):
                 st.markdown(f"**English:**\n{prof.explanation_en}")
-                st.markdown(f"**हिंदी:**\n{prof.explanation_hi}")
+                st.markdown(f"**Hindi:**\n{prof.explanation_hi}")
 
             ui_divider(style="dotted")
 
             # 2. Budget vs Actual Variance
-            st.markdown("#### 🎯 Crop Cycle Budget vs Actual Expenditure")
+            st.markdown("#### Crop Cycle Budget vs Actual Expenditure")
             try:
                 variance_rep = economics.budgets.calculate_budget_variance(target_cycle_id, active_farmer_id)
             except Exception:
@@ -611,9 +603,10 @@ def render_farm_economics_view():
 
             if variance_rep:
                 if variance_rep.is_exceeded:
-                    st.error(
-                        f"🚨 **BUDGET EXCEEDED!** Total expenses (₹{variance_rep.total_actual:,.2f}) exceed planned budget "
-                        f"(₹{variance_rep.total_planned:,.2f}) by ₹{variance_rep.amount_over_budget:,.2f} (+{variance_rep.total_variance_pct:.1f}%)."
+                    ui_alert(
+                        f"BUDGET EXCEEDED: Total expenses (₹{variance_rep.total_actual:,.2f}) exceed planned budget "
+                        f"(₹{variance_rep.total_planned:,.2f}) by ₹{variance_rep.amount_over_budget:,.2f} (+{variance_rep.total_variance_pct:.1f}%).",
+                        level="error",
                     )
 
                 # Variance Table
@@ -625,14 +618,14 @@ def render_farm_economics_view():
                         "Actual (₹)": f"₹{it.actual_amount:,.2f}",
                         "Variance (₹)": f"{'+' if it.variance_amount > 0 else ''}₹{it.variance_amount:,.2f}",
                         "Variance (%)": f"{'+' if it.variance_percentage > 0 else ''}{it.variance_percentage:.1f}%",
-                        "Alert": "🔴 Over Budget" if it.is_over_budget else "🟢 Within Budget",
+                        "Alert": "Over Budget" if it.is_over_budget else "Within Budget",
                     })
                 st.dataframe(pd.DataFrame(var_data), use_container_width=True, hide_index=True)
             else:
-                st.info("ℹ️ No planned budget registered for this crop cycle yet. You can set a seasonal budget below.")
+                ui_alert("No planned budget registered for this crop cycle yet. You can set a seasonal budget below.", level="info")
 
             # Create / Edit Budget
-            with st.expander("📝 Set or Update Seasonal Budget for this Crop Cycle"):
+            with st.expander("Set or Update Seasonal Budget for this Crop Cycle"):
                 with st.form("set_budget_form"):
                     b_name = st.text_input("Budget Name", value=f"Budget for {prof.crop_name} Cycle")
                     st.caption("Allocate planned budget amounts across categories:")
@@ -643,8 +636,8 @@ def render_farm_economics_view():
                         with b_cols[idx % 4]:
                             amt = st.number_input(f"{cat.value.replace('_', ' ').title()} (₹)", min_value=0.0, step=500.0, value=5000.0 if idx < 4 else 1000.0)
                             b_items.append(BudgetItemCreate(expense_category=cat, planned_amount=amt))
-                    
-                    submit_budget = st.form_submit_button("💾 Save Cycle Budget")
+
+                    submit_budget = st.form_submit_button("Save Cycle Budget")
                     if submit_budget:
                         try:
                             tot_planned = sum(item.planned_amount for item in b_items)
@@ -656,19 +649,18 @@ def render_farm_economics_view():
                                 items=b_items,
                             )
                             saved_b = economics.budgets.create_budget(farmer_id=active_farmer_id, payload=b_create, user_id=user_id)
-                            st.success(f"✅ Budget saved: {saved_b.budget_name} (Total Planned: ₹{saved_b.total_budget_amount:,.2f})")
+                            ui_alert(f"Budget saved: {saved_b.budget_name} (Total Planned: ₹{saved_b.total_budget_amount:,.2f})", level="success")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"❌ Failed to save budget: {e}")
+                            ui_alert(f"Failed to save budget: {e}", level="error")
 
     # =========================================================================
     # TAB 6: SCENARIOS & CROP PLANNING
     # =========================================================================
     with tab6:
-        st.subheader("🔮 Scenario Simulator & Multi-Crop Economic Planning")
-        st.caption("Simulate Conservative, Base, and Optimistic crop scenarios, evaluate sensitivity, and compare prospective crops.")
+        ui_section_header("Scenario Simulator & Multi-Crop Economic Planning", "Simulate Conservative, Base, and Optimistic crop scenarios, evaluate sensitivity, and compare prospective crops.", "trending-up")
 
-        sub_sim, sub_comp = st.tabs(["🎯 Scenario Simulator", "🌾 Prospective Crop Comparison"])
+        sub_sim, sub_comp = st.tabs(["Scenario Simulator", "Prospective Crop Comparison"])
 
         # SUB-TAB 1: SIMULATOR
         with sub_sim:
@@ -703,7 +695,7 @@ def render_farm_economics_view():
 
             # Results
             ui_divider(style="dotted")
-            st.markdown(f"##### 📈 Projected Financial Outcome ({res.scenario_type.value.title()} Case)")
+            st.markdown(f"##### Projected Financial Outcome ({res.scenario_type.value.title()} Case)")
             sr1, sr2, sr3, sr4 = st.columns(4)
             with sr1:
                 ui_metric_card("Total Expected Cost", f"₹{res.total_expected_cost:,.2f}", delta=f"{res.planned_area_acres} Acres")
@@ -717,12 +709,12 @@ def render_farm_economics_view():
             # Break-even
             sb1, sb2 = st.columns(2)
             with sb1:
-                st.info(f"⚖️ **Break-Even Price:** ₹{res.break_even_price_per_quintal:,.2f} per quintal (Selling below this causes loss)")
+                ui_alert(f"Break-Even Price: ₹{res.break_even_price_per_quintal:,.2f} per quintal (Selling below this causes loss)", level="info")
             with sb2:
-                st.info(f"🌾 **Break-Even Yield:** {res.break_even_yield_quintals_per_acre:.2f} quintals/acre (Yield below this causes loss)")
+                ui_alert(f"Break-Even Yield: {res.break_even_yield_quintals_per_acre:.2f} quintals/acre (Yield below this causes loss)", level="info")
 
             # Sensitivity Analysis Table
-            st.markdown("##### 🔍 Sensitivity Analysis (Price vs Yield Variations)")
+            st.markdown("##### Sensitivity Analysis (Price vs Yield Variations)")
             sens = res.sensitivity_analysis
             st.markdown(
                 f"- **Downside Case (-10% Mandi Price):** Net Return drops to **₹{sens.get('price_down_10pct', {}).get('net_return', 0):,.2f}**\n"
@@ -730,16 +722,16 @@ def render_farm_economics_view():
                 f"- **Yield Stress Case (-10% Yield):** Net Return drops to **₹{sens.get('yield_down_10pct', {}).get('net_return', 0):,.2f}**"
             )
 
-            if st.button("💾 Save Simulation Scenario for Future Reference"):
+            if st.button("Save Simulation Scenario for Future Reference"):
                 try:
                     saved_sc = economics.scenarios.save_scenario(active_farmer_id, req, res, user_id)
-                    st.success(f"✅ Saved scenario '{saved_sc.scenario_name}' (ID: {saved_sc.scenario_id})")
+                    ui_alert(f"Saved scenario '{saved_sc.scenario_name}' (ID: {saved_sc.scenario_id})", level="success")
                 except Exception as e:
-                    st.error(f"❌ Failed to save scenario: {e}")
+                    ui_alert(f"Failed to save scenario: {e}", level="error")
 
         # SUB-TAB 2: MULTI-CROP COMPARISON
         with sub_comp:
-            st.markdown("#### ⚖️ Prospective Crop Comparison on Target Plot")
+            st.markdown("#### Prospective Crop Comparison on Target Plot")
             st.caption("Compare economic returns, investment requirements, and break-even points between competing crop options.")
 
             plot_area = st.number_input("Target Plot Size (Acres)", min_value=0.1, step=0.5, value=2.0)
@@ -748,7 +740,7 @@ def render_farm_economics_view():
             # 3 Standard Comparison Presets
             st.markdown("##### Crop Options to Compare:")
             c_items = []
-            
+
             c_col1, c_col2, c_col3 = st.columns(3)
             with c_col1:
                 st.markdown("**Option 1: Wheat (गेहूं)**")
@@ -811,8 +803,8 @@ def render_farm_economics_view():
             comp_rep = economics.scenarios.compare_crops(comp_req)
 
             ui_divider(style="dotted")
-            st.markdown("##### 📊 Comparative Evaluation Summary")
-            st.success(f"🏆 **Highest Total Net Return Crop:** {comp_rep.best_net_return_crop} | 💡 **Highest ROI % Crop:** {comp_rep.best_roi_crop}")
+            st.markdown("##### Comparative Evaluation Summary")
+            ui_alert(f"Highest Total Net Return Crop: {comp_rep.best_net_return_crop} | Highest ROI % Crop: {comp_rep.best_roi_crop}", level="success")
 
             comp_table = []
             for it in comp_rep.comparison_items:
@@ -831,5 +823,4 @@ def render_farm_economics_view():
                 })
             st.dataframe(pd.DataFrame(comp_table), use_container_width=True, hide_index=True)
 
-            st.caption(f"⚠️ *Disclaimer:* {comp_rep.disclaimer}")
-
+            st.caption(f"Disclaimer: {comp_rep.disclaimer}")

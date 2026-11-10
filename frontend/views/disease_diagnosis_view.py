@@ -12,7 +12,15 @@ from backend.app.integrations.gnani.audio_utils import save_temporary_audio
 from backend.app.integrations.gnani.timbre_tts import GnaniTimbreClient
 from backend.app.schemas.disease import DiagnosisResult
 from backend.app.services.agriculture.disease_detector import PlantDiseaseDetector
-from frontend.components.ui_widgets import ui_alert, ui_card, ui_divider
+from frontend.components.icons import render_icon
+from frontend.components.ui_widgets import (
+    ui_alert,
+    ui_card,
+    ui_divider,
+    ui_page_header,
+    ui_section_header,
+    ui_status_badge,
+)
 
 logger = get_logger("DiseaseDiagnosisView")
 
@@ -21,31 +29,10 @@ def render_disease_diagnosis_view() -> None:
     """Render the comprehensive crop disease detection and explainability interface."""
     settings = get_settings()
 
-    st.markdown(
-        """
-        <div style="background: linear-gradient(120deg, #1B5E20 0%, #2E7D32 50%, #388E3C 100%);
-                    padding: 1.8rem; border-radius: 12px; color: white; margin-bottom: 1.5rem; text-align: center;">
-            <h1 style="margin: 0; font-size: 2.2rem; color: #FFFFFF;">🔬 Intelligent Crop Disease Diagnosis</h1>
-            <p style="margin-top: 0.5rem; font-size: 1.05rem; opacity: 0.95;">
-                Deep learning foliar diagnostics with genuine Grad-CAM explainability and evidence-based severity staging.
-            </p>
-            <div style="margin-top: 0.6rem; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
-                <span style="background: rgba(255,255,255,0.2); padding: 3px 12px; border-radius: 15px; font-size: 0.82rem;">
-                    🧠 MobileNetV3-Small CNN
-                </span>
-                <span style="background: rgba(255,255,255,0.2); padding: 3px 12px; border-radius: 15px; font-size: 0.82rem;">
-                    🔥 Genuine Grad-CAM Heatmaps
-                </span>
-                <span style="background: rgba(255,255,255,0.2); padding: 3px 12px; border-radius: 15px; font-size: 0.82rem;">
-                    📐 Decoupled Surface Severity %
-                </span>
-                <span style="background: rgba(255,255,255,0.2); padding: 3px 12px; border-radius: 15px; font-size: 0.82rem;">
-                    🏛️ ICAR-Aligned IPM Advisory
-                </span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    ui_page_header(
+        title="Intelligent Crop Disease Diagnosis",
+        subtitle="Deep learning foliar diagnostics with genuine Grad-CAM explainability, clinical surface severity quantification, and ICAR-aligned IPM advisory.",
+        pills=["MobileNetV3-Small CNN", "Grad-CAM Attention Overlay", "Surface Severity %", "ICAR IPM Advisory"],
     )
 
     if "disease_detector" not in st.session_state:
@@ -57,18 +44,18 @@ def render_disease_diagnosis_view() -> None:
     timbre: GnaniTimbreClient = st.session_state.timbre_client
 
     # Section 1: Image Capture / Upload
-    st.markdown("### 📸 Submit Crop Photograph / पत्ती की फोटो अपलोड करें")
+    ui_section_header("Submit Crop Photograph", "High-resolution leaf specimen for neural network inference", icon="microscope")
 
     input_mode = st.radio(
         "Choose Capture Mode:",
-        ["📁 Upload Image File", "📷 Use Camera", "🧪 Demonstration Samples"],
+        ["Upload Image File", "Use Camera", "Diagnostic Demonstration Samples"],
         horizontal=True,
     )
 
     temp_image_path = None
     original_pil_image = None
 
-    if input_mode == "📁 Upload Image File":
+    if input_mode == "Upload Image File":
         uploaded_file = st.file_uploader(
             "Upload an affected plant leaf photograph (JPEG, PNG, WEBP):",
             type=["jpg", "jpeg", "png", "webp"],
@@ -84,7 +71,7 @@ def render_disease_diagnosis_view() -> None:
                 f.write(file_bytes)
             original_pil_image = Image.open(temp_image_path)
 
-    elif input_mode == "📷 Use Camera":
+    elif input_mode == "Use Camera":
         camera_img = st.camera_input("Capture leaf photo:")
         if camera_img is not None:
             file_bytes = camera_img.read()
@@ -95,7 +82,7 @@ def render_disease_diagnosis_view() -> None:
                 f.write(file_bytes)
             original_pil_image = Image.open(temp_image_path)
 
-    elif input_mode == "🧪 Demonstration Samples":
+    elif input_mode == "Diagnostic Demonstration Samples":
         sample_choice = st.selectbox(
             "Select Diagnostic Benchmark Test Case:",
             [
@@ -142,10 +129,10 @@ def render_disease_diagnosis_view() -> None:
         ui_divider(style="dotted")
         col_btn, col_empty = st.columns([1.5, 3])
         with col_btn:
-            run_diag = st.button("🔍 Run Full Diagnostic Assessment", type="primary", use_container_width=True)
+            run_diag = st.button("Run Full Diagnostic Assessment", type="primary", use_container_width=True)
 
         if run_diag:
-            with st.spinner("🔬 Executing deep neural network inference, Grad-CAM backpropagation, and severity assessment..."):
+            with st.spinner("Executing deep neural network inference, Grad-CAM backpropagation, and severity assessment..."):
                 diag_result: DiagnosisResult = detector.diagnose(temp_image_path)
                 st.session_state.active_diagnosis = diag_result
 
@@ -154,23 +141,23 @@ def render_disease_diagnosis_view() -> None:
         diag: DiagnosisResult = st.session_state.active_diagnosis
 
         ui_divider(style="bold")
-        st.markdown("## 📋 Diagnostic Assessment Report")
+        ui_section_header("Diagnostic Assessment Report", "Deep learning classification and clinical staging", icon="file-text")
 
         # 1. Quality Pre-flight Banner
         q = diag.quality_assessment
         if q.quality_tier == "Good":
-            st.success(f"🟢 **Image Quality: Optimal** (Sharpness: {q.blur_score:.1f}, Exposure: {q.exposure_status}) — Reliable diagnostic conditions.")
+            ui_alert(f"Image Quality: Optimal (Sharpness: {q.blur_score:.1f}, Exposure: {q.exposure_status}) — Highly reliable diagnostic conditions.", type="success")
         elif q.quality_tier == "Acceptable":
-            st.warning(f"🟡 **Image Quality: Acceptable** (Sharpness: {q.blur_score:.1f}, Exposure: {q.exposure_status}) — {q.farmer_advice}")
+            ui_alert(f"Image Quality: Acceptable (Sharpness: {q.blur_score:.1f}, Exposure: {q.exposure_status}) — {q.farmer_advice}", type="warning")
         else:
-            st.error(f"🔴 **Image Quality: Compromised** — {q.farmer_advice}")
+            ui_alert(f"Image Quality: Compromised — {q.farmer_advice}", type="error")
 
         # 2. Main Metrics Grid
         col1, col2, col3 = st.columns([1.4, 1.3, 1.3])
 
         with col1:
             ui_card(
-                f"### 🦠 Primary Diagnosis\n\n"
+                f"### Primary Diagnosis\n\n"
                 f"**{diag.common_name}**\n\n"
                 f"*{diag.scientific_name or 'Etiology indeterminate'}*\n\n"
                 f"**Confidence:** `{diag.confidence * 100:.1f}%` ({'High Confidence' if diag.is_confident else 'Low Confidence / Uncertain'})"
@@ -178,26 +165,23 @@ def render_disease_diagnosis_view() -> None:
 
         with col2:
             sev = diag.severity_assessment
-            stage_colors = {"Healthy": "🟢", "Mild": "🟡", "Moderate": "🟠", "Severe": "🔴"}
-            badge = stage_colors.get(sev.severity_stage, "⚪")
-
             ui_card(
-                f"### 📐 Observable Severity\n\n"
-                f"**Clinical Stage:** {badge} **{sev.severity_stage}**\n\n"
+                f"### Observable Severity\n\n"
+                f"**Clinical Stage:** **{sev.severity_stage}**\n\n"
                 f"**Foliar Lesion Area:** `{sev.severity_score_percent:.1f}%` of visible leaf\n\n"
                 f"**Environmental Multiplier:** `{sev.environmental_risk_multiplier}x`"
             )
 
         with col3:
             ui_card(
-                f"### ⚡ Inference Profile\n\n"
+                f"### Inference Profile\n\n"
                 f"**Architecture:** `{diag.model_metadata.get('architecture', 'MobileNetV3-Small')}`\n\n"
                 f"**Latency:** `{diag.inference_time_ms:.1f} ms` on CPU\n\n"
                 f"**Status:** `Genuine Weights (Non-Simulated)`"
             )
 
         # 3. Top-3 Candidate Ranking
-        st.markdown("#### 📊 Model Prediction Ranking (Top-3 Candidates)")
+        ui_section_header("Model Prediction Ranking (Top-3 Candidates)", icon="bar-chart")
         for pred in diag.top_predictions:
             c_col1, c_col2 = st.columns([3, 1])
             with c_col1:
@@ -208,10 +192,10 @@ def render_disease_diagnosis_view() -> None:
         ui_divider(style="dotted")
 
         # 4. Explainable AI: Grad-CAM Side-by-Side Visualizer
-        st.markdown("### 🔥 Explainable AI: Gradient-Weighted Class Activation Mapping (Grad-CAM)")
+        ui_section_header("Explainable AI: Gradient-Weighted Class Activation Mapping (Grad-CAM)", "Visual evidence and convolutional attention localization", icon="layers")
         st.caption(
             "Grad-CAM visualizes the exact convolutional feature activation regions that triggered the model's diagnostic classification. "
-            "Warm colors (red/orange) represent the primary visual evidence (lesion margins, necrosis, fungal spots) utilized by the network."
+            "Warm colors represent the primary visual evidence (lesion margins, necrosis, fungal spots) utilized by the network."
         )
 
         col_orig, col_cam = st.columns(2)
@@ -228,14 +212,13 @@ def render_disease_diagnosis_view() -> None:
         ui_divider(style="dotted")
 
         # 5. Integrated Pest Management (IPM) Guidelines
-        st.markdown("### 🏛️ Integrated Pest & Disease Management (IPM) Guidelines")
-        st.caption("Standardized agronomic protocols aligned with Indian Council of Agricultural Research (ICAR) recommendations:")
+        ui_section_header("Integrated Pest & Disease Management (IPM) Guidelines", "Statutory agronomic protocols aligned with ICAR recommendations", icon="shield-check")
 
         tab1, tab2, tab3, tab4 = st.tabs([
-            "🌿 Cultural & Sanitation Practices",
-            "🐞 Biological Controls",
-            "⚠️ Chemical Precautions",
-            "🏛️ KVK Agricultural Extension Advisory",
+            "Cultural & Sanitation Practices",
+            "Biological Controls",
+            "Chemical Precautions",
+            "KVK Agricultural Extension Advisory",
         ])
 
         with tab1:
@@ -250,19 +233,18 @@ def render_disease_diagnosis_view() -> None:
 
         with tab3:
             st.markdown("#### Chemical Precautions & Safety Waiting Periods")
-            st.warning("⚠️ **Safety Notice:** Follow Central Insecticide Board & Registration Committee (CIBRC) guidelines. Always wear masks, gloves, and protective boots when preparing spray dilutions.")
+            ui_alert("Safety Notice: Follow Central Insecticide Board & Registration Committee (CIBRC) guidelines. Always wear masks, gloves, and protective boots when preparing spray dilutions.", type="warning")
             for item in diag.management_guidelines.chemical_precautions:
                 st.markdown(f"- {item}")
 
         with tab4:
             st.markdown("#### Krishi Vigyan Kendra (KVK) Specialist Guidance")
-            st.info(f"🏛️ **Official Extension Advice:** {diag.management_guidelines.kvk_advisory}")
+            ui_alert(f"Official Extension Advisory: {diag.management_guidelines.kvk_advisory}", type="info")
 
         ui_divider(style="dotted")
 
         # 6. Spoken Voice Audio Playback via Gnani Timbre
-        st.markdown("### 🎙️ Listen to Diagnosis in Your Preferred Indian Language")
-        st.caption("Powered by Gnani Timbre v2.5 Indian Voice Intelligence:")
+        ui_section_header("Spoken Audio Diagnostic Summary", "Multilingual voice readout powered by Gnani Timbre v2.5", icon="volume-2")
 
         lang_options = list(SUPPORTED_LANGUAGES.keys())
         v_col1, v_col2 = st.columns([1.5, 2])
@@ -278,9 +260,8 @@ def render_disease_diagnosis_view() -> None:
 
         with v_col2:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            if st.button("🔊 Synthesize & Play Voice Summary", type="primary", use_container_width=True):
-                with st.spinner("🎧 Synthesizing spoken diagnostic summary via Gnani Timbre v2.5..."):
-                    # Construct clean verbal summary for speech synthesis
+            if st.button("Synthesize & Play Voice Summary", type="primary", use_container_width=True):
+                with st.spinner("Synthesizing spoken diagnostic summary via Gnani Timbre v2.5..."):
                     spoken_text = (
                         f"Crop Disease Diagnosis: {diag.common_name}. "
                         f"Confidence: {diag.confidence * 100:.0f} percent. "
@@ -294,9 +275,8 @@ def render_disease_diagnosis_view() -> None:
                         if tts_res.success and tts_res.audio_file_path and os.path.exists(tts_res.audio_file_path):
                             with open(tts_res.audio_file_path, "rb") as f:
                                 st.audio(f.read(), format="audio/wav")
-                            st.success(f"✅ Spoken voice generated with voice '{tts_res.voice}' ({tts_res.duration_seconds:.1f}s)")
+                            ui_alert(f"Spoken voice generated with voice '{tts_res.voice}' ({tts_res.duration_seconds:.1f}s)", type="success")
                         else:
-                            st.warning(f"Voice generation note: {tts_res.error or 'Synthesis unavailable.'}")
+                            ui_alert(f"Voice generation note: {tts_res.error or 'Synthesis unavailable.'}", type="warning")
                     except Exception as e:
-                        st.error(f"Voice synthesis error: {e}")
-
+                        ui_alert(f"Voice synthesis error: {e}", type="error")

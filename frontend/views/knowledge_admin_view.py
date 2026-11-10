@@ -9,7 +9,14 @@ from backend.app.repositories.source_repository import SourceRepository
 from backend.app.repositories.fact_repository import FactRepository
 from backend.app.services.agriculture.retrieval_service import RetrievalService
 from backend.app.services.agriculture.safety_guardrail_service import SafetyGuardrailService
-from frontend.components.ui_widgets import ui_divider, ui_card
+from frontend.components.ui_widgets import (
+    ui_page_header,
+    ui_section_header,
+    ui_divider,
+    ui_card,
+    ui_badge,
+    ui_alert,
+)
 
 
 def render_knowledge_admin_view():
@@ -20,31 +27,24 @@ def render_knowledge_admin_view():
     retrieval_service = RetrievalService(source_repo=source_repo, fact_repo=fact_repo)
     safety_service = SafetyGuardrailService()
 
-    st.markdown(
-        """
-        <div style='background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 1.5rem; border-radius: 10px; color: white; margin-bottom: 1.5rem;'>
-            <h1 style='color: white; margin: 0; font-size: 2.2rem;'>📚 Agricultural Knowledge Governance</h1>
-            <p style='color: #e0e0e0; margin: 0.5rem 0 0 0;'>
-                Audit Tier-1 statutory sources, inspect atomic agronomic facts, and verify evidence-grounded safety policies.
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    ui_page_header(
+        title="Agricultural Knowledge Governance",
+        subtitle="Audit Tier-1 statutory sources, inspect atomic agronomic facts, and verify evidence-grounded safety policies.",
+        icon_name="book-open",
     )
 
     tab_sources, tab_facts, tab_governance, tab_retrieval_tester = st.tabs([
-        "🏛️ Authoritative Sources",
-        "🧬 Atomic Knowledge Facts",
-        "🛡️ Governance & Safety Rules",
-        "🔍 Retrieval Benchmark Tester",
+        "Authoritative Sources",
+        "Atomic Knowledge Facts",
+        "Governance & Safety Rules",
+        "Retrieval Benchmark Tester",
     ])
 
     # =========================================================================
     # TAB 1: AUTHORITATIVE SOURCES REGISTRY
     # =========================================================================
     with tab_sources:
-        st.subheader("Authoritative Agricultural Sources Registry")
-        st.caption("All agronomic recommendations in AgriGuardian must originate from verified sources.")
+        ui_section_header("Authoritative Agricultural Sources Registry", "All agronomic recommendations in AgriGuardian must originate from verified sources.", "database")
 
         col_tier, col_status = st.columns(2)
         with col_tier:
@@ -72,18 +72,18 @@ def render_knowledge_admin_view():
                 continue
             filtered_sources.append(s)
 
-        st.info(f"Showing **{len(filtered_sources)}** of **{len(sources)}** registered sources.")
+        st.caption(f"Showing **{len(filtered_sources)}** of **{len(sources)}** registered sources.")
 
         for src in filtered_sources:
-            tier_badge = "🥇 Tier 1 (Statutory)" if src.authority_tier == 1 else ("🥈 Tier 2 (State Univ)" if src.authority_tier == 2 else "🥉 Tier 3 (KVK)")
-            peer_status = "✅ Peer-Reviewed" if src.peer_reviewed else "📑 Institutional Guidance"
-            active_badge = "🟢 Active" if src.is_active else "🔴 Retired"
+            tier_text = "Tier 1 (Statutory)" if src.authority_tier == 1 else ("Tier 2 (State Univ)" if src.authority_tier == 2 else "Tier 3 (KVK)")
+            peer_status = "Peer-Reviewed" if src.peer_reviewed else "Institutional Guidance"
+            active_text = "Active" if src.is_active else "Retired"
 
             with st.expander(f"{src.source_id} — {src.source_name} ({src.organization})", expanded=False):
                 col_a, col_b, col_c = st.columns(3)
-                col_a.metric("Authority Tier", tier_badge)
+                col_a.metric("Authority Tier", tier_text)
                 col_b.metric("Reliability Score", f"{src.reliability_score * 100:.0f}%")
-                col_c.metric("Status", f"{active_badge} | {peer_status}")
+                col_c.metric("Status", f"{active_text} | {peer_status}")
 
                 st.markdown(f"**Jurisdiction:** `{src.jurisdiction}` | **Applicable Crops:** `{', '.join(src.applicable_crops)}`")
                 st.markdown(f"**Publication / Review Date:** `{src.publication_date}` | **Valid Until:** `{src.valid_until or 'Ongoing'}`")
@@ -91,14 +91,13 @@ def render_knowledge_admin_view():
                 st.markdown(f"**License Notes:** {src.license_notes}")
 
                 if src.requires_review():
-                    st.warning("⚠️ This source is past its scheduled review window and requires domain specialist re-verification.")
+                    ui_alert("This source is past its scheduled review window and requires domain specialist re-verification.", level="warning")
 
     # =========================================================================
     # TAB 2: ATOMIC KNOWLEDGE FACTS
     # =========================================================================
     with tab_facts:
-        st.subheader("Atomic Agronomic Knowledge Facts")
-        st.caption("Discrete, verifiable, structured facts stored in the knowledge graph repository.")
+        ui_section_header("Atomic Agronomic Knowledge Facts", "Discrete, verifiable, structured facts stored in the knowledge graph repository.", "layers")
 
         col_f1, col_f2 = st.columns(2)
         with col_f1:
@@ -117,20 +116,20 @@ def render_knowledge_admin_view():
                 continue
             filtered_facts.append(f)
 
-        st.info(f"Showing **{len(filtered_facts)}** of **{len(facts)}** atomic facts.")
+        st.caption(f"Showing **{len(filtered_facts)}** of **{len(facts)}** atomic facts.")
 
         for fact in filtered_facts:
             with st.container():
                 st.markdown(
                     f"""
-                    <div style='background-color: #f8f9fa; padding: 1rem; border-left: 4px solid #28a745; border-radius: 4px; margin-bottom: 0.8rem;'>
-                        <div style='display: flex; justify-content: space-between;'>
-                            <b style='font-size: 1.05rem; color: #155724;'>{fact.fact_id} — {fact.subject}</b>
-                            <span style='background: #e2e3e5; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;'>{fact.predicate}</span>
+                    <div style='background-color: var(--surface); padding: 1.1rem; border-left: 4px solid var(--primary); border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius-md); margin-bottom: 0.8rem; box-shadow: var(--shadow-sm);'>
+                        <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;'>
+                            <span style='font-size: 1.05rem; font-weight: 700; color: var(--primary-dark);'>{fact.fact_id} — {fact.subject}</span>
+                            <span style='background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;'>{fact.predicate}</span>
                         </div>
-                        <p style='margin: 0.5rem 0; font-size: 0.95rem; color: #212529;'>{fact.value}</p>
-                        <div style='font-size: 0.8rem; color: #6c757d;'>
-                            <b>Crop:</b> {fact.crop.title()} | <b>Authority Weight:</b> {fact.authority_weight} | <b>Confidence:</b> {fact.confidence_score * 100:.0f}%
+                        <p style='margin: 0.5rem 0; font-size: 0.95rem; color: var(--text-primary); line-height: 1.5;'>{fact.value}</p>
+                        <div style='font-size: 0.8rem; color: var(--text-muted);'>
+                            <b>Crop:</b> {fact.crop.title()} &nbsp;|&nbsp; <b>Authority Weight:</b> {fact.authority_weight} &nbsp;|&nbsp; <b>Confidence:</b> {fact.confidence_score * 100:.0f}%
                         </div>
                     </div>
                     """,
@@ -138,11 +137,26 @@ def render_knowledge_admin_view():
                 )
 
                 if fact.evidence:
-                    with st.expander(f"📑 Supporting Evidence ({len(fact.evidence)} Excerpts)", expanded=False):
+                    with st.expander(f"Supporting Evidence ({len(fact.evidence)} Excerpts)", expanded=False):
                         for ev in fact.evidence:
                             st.caption(f"**Evidence ID:** `{ev.evidence_id}` | **Source:** `{ev.source_id}` ({ev.organization})")
-                            st.markdown(f"> *\"{ev.excerpt_text}\"*")
-                            loc = getattr(ev, "page_or_section", None) or (f"p. {ev.page}" if getattr(ev, "page", None) else getattr(ev, "section", ""))
+                            excerpt = getattr(ev, "excerpt_text", None) or getattr(ev, "quote_or_excerpt", "")
+                            st.markdown(f"> *\"{excerpt}\"*")
+                            loc = getattr(ev, "page_or_section", None)
+                            if callable(loc):
+                                try:
+                                    loc = loc()
+                                except Exception:
+                                    loc = None
+                            if not loc:
+                                p = getattr(ev, "page", None)
+                                s = getattr(ev, "section", None)
+                                parts = []
+                                if p:
+                                    parts.append(f"p. {p}")
+                                if s:
+                                    parts.append(str(s))
+                                loc = ", ".join(parts)
                             if loc:
                                 st.caption(f"Section/Page: {loc}")
                 ui_divider(style="dotted")
@@ -151,29 +165,22 @@ def render_knowledge_admin_view():
     # TAB 3: GOVERNANCE & SAFETY POLICIES
     # =========================================================================
     with tab_governance:
-        st.subheader("Agricultural Governance & Safety Guardrails")
-
-        st.markdown(
-            """
-            AgriGuardian implements strict defensive guardrails designed to prevent agricultural disasters, 
-            illegal pesticide usage, and ungrounded LLM advice.
-            """
-        )
+        ui_section_header("Agricultural Governance & Safety Guardrails", "Defensive guardrails designed to prevent agricultural disasters, illegal pesticide usage, and ungrounded advice.", "shield-check")
 
         col_g1, col_g2 = st.columns(2)
 
         with col_g1:
-            st.markdown("### 🚫 Prohibited Chemical Blacklist")
+            st.markdown("#### Prohibited Chemical Blacklist")
             st.caption("Active ingredients banned by the Ministry of Agriculture & Farmers Welfare:")
             for chem in sorted(safety_service.BANNED_CHEMICALS):
-                st.markdown(f"- ❌ **{chem.title()}** *(Banned / Restriced in India)*")
+                st.markdown(f"- **{chem.title()}** *(Banned / Restricted in India)*")
 
-            st.markdown("### ⚠️ Prompt Injection Defense")
+            st.markdown("#### Prompt Injection Defense")
             st.caption("Queries attempting to bypass agricultural safety policies are intercepted and rejected:")
             st.code("Patterns: 'ignore previous instructions', 'ignore safety rules', 'prescribe dosage anyway'")
 
         with col_g2:
-            st.markdown("### 🏛️ Conflict Arbitration Protocol")
+            st.markdown("#### Conflict Arbitration Protocol")
             st.markdown(
                 """
                 When multiple advisories conflict on recommendations:
@@ -184,7 +191,7 @@ def render_knowledge_admin_view():
                 """
             )
 
-            st.markdown("### 🔄 Knowledge Index Maintenance")
+            st.markdown("#### Knowledge Index Maintenance")
             manifest_path = os.path.join(os.getcwd(), "data", "knowledge_manifest.json")
             if os.path.exists(manifest_path):
                 with open(manifest_path, "r", encoding="utf-8") as f:
@@ -193,24 +200,23 @@ def render_knowledge_admin_view():
                 st.caption(f"Last Catalog Ingestion: `{manifest.get('generated_at', 'Unknown')[:19]}`")
                 st.caption(f"Catalog Version: `{manifest.get('version', '1.0.0')}`")
 
-            if st.button("🔄 Rebuild Knowledge Graph Index"):
+            if st.button("Rebuild Knowledge Graph Index"):
                 source_repo.reload()
                 fact_repo.reload()
                 retrieval_service.rebuild_index()
-                st.success("✅ Knowledge base and lexical indices successfully reloaded from disk.")
+                ui_alert("Knowledge base and lexical indices successfully reloaded from disk.", level="success")
 
     # =========================================================================
     # TAB 4: RETRIEVAL BENCHMARK TESTER
     # =========================================================================
     with tab_retrieval_tester:
-        st.subheader("Interactive Knowledge Retrieval Tester")
-        st.caption("Test BM25 lexical search, Indic synonym expansion, and authority-weighted ranking.")
+        ui_section_header("Interactive Knowledge Retrieval Tester", "Test BM25 lexical search, Indic synonym expansion, and authority-weighted ranking.", "search")
 
         test_query = st.text_input("Enter Query (English or Hindi)", value="टमाटर में झुलसा और धब्बा")
         test_crop = st.selectbox("Target Crop", ["tomato", "wheat", "cotton"], index=0)
         test_state = st.selectbox("Farmer State (Optional)", ["None", "Karnataka", "Uttar Pradesh", "Tamil Nadu"], index=0)
 
-        if st.button("🔎 Run Retrieval Benchmark"):
+        if st.button("Run Retrieval Benchmark"):
             state_val = None if test_state == "None" else test_state
             results = retrieval_service.retrieve(
                 query=test_query,
@@ -220,7 +226,7 @@ def render_knowledge_admin_view():
             )
 
             if results:
-                st.success(f"Retrieved {len(results)} applicable facts:")
+                ui_alert(f"Retrieved {len(results)} applicable facts matching criteria.", level="success")
                 for i, (fact, score) in enumerate(results, 1):
                     with st.expander(f"Rank #{i} | Score: {score:.3f} | {fact.subject} ({fact.predicate})", expanded=(i == 1)):
                         st.markdown(f"**Fact Statement:** {fact.value}")
@@ -228,5 +234,4 @@ def render_knowledge_admin_view():
                         if fact.evidence:
                             st.caption(f"**Issuing Authority:** {fact.evidence[0].organization} (Source: {fact.evidence[0].source_id})")
             else:
-                st.warning("No matching facts found for this query and crop filter.")
-
+                ui_alert("No matching facts found for this query and crop filter.", level="warning")

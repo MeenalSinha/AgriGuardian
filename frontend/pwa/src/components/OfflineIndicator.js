@@ -50,17 +50,17 @@ export class OfflineIndicator {
     const isWeak = this.status === NetworkQuality.WEAK;
 
     let bannerClass = 'banner-online';
-    let statusText = '🟢 Online (Connected)';
-    let statusTextHi = '🟢 ऑनलाइन (सर्वर से जुड़ा हुआ)';
+    let statusText = 'Online (Connected)';
+    let statusTextHi = 'ऑनलाइन (सर्वर से जुड़ा हुआ)';
 
     if (isOffline) {
       bannerClass = 'banner-offline';
-      statusText = '🟠 Offline Mode — Local Cache Active';
-      statusTextHi = '🟠 ऑफ़लाइन मोड — स्थानीय डेटा सक्रिय';
+      statusText = 'Offline Mode — Local Cache Active';
+      statusTextHi = 'ऑफ़लाइन मोड — स्थानीय डेटा सक्रिय';
     } else if (isWeak) {
       bannerClass = 'banner-weak';
-      statusText = '🟡 Weak Connection — Requests May Delay';
-      statusTextHi = '🟡 कमजोर नेटवर्क — अनुरोध में समय लग सकता है';
+      statusText = 'Weak Connection — Requests May Delay';
+      statusTextHi = 'कमजोर नेटवर्क — अनुरोध में समय लग सकता है';
     }
 
     const lang = localStorage.getItem('agri_lang') || 'en';
@@ -78,7 +78,7 @@ export class OfflineIndicator {
         </div>
         ${this.pendingCount > 0 ? `
           <button class="banner-pending-pill" id="btn-open-sync-center">
-            ⏳ ${this.pendingCount} ${lang === 'hi' ? 'बदलाव सिंक होना बाकी' : 'change(s) pending sync'}
+            ${this.pendingCount} ${lang === 'hi' ? 'बदलाव सिंक होना बाकी' : 'change(s) pending sync'}
           </button>
         ` : ''}
       </div>

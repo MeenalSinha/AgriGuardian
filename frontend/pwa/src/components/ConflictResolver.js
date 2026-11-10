@@ -50,7 +50,7 @@ export class ConflictResolver {
     if (this.conflicts.length === 0) {
       this.container.innerHTML = `
         <div class="empty-sync-box" style="margin: 16px 0;">
-          🛡️ ${lang === 'hi' ? 'कोई सक्रिय डेटा विरोध नहीं है। सभी रिकॉर्ड संरेखित हैं।' : 'No active conflicts detected. All records are aligned.'}
+          ${lang === 'hi' ? 'कोई सक्रिय डेटा विरोध नहीं है। सभी रिकॉर्ड संरेखित हैं।' : 'No active conflicts detected. All records are aligned.'}
         </div>
       `;
       return;
@@ -58,7 +58,7 @@ export class ConflictResolver {
 
     this.container.innerHTML = `
       <div class="conflicts-panel">
-        <h3>⚠️ ${lang === 'hi' ? 'डेटा विरोध समाधान' : 'Resolve Conflicting Changes'} (${this.conflicts.length})</h3>
+        <h3>${lang === 'hi' ? 'डेटा विरोध समाधान' : 'Resolve Conflicting Changes'} (${this.conflicts.length})</h3>
         <p class="conflict-intro">
           ${lang === 'hi'
             ? 'नीचे दिए गए रिकॉर्ड में आपके ऑफ़लाइन बदलाव और सर्वर पर मौजूद डेटा में अंतर है। कृपया अपनी पसंद चुनें:'
@@ -71,7 +71,7 @@ export class ConflictResolver {
             return `
               <div class="conflict-item-card">
                 <div class="conflict-item-header">
-                  <strong>🏷️ ${c.resource_type.replace('_', ' ').toUpperCase()}</strong>
+                  <strong>${c.resource_type.replace('_', ' ').toUpperCase()}</strong>
                   <span class="pill-badge pill-conflict">Conflict</span>
                 </div>
 
@@ -80,8 +80,8 @@ export class ConflictResolver {
                     <thead>
                       <tr>
                         <th>${lang === 'hi' ? 'फ़ील्ड' : 'Field'}</th>
-                        <th>📱 ${lang === 'hi' ? 'आपका ऑफ़लाइन संस्करण' : 'Your Offline Version'}</th>
-                        <th>☁️ ${lang === 'hi' ? 'सर्वर संस्करण' : 'Server Version'}</th>
+                        <th>${lang === 'hi' ? 'आपका ऑफ़लाइन संस्करण' : 'Your Offline Version'}</th>
+                        <th>${lang === 'hi' ? 'सर्वर संस्करण' : 'Server Version'}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -98,10 +98,10 @@ export class ConflictResolver {
 
                 <div class="conflict-actions-row">
                   <button class="btn-primary" data-resolve-id="${c.conflict_id}" data-strategy="client_wins">
-                    📱 ${lang === 'hi' ? 'मेरा ऑफ़लाइन संस्करण रखें' : 'Keep My Offline Version'}
+                    ${lang === 'hi' ? 'मेरा ऑफ़लाइन संस्करण रखें' : 'Keep My Offline Version'}
                   </button>
                   <button class="btn-secondary" data-resolve-id="${c.conflict_id}" data-strategy="server_wins">
-                    ☁️ ${lang === 'hi' ? 'सर्वर संस्करण रखें' : 'Keep Server Version'}
+                    ${lang === 'hi' ? 'सर्वर संस्करण रखें' : 'Keep Server Version'}
                   </button>
                 </div>
               </div>

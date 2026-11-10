@@ -11,7 +11,16 @@ from backend.app.core.config import get_settings
 from backend.app.repositories.farm_db import FarmDatabaseRepository, get_farm_repo
 from backend.app.schemas.sync import ConflictResolutionStrategy, ConflictResolveRequest
 from backend.app.services.sync.sync_service import SyncService
-from frontend.components.ui_widgets import ui_alert, ui_card, ui_divider, ui_metric_card
+from frontend.components.ui_widgets import (
+    ui_page_header,
+    ui_section_header,
+    ui_divider,
+    ui_card,
+    ui_metric_card,
+    ui_alert,
+    ui_badge,
+)
+from frontend.components.icons import render_icon
 
 
 def get_sync_bundle():
@@ -26,76 +35,60 @@ def render_offline_sync_view():
     repo, sync_service = get_sync_bundle()
     settings = get_settings()
 
-    st.markdown(
-        """
-        <div style="background: linear-gradient(135deg, #1b4332 0%, #2d6a4f 100%);
-                    color: white; padding: 20px; border-radius: 12px; margin-bottom: 24px;">
-            <h1 style="color: white; margin: 0; font-size: 26px;">
-                🔄 Offline-First Synchronization & PWA Companion
-            </h1>
-            <p style="margin: 8px 0 0 0; opacity: 0.92; font-size: 15px;">
-                Resilient field operations for Indian agriculture: zero data loss during network disruptions,
-                durable IndexedDB journal queuing, monotonic change-feed replication, and intelligent conflict resolution.
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    ui_page_header(
+        title="Offline-First Synchronization & PWA Companion",
+        subtitle="Zero data loss during network disruptions, durable IndexedDB journals, monotonic change-feed replication, and conflict resolution.",
+        icon_name="refresh-cw",
     )
 
     tabs = st.tabs([
-        "📱 Mobile PWA Portal",
-        "💻 Registered Devices",
-        "📜 Change Feed Log",
-        "⚡ Mutations & Idempotency",
-        "🛡️ Conflict Resolution",
-        "📊 Telemetry & Health",
+        "Mobile PWA Portal",
+        "Registered Devices",
+        "Change Feed Log",
+        "Mutations & Idempotency",
+        "Conflict Resolution",
+        "Telemetry & Health",
     ])
 
     # -------------------------------------------------------------------------
     # TAB 1: Mobile PWA Portal
     # -------------------------------------------------------------------------
     with tabs[0]:
-        st.subheader("📲 Installable Progressive Web App (PWA)")
-        st.markdown(
-            """
-            AgriGuardian includes an **installable Progressive Web App** specifically designed for farmers
-            working in fields where cellular reception is weak or completely absent.
-            """
-        )
+        ui_section_header("Installable Progressive Web App (PWA)", "Offline-capable companion application for fields with weak or absent cellular connectivity.", "wifi-off")
 
         col_pwa_1, col_pwa_2 = st.columns([2, 1])
         with col_pwa_1:
             ui_card(
-                title="🌾 Open Farmer PWA",
+                title="Farmer PWA Client",
                 content=(
                     "**PWA Endpoint URL:** `http://localhost:8000/pwa/index.html`\n\n"
                     "**Core Offline Capabilities:**\n"
-                    "- 💾 **Full Offline Farm Context:** My Farms, Plots, Crops, Soil, and Saved Calendars.\n"
-                    "- 🚜 **Offline Farm Logging:** Record irrigation, spray, weeding, and fertilizer actions.\n"
-                    "- 📷 **Offline Leaf Symptom Photo Drafts:** Capture photos in field; auto-upload for AI diagnosis.\n"
-                    "- ⏰ **Smart Reminders:** Offline completion with optimistic locking.\n"
-                    "- 🛡️ **Zero Data Loss:** Durable IndexedDB mutation queue surviving browser refreshes.\n"
-                    "- 🌐 **Bilingual Touch UI:** English & Hindi with large touch targets."
+                    "- **Full Offline Farm Context:** My Farms, Plots, Crops, Soil, and Saved Calendars.\n"
+                    "- **Offline Farm Logging:** Record irrigation, spray, weeding, and fertilizer actions.\n"
+                    "- **Offline Leaf Symptom Photo Drafts:** Capture photos in field; auto-upload for AI diagnosis.\n"
+                    "- **Smart Reminders:** Offline completion with optimistic locking.\n"
+                    "- **Zero Data Loss:** Durable IndexedDB mutation queue surviving browser refreshes.\n"
+                    "- **Bilingual Touch UI:** English and Hindi with high-contrast accessibility targets."
                 ),
             )
             st.markdown(
                 """
                 <a href="http://localhost:8000/pwa/index.html" target="_blank"
-                   style="display: inline-block; background-color: #2d6a4f; color: white;
-                          padding: 12px 24px; border-radius: 8px; text-decoration: none;
-                          font-weight: 700; margin-top: 10px;">
-                    🚀 Launch Farmer PWA in Browser / Mobile
+                   style="display: inline-block; background-color: var(--primary); color: white;
+                          padding: 12px 24px; border-radius: var(--radius-md); text-decoration: none;
+                          font-weight: 700; margin-top: 10px; box-shadow: var(--shadow-sm);">
+                    Launch Farmer PWA in Browser / Mobile
                 </a>
                 """,
                 unsafe_allow_html=True,
             )
 
         with col_pwa_2:
-            st.markdown("### 📋 Installation Guide")
+            st.markdown("#### Installation Guide")
             st.info(
                 "**On Android (Chrome):**\n"
                 "1. Open `/pwa/index.html`\n"
-                "2. Tap browser menu (⋮) -> 'Install app' or 'Add to Home screen'\n"
+                "2. Tap browser menu (three dots) -> 'Install app' or 'Add to Home screen'\n"
                 "3. AgriGuardian installs as a standalone native-like app\n"
                 "4. Works even in Airplane mode!"
             )
@@ -110,8 +103,7 @@ def render_offline_sync_view():
     # TAB 2: Registered Devices
     # -------------------------------------------------------------------------
     with tabs[1]:
-        st.subheader("📱 Registered Sync Devices")
-        st.caption("Active and revoked devices authorized to synchronize farmer context.")
+        ui_section_header("Registered Sync Devices", "Active and revoked devices authorized to synchronize farmer context.", "activity")
 
         with repo.get_connection() as conn:
             cursor = conn.execute(
@@ -125,11 +117,12 @@ def render_offline_sync_view():
             devices = [dict(r) for r in cursor.fetchall()]
 
         if not devices:
-            st.info("No physical or PWA devices registered yet. Devices register automatically upon opening the PWA.")
+            ui_alert("No physical or PWA devices registered yet. Devices register automatically upon opening the PWA.", level="info")
         else:
             for dev in devices:
+                status_text = "[REVOKED]" if dev['is_revoked'] else "[ACTIVE]"
                 with st.expander(
-                    f"{'🔴 [REVOKED]' if dev['is_revoked'] else '🟢 [ACTIVE]'} {dev['device_name']} ({dev['device_type']})",
+                    f"{status_text} {dev['device_name']} ({dev['device_type']})",
                     expanded=not dev['is_revoked'],
                 ):
                     c1, c2, c3 = st.columns(3)
@@ -144,17 +137,16 @@ def render_offline_sync_view():
                         st.markdown(f"**Last Sync:** `{dev.get('last_sync_at') or 'Never'}`")
 
                     if not dev["is_revoked"]:
-                        if st.button(f"🚫 Revoke Device Access", key=f"rev_{dev['device_id']}"):
+                        if st.button("Revoke Device Access", key=f"rev_{dev['device_id']}"):
                             sync_service.revoke_device(dev["device_id"], dev["user_id"])
-                            st.warning(f"Device {dev['device_id']} revoked. It cannot sync future data.")
+                            ui_alert(f"Device {dev['device_id']} revoked. It cannot sync future data.", level="warning")
                             st.rerun()
 
     # -------------------------------------------------------------------------
     # TAB 3: Change Feed Log
     # -------------------------------------------------------------------------
     with tabs[2]:
-        st.subheader("📜 Monotonic Sync Change Feed (`sync_change_log`)")
-        st.caption("Immutable append-only change log powering incremental pull synchronization.")
+        ui_section_header("Monotonic Sync Change Feed (sync_change_log)", "Immutable append-only change log powering incremental pull synchronization.", "database")
 
         with repo.get_connection() as conn:
             cursor = conn.execute(
@@ -169,7 +161,7 @@ def render_offline_sync_view():
             changes = [dict(r) for r in cursor.fetchall()]
 
         if not changes:
-            st.info("No changes recorded in change feed yet.")
+            ui_alert("No changes recorded in change feed yet.", level="info")
         else:
             st.dataframe(changes, use_container_width=True)
 
@@ -177,8 +169,7 @@ def render_offline_sync_view():
     # TAB 4: Mutations & Idempotency
     # -------------------------------------------------------------------------
     with tabs[3]:
-        st.subheader("⚡ Inbound Client Mutations Journal")
-        st.caption("Durable queue of pushed offline mutations with idempotency execution results.")
+        ui_section_header("Inbound Client Mutations Journal", "Durable queue of pushed offline mutations with idempotency execution results.", "activity")
 
         with repo.get_connection() as conn:
             cursor = conn.execute(
@@ -195,7 +186,7 @@ def render_offline_sync_view():
             mutations = [dict(r) for r in cursor.fetchall()]
 
         if not mutations:
-            st.info("No mutations received yet.")
+            ui_alert("No mutations received yet.", level="info")
         else:
             st.dataframe(mutations, use_container_width=True)
 
@@ -203,8 +194,7 @@ def render_offline_sync_view():
     # TAB 5: Conflict Resolution
     # -------------------------------------------------------------------------
     with tabs[4]:
-        st.subheader("🛡️ Edit Conflict Management (`sync_conflicts`)")
-        st.caption("Safely resolves concurrent edits without silent last-write-wins data loss.")
+        ui_section_header("Edit Conflict Management (sync_conflicts)", "Safely resolves concurrent edits without silent last-write-wins data loss.", "shield-check")
 
         with repo.get_connection() as conn:
             cursor = conn.execute(
@@ -218,37 +208,37 @@ def render_offline_sync_view():
             conflicts = [dict(r) for r in cursor.fetchall()]
 
         if not conflicts:
-            st.success("✅ No conflicting edits recorded. Local and cloud data remain aligned.")
+            ui_alert("No conflicting edits recorded. Local and cloud data remain aligned.", level="success")
         else:
             for c in conflicts:
-                with st.expander(f"⚠️ Conflict {c['conflict_id']} ({c['resource_type']}) - Status: {c['status']}"):
+                with st.expander(f"Conflict {c['conflict_id']} ({c['resource_type']}) - Status: {c['status']}"):
                     st.json(c)
                     if c["status"] == "pending":
                         col_c1, col_c2 = st.columns(2)
                         with col_c1:
-                            if st.button("📱 Keep Client Version", key=f"cw_{c['conflict_id']}"):
+                            if st.button("Keep Client Version", key=f"cw_{c['conflict_id']}"):
                                 sync_service.resolve_conflict(
                                     conflict_id=c["conflict_id"],
                                     farmer_id=c["farmer_id"],
                                     req=ConflictResolveRequest(resolution_strategy=ConflictResolutionStrategy.CLIENT_WINS),
                                 )
-                                st.success("Resolved using CLIENT_WINS.")
+                                ui_alert("Resolved using CLIENT_WINS.", level="success")
                                 st.rerun()
                         with col_c2:
-                            if st.button("☁️ Keep Server Version", key=f"sw_{c['conflict_id']}"):
+                            if st.button("Keep Server Version", key=f"sw_{c['conflict_id']}"):
                                 sync_service.resolve_conflict(
                                     conflict_id=c["conflict_id"],
                                     farmer_id=c["farmer_id"],
                                     req=ConflictResolveRequest(resolution_strategy=ConflictResolutionStrategy.SERVER_WINS),
                                 )
-                                st.info("Resolved using SERVER_WINS.")
+                                ui_alert("Resolved using SERVER_WINS.", level="info")
                                 st.rerun()
 
     # -------------------------------------------------------------------------
     # TAB 6: Telemetry & Health
     # -------------------------------------------------------------------------
     with tabs[5]:
-        st.subheader("📊 Sync Telemetry & System Health")
+        ui_section_header("Sync Telemetry & System Health", "Operational latency, transaction volume, and network status.", "bar-chart")
 
         status_info = sync_service.get_sync_status()
         st.json(status_info)
@@ -266,5 +256,5 @@ def render_offline_sync_view():
             telemetry = [dict(r) for r in cursor.fetchall()]
 
         if telemetry:
-            st.markdown("### Recent Synchronization Sessions")
+            st.markdown("#### Recent Synchronization Sessions")
             st.dataframe(telemetry, use_container_width=True)

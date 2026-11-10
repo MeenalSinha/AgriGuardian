@@ -28,7 +28,16 @@ from backend.app.schemas.notification import (
     ReminderStatus,
 )
 from backend.app.services.notifications.notification_service import NotificationService
-from frontend.components.ui_widgets import ui_alert, ui_card, ui_divider, ui_metric_card
+from frontend.components.ui_widgets import (
+    ui_page_header,
+    ui_section_header,
+    ui_divider,
+    ui_card,
+    ui_metric_card,
+    ui_alert,
+    ui_badge,
+)
+from frontend.components.icons import render_icon
 
 
 def get_notification_bundle():
@@ -40,10 +49,10 @@ def get_notification_bundle():
 
 def render_notifications_view():
     """Main entrypoint for Notifications and Smart Reminders view."""
-    st.markdown("## 🔔 Proactive Notifications & Smart Farm Reminders")
-    st.caption(
-        "Real-Time Weather Risk Warnings • Market Price Surges • Agronomic Milestones • "
-        "Multi-Channel Delivery • Zero Data Loss Outbox"
+    ui_page_header(
+        title="Proactive Notifications & Smart Farm Reminders",
+        subtitle="Real-Time Weather Risk Warnings | Market Price Surges | Agronomic Milestones | Multi-Channel Outbox Telemetry",
+        icon_name="bell",
     )
 
     repo, service = get_notification_bundle()
@@ -77,26 +86,26 @@ def render_notifications_view():
             unread_count = service.get_unread_count(active_farmer.farmer_id)
             st.metric("Unread Notifications", f"{unread_count} New", delta=None)
         else:
-            st.info("No registered farmer found.")
+            ui_alert("No registered farmer found.", level="info")
             return
 
     with col_f3:
         view_lang = st.radio(
             "Display Language",
-            ["हिन्दी (Hindi)", "English"],
+            ["Hindi", "English"],
             horizontal=True,
             key="notif_view_lang",
         )
-        is_hindi = "हिन्दी" in view_lang
+        is_hindi = "Hindi" in view_lang
 
     ui_divider(style="dotted")
 
     # Main Navigation Tabs
     tab_inbox, tab_reminders, tab_prefs, tab_admin = st.tabs([
-        f"📬 Notification Inbox ({unread_count})",
-        "⏰ Smart Farm Reminders",
-        "⚙️ Notification Preferences & Consents",
-        "🛡️ Outbox Queue & Channel Telemetry",
+        f"Notification Inbox ({unread_count})",
+        "Smart Farm Reminders",
+        "Notification Preferences & Consents",
+        "Outbox Queue & Channel Telemetry",
     ])
 
     with tab_inbox:
@@ -118,7 +127,7 @@ def render_notifications_view():
 
 def render_inbox_tab(farmer_id: str, service: NotificationService, repo: FarmDatabaseRepository, is_hindi: bool):
     """Render notification cards with filters, read status, and dismiss actions."""
-    st.subheader("📬 Your Farm Notifications")
+    ui_section_header("Your Farm Notifications", "Inbox of incoming weather advisories, market updates, and expert alerts.", "bell")
 
     col_ctrl1, col_ctrl2, col_ctrl3 = st.columns([2, 2, 2])
     with col_ctrl1:
@@ -138,9 +147,9 @@ def render_inbox_tab(farmer_id: str, service: NotificationService, repo: FarmDat
         unread_only = st.checkbox("Show Unread Only", value=False, key="inbox_unread_only")
 
     with col_ctrl3:
-        if st.button("Mark All as Read ✓", use_container_width=True, key="inbox_mark_all_read"):
+        if st.button("Mark All as Read", use_container_width=True, key="inbox_mark_all_read"):
             cnt = service.mark_all_as_read(farmer_id)
-            st.success(f"Marked {cnt} notifications as read.")
+            ui_alert(f"Marked {cnt} notifications as read.", level="success")
             st.rerun()
 
     # Map category filter to enum
@@ -161,45 +170,37 @@ def render_inbox_tab(farmer_id: str, service: NotificationService, repo: FarmDat
     )
 
     if not notifications:
-        st.info("No notifications match your current filter.")
-        # Offer quick demo trigger
+        ui_alert("No notifications match your current filter.", level="info")
         st.caption("Tip: You can emit a demo alert from the smart reminders or weather tab to test live dispatch.")
         return
 
-    priority_icons = {
-        NotificationPriority.EMERGENCY: "🚨 EMERGENCY",
-        NotificationPriority.HIGH: "⚠️ HIGH",
-        NotificationPriority.MEDIUM: "ℹ️ INFO",
-        NotificationPriority.LOW: "🔹 NOTICE",
-    }
-    category_icons = {
-        NotificationCategory.WEATHER_ALERT: "🌦️",
-        NotificationCategory.MARKET_INTELLIGENCE: "📈",
-        NotificationCategory.EXPERT_REVIEW: "👨‍⚕️",
-        NotificationCategory.CROP_REMINDER: "⏰",
-        NotificationCategory.SYSTEM_GOVERNANCE: "⚙️",
+    priority_labels = {
+        NotificationPriority.EMERGENCY: "EMERGENCY",
+        NotificationPriority.HIGH: "HIGH",
+        NotificationPriority.MEDIUM: "INFO",
+        NotificationPriority.LOW: "NOTICE",
     }
 
     for n in notifications:
         is_unread = n.status == NotificationStatus.UNREAD
-        card_border = "#FF5722" if n.priority == NotificationPriority.EMERGENCY else ("#2E7D32" if is_unread else "#E0E0E0")
-        card_bg = "#FFF9C4" if n.priority == NotificationPriority.EMERGENCY else ("#F1F8E9" if is_unread else "#FAFAFA")
+        card_border = "#DC2626" if n.priority == NotificationPriority.EMERGENCY else ("#16532D" if is_unread else "#E2E8F0")
+        card_bg = "#FEF2F2" if n.priority == NotificationPriority.EMERGENCY else ("#F0FDF4" if is_unread else "#FFFFFF")
 
         title = n.title_hi if is_hindi and n.title_hi else n.title_en
         body = n.body_hi if is_hindi and n.body_hi else n.body_en
-        p_label = priority_icons.get(n.priority, "INFO")
-        cat_icon = category_icons.get(n.category, "📢")
+        p_label = priority_labels.get(n.priority, "INFO")
+        cat_label = n.category.value.replace("_", " ").title()
 
         with st.container():
             st.markdown(
                 f"""
-                <div style="border-left: 6px solid {card_border}; background-color: {card_bg}; padding: 14px 18px; border-radius: 8px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+                <div style="border-left: 5px solid {card_border}; border: 1px solid #E2E8F0; border-left-width: 5px; background-color: {card_bg}; padding: 14px 18px; border-radius: 8px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: 700; font-size: 1.05rem; color: #1B5E20;">{cat_icon} {title}</span>
-                        <span style="font-size: 0.8rem; background-color: #E0E0E0; padding: 2px 8px; border-radius: 12px; font-weight: 600;">{p_label}</span>
+                        <span style="font-weight: 700; font-size: 1.05rem; color: #0F172A;">[{cat_label}] {title}</span>
+                        <span style="font-size: 0.78rem; background-color: rgba(0,0,0,0.06); padding: 2px 8px; border-radius: 4px; font-weight: 700; letter-spacing: 0.04em;">{p_label}</span>
                     </div>
-                    <p style="margin-top: 8px; margin-bottom: 8px; font-size: 0.95rem; color: #333; line-height: 1.4;">{body}</p>
-                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: #757575;">
+                    <p style="margin-top: 8px; margin-bottom: 8px; font-size: 0.95rem; color: #334155; line-height: 1.5;">{body}</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: #64748B;">
                         <span>Received: {n.created_at[:16].replace('T', ' ')}</span>
                         <span>Status: <b>{n.status.value.upper()}</b></span>
                     </div>
@@ -211,16 +212,16 @@ def render_inbox_tab(farmer_id: str, service: NotificationService, repo: FarmDat
             btn_col1, btn_col2, btn_col3 = st.columns([1.5, 1.5, 4])
             with btn_col1:
                 if is_unread:
-                    if st.button("Mark as Read ✓", key=f"read_{n.notification_id}", use_container_width=True):
+                    if st.button("Mark as Read", key=f"read_{n.notification_id}", use_container_width=True):
                         service.mark_as_read(n.notification_id, farmer_id=farmer_id)
                         st.rerun()
             with btn_col2:
-                if st.button("Dismiss 🗑️", key=f"dismiss_{n.notification_id}", use_container_width=True):
+                if st.button("Dismiss", key=f"dismiss_{n.notification_id}", use_container_width=True):
                     service.dismiss_notification(n.notification_id, farmer_id=farmer_id)
                     st.rerun()
             with btn_col3:
                 if n.action_url:
-                    st.caption(f"🔗 Related Section: `{n.action_url}`")
+                    st.caption(f"Related Section: `{n.action_url}`")
 
 
 # ==============================================================================
@@ -229,60 +230,56 @@ def render_inbox_tab(farmer_id: str, service: NotificationService, repo: FarmDat
 
 def render_reminders_tab(farmer_id: str, service: NotificationService, repo: FarmDatabaseRepository, is_hindi: bool):
     """Render upcoming and overdue farm activity reminders with weather conflict badges."""
-    st.subheader("⏰ Smart Farm Activity Reminders")
-    st.caption(
-        "Agronomic Milestones • Proactive Spray Warnings • Rain Conflict Analysis • Snooze & Reschedule"
-    )
+    ui_section_header("Smart Farm Activity Reminders", "Agronomic Milestones | Proactive Spray Warnings | Rain Conflict Analysis | Snooze & Reschedule", "calendar")
 
     # Sync action bar
     sync_col1, sync_col2 = st.columns([3, 1])
     with sync_col1:
         st.markdown(
-            "Smart Reminders are synchronized with your active crop cycles from **Phase 6 Farm Management**. "
+            "Smart Reminders are synchronized with your active crop cycles from **Farm Management**. "
             "Chemical applications and irrigations are cross-referenced with meteorological risk models."
         )
     with sync_col2:
-        if st.button("🔄 Sync Crop Cycle Tasks", use_container_width=True, key="sync_reminders_btn"):
+        if st.button("Sync Crop Cycle Tasks", use_container_width=True, key="sync_reminders_btn"):
             created = service.generate_reminders_from_cycles(farmer_id)
             if created:
-                st.success(f"Generated {len(created)} new agronomic reminders from active crop cycles!")
+                ui_alert(f"Generated {len(created)} new agronomic reminders from active crop cycles!", level="success")
             else:
-                st.info("All crop cycle milestones are already synchronized.")
+                ui_alert("All crop cycle milestones are already synchronized.", level="info")
             st.rerun()
 
     # List reminders
     reminders = service.list_reminders(farmer_id=farmer_id)
 
-    # Split into Pending/Overdue and Completed
     active_reminders = [r for r in reminders if r.status in (ReminderStatus.PENDING, ReminderStatus.SNOOZED)]
     completed_reminders = [r for r in reminders if r.status == ReminderStatus.COMPLETED]
 
     today_str = datetime.now().strftime("%Y-%m-%d")
 
     if not active_reminders:
-        st.info("No active reminders scheduled. Add a reminder below or sync from active crop cycles.")
+        ui_alert("No active reminders scheduled. Add a reminder below or sync from active crop cycles.", level="info")
     else:
         st.markdown(f"#### Active Reminders ({len(active_reminders)})")
         for rem in active_reminders:
             is_overdue = rem.scheduled_date < today_str
-            status_chip = "🔴 OVERDUE" if is_overdue else ("⏸️ SNOOZED" if rem.status == ReminderStatus.SNOOZED else "📅 SCHEDULED")
-            border_color = "#D32F2F" if is_overdue else ("#FF9800" if rem.has_weather_conflict else "#388E3C")
+            status_chip = "OVERDUE" if is_overdue else ("SNOOZED" if rem.status == ReminderStatus.SNOOZED else "SCHEDULED")
+            border_color = "#DC2626" if is_overdue else ("#D97706" if rem.has_weather_conflict else "#16532D")
 
             with st.container():
                 st.markdown(
                     f"""
-                    <div style="border-left: 6px solid {border_color}; background-color: #FAFAFA; padding: 14px 18px; border-radius: 8px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+                    <div style="border-left: 5px solid {border_color}; border: 1px solid #E2E8F0; border-left-width: 5px; background-color: #FFFFFF; padding: 14px 18px; border-radius: 8px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: 700; font-size: 1.05rem; color: #1B5E20;">
+                            <span style="font-weight: 700; font-size: 1.05rem; color: #0F172A;">
                                 {rem.activity_type.value.title()}: {rem.title_hi if is_hindi and rem.title_hi else rem.title_en}
                             </span>
-                            <span style="font-size: 0.8rem; background-color: #E0E0E0; padding: 2px 8px; border-radius: 12px; font-weight: 600;">{status_chip}</span>
+                            <span style="font-size: 0.78rem; background-color: rgba(0,0,0,0.06); padding: 2px 8px; border-radius: 4px; font-weight: 700;">{status_chip}</span>
                         </div>
-                        <p style="margin-top: 6px; margin-bottom: 6px; font-size: 0.92rem; color: #424242;">
+                        <p style="margin-top: 6px; margin-bottom: 6px; font-size: 0.92rem; color: #334155;">
                             {rem.description_hi if is_hindi and rem.description_hi else rem.description_en}
                         </p>
-                        <div style="font-size: 0.82rem; color: #616161;">
-                            <b>Scheduled Date:</b> {rem.scheduled_date} &nbsp;•&nbsp; <b>Activity:</b> {rem.activity_type.value}
+                        <div style="font-size: 0.82rem; color: #64748B;">
+                            <b>Scheduled Date:</b> {rem.scheduled_date} &nbsp;|&nbsp; <b>Activity:</b> {rem.activity_type.value}
                         </div>
                     </div>
                     """,
@@ -292,27 +289,27 @@ def render_reminders_tab(farmer_id: str, service: NotificationService, repo: Far
                 # Weather Conflict Warning Banner
                 if rem.has_weather_conflict:
                     conflict_text = rem.weather_risk_reason_hi if is_hindi and rem.weather_risk_reason_hi else rem.weather_risk_reason_en
-                    st.warning(
-                        f"⚠️ **Adverse Weather Conflict Detected:**\n\n{conflict_text}\n\n"
-                        f"*Recommendation:* Snooze this activity to avoid pesticide runoff or fertilizer leaching."
+                    ui_alert(
+                        f"Adverse Weather Conflict Detected: {conflict_text} — Recommendation: Snooze this activity to avoid pesticide runoff or fertilizer leaching.",
+                        level="warning",
                     )
 
                 # Action Controls
                 act_col1, act_col2, act_col3, act_col4 = st.columns([2, 1.5, 1.5, 2])
                 with act_col1:
-                    if st.button("Complete Task ✅", key=f"comp_{rem.reminder_id}", use_container_width=True):
+                    if st.button("Complete Task", key=f"comp_{rem.reminder_id}", use_container_width=True):
                         service.complete_reminder(rem.reminder_id, farmer_id=farmer_id)
-                        st.success("Activity marked as completed!")
+                        ui_alert("Activity marked as completed!", level="success")
                         st.rerun()
                 with act_col2:
-                    if st.button("Snooze +1d ⏸️", key=f"sn1_{rem.reminder_id}", use_container_width=True):
+                    if st.button("Snooze +1d", key=f"sn1_{rem.reminder_id}", use_container_width=True):
                         service.snooze_reminder(rem.reminder_id, snooze_days=1, farmer_id=farmer_id)
-                        st.info("Snoozed for 1 day.")
+                        ui_alert("Snoozed for 1 day.", level="info")
                         st.rerun()
                 with act_col3:
-                    if st.button("Snooze +3d ⏸️", key=f"sn3_{rem.reminder_id}", use_container_width=True):
+                    if st.button("Snooze +3d", key=f"sn3_{rem.reminder_id}", use_container_width=True):
                         service.snooze_reminder(rem.reminder_id, snooze_days=3, farmer_id=farmer_id)
-                        st.info("Snoozed for 3 days.")
+                        ui_alert("Snoozed for 3 days.", level="info")
                         st.rerun()
                 with act_col4:
                     custom_date = st.date_input(
@@ -320,20 +317,20 @@ def render_reminders_tab(farmer_id: str, service: NotificationService, repo: Far
                         value=datetime.now() + timedelta(days=2),
                         key=f"cust_date_{rem.reminder_id}",
                     )
-                    if st.button("Set Date 🗓️", key=f"set_d_{rem.reminder_id}", use_container_width=True):
+                    if st.button("Set Date", key=f"set_d_{rem.reminder_id}", use_container_width=True):
                         service.snooze_reminder(
                             rem.reminder_id,
                             custom_date=custom_date.strftime("%Y-%m-%d"),
                             farmer_id=farmer_id,
                         )
-                        st.info(f"Rescheduled to {custom_date.strftime('%Y-%m-%d')}.")
+                        ui_alert(f"Rescheduled to {custom_date.strftime('%Y-%m-%d')}.", level="info")
                         st.rerun()
 
-                st.markdown("<hr style='margin: 8px 0;'>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin: 8px 0; border: none; border-top: 1px dashed #E2E8F0;'>", unsafe_allow_html=True)
 
     # Add Custom Reminder Form
     ui_divider(style="dotted")
-    with st.expander("➕ Add Custom Farm Reminder", expanded=False):
+    with st.expander("Add Custom Farm Reminder", expanded=False):
         farms = repo.get_farms_by_farmer(farmer_id)
         farm_choices = {f.farm_id: f.farm_name for f in farms}
         farm_choices[None] = "General / No Farm"
@@ -359,10 +356,10 @@ def render_reminders_tab(farmer_id: str, service: NotificationService, repo: Far
                 desc_en = st.text_area("Description / Instructions (English) *", placeholder="Specify dosage and plot notes...")
                 desc_hi = st.text_area("Description (Hindi Optional)", placeholder="निर्देश और खुराक...")
 
-            sub_rem = st.form_submit_button("Schedule Reminder 🗓️", use_container_width=True)
+            sub_rem = st.form_submit_button("Schedule Reminder", use_container_width=True)
             if sub_rem:
                 if not title_en or not desc_en:
-                    st.error("Please fill in Title and Description.")
+                    ui_alert("Please fill in Title and Description.", level="error")
                 else:
                     new_rem = service.create_reminder(
                         farmer_id=farmer_id,
@@ -376,9 +373,9 @@ def render_reminders_tab(farmer_id: str, service: NotificationService, repo: Far
                             scheduled_date=due_date.strftime("%Y-%m-%d"),
                         ),
                     )
-                    st.success(f"Reminder '{new_rem.title_en}' scheduled for {new_rem.scheduled_date}!")
+                    ui_alert(f"Reminder '{new_rem.title_en}' scheduled for {new_rem.scheduled_date}!", level="success")
                     if new_rem.has_weather_conflict:
-                        st.warning(f"⚠️ Weather Warning: {new_rem.weather_risk_reason_en}")
+                        ui_alert(f"Weather Warning: {new_rem.weather_risk_reason_en}", level="warning")
                     st.rerun()
 
 
@@ -388,15 +385,14 @@ def render_reminders_tab(farmer_id: str, service: NotificationService, repo: Far
 
 def render_preferences_tab(farmer_id: str, service: NotificationService, repo: FarmDatabaseRepository, is_hindi: bool):
     """Render channel switches, quiet hours, and DPDP-compliant channel consent audit."""
-    st.subheader("⚙️ Notification Preferences & Channel Consents")
-    st.caption("Manage Channel Subscriptions • Quiet Hours Protection • Explicit DPDP Consent Tracking")
+    ui_section_header("Notification Preferences & Channel Consents", "Manage Channel Subscriptions | Quiet Hours Protection | Explicit DPDP Consent Tracking", "sliders")
 
     pref = service.get_preferences(farmer_id)
     consents = service.get_channel_consents(farmer_id)
     consent_dict = {c.channel: c for c in consents}
 
     with st.form("pref_form"):
-        st.markdown("#### 📡 Communication Channels")
+        st.markdown("#### Communication Channels")
         st.caption("Select which channels AgriGuardian may use to reach you:")
 
         col_ch1, col_ch2, col_ch3 = st.columns(3)
@@ -426,7 +422,7 @@ def render_preferences_tab(farmer_id: str, service: NotificationService, repo: F
 
         ui_divider(style="dotted")
 
-        st.markdown("#### 🌙 Quiet Hours")
+        st.markdown("#### Quiet Hours")
         st.caption("During quiet hours, routine notifications will only appear in-app, deferring noisy external channels.")
 
         col_qh1, col_qh2, col_qh3 = st.columns(3)
@@ -443,7 +439,7 @@ def render_preferences_tab(farmer_id: str, service: NotificationService, repo: F
 
         ui_divider(style="dotted")
 
-        st.markdown("#### 📂 Subscribed Categories")
+        st.markdown("#### Subscribed Categories")
         col_cat1, col_cat2 = st.columns(2)
         with col_cat1:
             cat_weather = st.checkbox("Weather Hazards & Advisories", value=NotificationCategory.WEATHER_ALERT in pref.categories_enabled)
@@ -452,7 +448,7 @@ def render_preferences_tab(farmer_id: str, service: NotificationService, repo: F
             cat_rem = st.checkbox("Smart Crop Activity Reminders", value=NotificationCategory.CROP_REMINDER in pref.categories_enabled)
             cat_exp = st.checkbox("Agronomist Expert Review Updates", value=NotificationCategory.EXPERT_REVIEW in pref.categories_enabled)
 
-        save_btn = st.form_submit_button("Save Notification Preferences 💾", use_container_width=True)
+        save_btn = st.form_submit_button("Save Notification Preferences", use_container_width=True)
         if save_btn:
             selected_channels = [NotificationChannel.IN_APP]
             if ch_sms:
@@ -484,18 +480,18 @@ def render_preferences_tab(farmer_id: str, service: NotificationService, repo: F
                 preferred_language=pref.preferred_language,
             )
             service.save_preferences(updated_pref)
-            st.success("Preferences updated successfully!")
+            ui_alert("Preferences updated successfully!", level="success")
             st.rerun()
 
     # Consent Audit Trail (DPDP Compliance)
     ui_divider(style="dotted")
-    st.markdown("#### 📋 DPDP Channel Consent Audit Trail")
+    st.markdown("#### DPDP Channel Consent Audit Trail")
     st.caption("Under the Digital Personal Data Protection Act, farmers have explicit rights to view, grant, and withdraw channel consents.")
 
     for ch in [NotificationChannel.SMS, NotificationChannel.WHATSAPP, NotificationChannel.VOICE_CALL, NotificationChannel.EMAIL]:
         c_record = consent_dict.get(ch)
         is_granted = c_record.is_granted if c_record else False
-        status_text = "🟢 Consent Granted" if is_granted else "⚪ Consent Not Granted / Revoked"
+        status_text = "Consent Granted" if is_granted else "Consent Not Granted / Revoked"
         consent_time = c_record.updated_at[:16].replace("T", " ") if c_record else "Never"
 
         c_col1, c_col2, c_col3 = st.columns([3, 2, 2])
@@ -514,7 +510,7 @@ def render_preferences_tab(farmer_id: str, service: NotificationService, repo: F
                         consent_source="farmer_preferences_ui",
                     ),
                 )
-                st.info(f"Consent for {ch.value} updated.")
+                ui_alert(f"Consent for {ch.value} updated.", level="info")
                 st.rerun()
 
 
@@ -524,10 +520,7 @@ def render_preferences_tab(farmer_id: str, service: NotificationService, repo: F
 
 def render_admin_outbox_tab(service: NotificationService, repo: FarmDatabaseRepository, settings):
     """Render Outbox queue health, worker batch processing, and truthful provider telemetry."""
-    st.subheader("🛡️ Transactional Outbox & Channel Gateway Telemetry")
-    st.caption(
-        "Guaranteed At-Least-Once Delivery • Worker Lease Recovery • Dead-Letter Queue • Truth-First Telemetry"
-    )
+    ui_section_header("Transactional Outbox & Channel Gateway Telemetry", "Guaranteed At-Least-Once Delivery | Worker Lease Recovery | Dead-Letter Queue | Truth-First Telemetry", "shield-check")
 
     # 1. Telemetry Metrics
     telemetry = service.get_outbox_telemetry()
@@ -560,29 +553,29 @@ def render_admin_outbox_tab(service: NotificationService, repo: FarmDatabaseRepo
             "Expired leases (>60s) from aborted workers are automatically reclaimed."
         )
     with w_col2:
-        if st.button("🚀 Process Outbox Batch", use_container_width=True, key="proc_outbox_batch_btn"):
+        if st.button("Process Outbox Batch", use_container_width=True, key="proc_outbox_batch_btn"):
             res = service.process_outbox(batch_size=20)
-            st.success(
+            ui_alert(
                 f"Batch Complete: {res['processed']} processed | {res['delivered']} delivered | "
-                f"{res['failed']} failed | {res['dead_lettered']} moved to dead-letter."
+                f"{res['failed']} failed | {res['dead_lettered']} moved to dead-letter.",
+                level="success",
             )
             st.rerun()
 
     # 3. Channel Provider Readiness Status Cards
-    st.markdown("#### 🔌 Physical Channel Gateways Readiness")
+    st.markdown("#### Physical Channel Gateways Readiness")
     providers_telemetry = service.get_channels_telemetry()
 
     col_g1, col_g2 = st.columns(2)
     with col_g1:
         for ch_key, info in list(providers_telemetry.items())[:3]:
-            status_icon = "🟢" if info["configured"] else "🟡"
             status_label = "Configured & Active" if info["configured"] else "Provider Not Configured"
             st.markdown(
                 f"""
-                <div style="background-color: #FAFAFA; border: 1px solid #E0E0E0; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
-                    <b>{status_icon} Channel: {ch_key.upper()}</b><br>
-                    <span style="font-size: 0.85rem; color: #555;">Gateway: {info['provider']} &nbsp;•&nbsp; Status: <b>{status_label}</b></span><br>
-                    <span style="font-size: 0.78rem; color: #777;">Mode: {info['environment_mode']} &nbsp;•&nbsp; Note: {info['note']}</span>
+                <div style="background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
+                    <b>Channel: {ch_key.upper()}</b><br>
+                    <span style="font-size: 0.85rem; color: #475569;">Gateway: {info['provider']} &nbsp;|&nbsp; Status: <b>{status_label}</b></span><br>
+                    <span style="font-size: 0.78rem; color: #64748B;">Mode: {info['environment_mode']} &nbsp;|&nbsp; Note: {info['note']}</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -590,14 +583,13 @@ def render_admin_outbox_tab(service: NotificationService, repo: FarmDatabaseRepo
 
     with col_g2:
         for ch_key, info in list(providers_telemetry.items())[3:]:
-            status_icon = "🟢" if info["configured"] else "🟡"
             status_label = "Configured & Active" if info["configured"] else "Provider Not Configured"
             st.markdown(
                 f"""
-                <div style="background-color: #FAFAFA; border: 1px solid #E0E0E0; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
-                    <b>{status_icon} Channel: {ch_key.upper()}</b><br>
-                    <span style="font-size: 0.85rem; color: #555;">Gateway: {info['provider']} &nbsp;•&nbsp; Status: <b>{status_label}</b></span><br>
-                    <span style="font-size: 0.78rem; color: #777;">Mode: {info['environment_mode']} &nbsp;•&nbsp; Note: {info['note']}</span>
+                <div style="background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; margin-bottom: 8px;">
+                    <b>Channel: {ch_key.upper()}</b><br>
+                    <span style="font-size: 0.85rem; color: #475569;">Gateway: {info['provider']} &nbsp;|&nbsp; Status: <b>{status_label}</b></span><br>
+                    <span style="font-size: 0.78rem; color: #64748B;">Mode: {info['environment_mode']} &nbsp;|&nbsp; Note: {info['note']}</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -605,7 +597,7 @@ def render_admin_outbox_tab(service: NotificationService, repo: FarmDatabaseRepo
 
     # 4. Outbox Queue Inspection Table
     ui_divider(style="dotted")
-    st.markdown("#### 📋 Outbox Queue Inspection")
+    st.markdown("#### Outbox Queue Inspection")
     q_filter = st.selectbox(
         "Queue Status Filter",
         ["All Outbox Items", "dead_letter", "pending", "failed", "delivered", "processing"],
@@ -615,7 +607,7 @@ def render_admin_outbox_tab(service: NotificationService, repo: FarmDatabaseRepo
 
     items = repo.list_outbox_items(status=selected_status, limit=30)
     if not items:
-        st.info("No outbox records match the selected status.")
+        ui_alert("No outbox records match the selected status.", level="info")
     else:
         for item in items:
             with st.expander(
@@ -626,12 +618,11 @@ def render_admin_outbox_tab(service: NotificationService, repo: FarmDatabaseRepo
                 st.caption(f"**Body:** {item.payload.get('body', 'N/A')}")
                 st.caption(f"**Retry Count:** {item.retry_count} / {item.max_retries}")
                 if item.last_error:
-                    st.error(f"Last Error: {item.last_error}")
+                    ui_alert(f"Last Error: {item.last_error}", level="error")
 
                 if item.status == OutboxStatus.DEAD_LETTER:
-                    if st.button("Retry Dead-Letter Item 🔄", key=f"dlq_retry_{item.outbox_id}"):
+                    if st.button("Retry Dead-Letter Item", key=f"dlq_retry_{item.outbox_id}"):
                         ok = service.retry_dead_letter(item.outbox_id)
                         if ok:
-                            st.success("Re-queued for immediate dispatch!")
+                            ui_alert("Re-queued for immediate dispatch!", level="success")
                             st.rerun()
-

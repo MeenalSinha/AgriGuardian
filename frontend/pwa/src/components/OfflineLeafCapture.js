@@ -99,8 +99,8 @@ export class OfflineLeafCapture {
     this.container.innerHTML = `
       <div class="form-card">
         <div class="form-header">
-          <h2>📷 ${lang === 'hi' ? 'फसल रोग निदान एवं लक्षण फोटो' : 'Crop Disease Photo & Diagnosis'}</h2>
-          <span class="pill-badge pill-pending_sync">🌿 ${lang === 'hi' ? 'ऑफ़लाइन ड्राफ्ट' : 'Offline Draft'}</span>
+          <h2>${lang === 'hi' ? 'फसल रोग निदान एवं लक्षण फोटो' : 'Crop Disease Photo & Diagnosis'}</h2>
+          <span class="pill-badge pill-pending_sync">${lang === 'hi' ? 'ऑफ़लाइन ड्राफ्ट' : 'Offline Draft'}</span>
         </div>
 
         <p class="form-intro">
@@ -113,13 +113,13 @@ export class OfflineLeafCapture {
           <div class="form-group">
             <label><strong>${lang === 'hi' ? 'फसल चुनें' : 'Select Crop'} *</strong></label>
             <select name="crop_name" class="form-control" required>
-              <option value="Wheat">🌾 ${lang === 'hi' ? 'गेहूं (Wheat)' : 'Wheat'}</option>
-              <option value="Rice">🌾 ${lang === 'hi' ? 'धान / चावल (Rice)' : 'Rice'}</option>
-              <option value="Tomato">🍅 ${lang === 'hi' ? 'टमाटर (Tomato)' : 'Tomato'}</option>
-              <option value="Cotton">🌱 ${lang === 'hi' ? 'कपास (Cotton)' : 'Cotton'}</option>
-              <option value="Corn">🌽 ${lang === 'hi' ? 'मक्का (Corn / Maize)' : 'Corn / Maize'}</option>
-              <option value="Potato">🥔 ${lang === 'hi' ? 'आलू (Potato)' : 'Potato'}</option>
-              <option value="Soybean">🌱 ${lang === 'hi' ? 'सोयाबीन (Soybean)' : 'Soybean'}</option>
+              <option value="Wheat">${lang === 'hi' ? 'गेहूं (Wheat)' : 'Wheat'}</option>
+              <option value="Rice">${lang === 'hi' ? 'धान / चावल (Rice)' : 'Rice'}</option>
+              <option value="Tomato">${lang === 'hi' ? 'टमाटर (Tomato)' : 'Tomato'}</option>
+              <option value="Cotton">${lang === 'hi' ? 'कपास (Cotton)' : 'Cotton'}</option>
+              <option value="Corn">${lang === 'hi' ? 'मक्का (Corn / Maize)' : 'Corn / Maize'}</option>
+              <option value="Potato">${lang === 'hi' ? 'आलू (Potato)' : 'Potato'}</option>
+              <option value="Soybean">${lang === 'hi' ? 'सोयाबीन (Soybean)' : 'Soybean'}</option>
             </select>
           </div>
 
@@ -128,7 +128,7 @@ export class OfflineLeafCapture {
             <div class="file-picker-box">
               <input type="file" id="leaf-file-input" accept="image/*" capture="environment" style="display: none;">
               <button type="button" class="btn-secondary" id="btn-trigger-camera">
-                📸 ${lang === 'hi' ? 'कैमरा खोलें / फोटो चुनें' : 'Open Camera / Choose Photo'}
+                ${lang === 'hi' ? 'कैमरा खोलें / फोटो चुनें' : 'Open Camera / Choose Photo'}
               </button>
             </div>
             <div id="preview-box" class="image-preview-container" style="display: none; margin-top: 12px;">
@@ -144,15 +144,15 @@ export class OfflineLeafCapture {
           <div class="form-group">
             <label><strong>${lang === 'hi' ? 'प्रभावित क्षेत्र का स्तर' : 'Severity Assessment'}</strong></label>
             <select name="severity" class="form-control">
-              <option value="mild">🟢 ${lang === 'hi' ? 'हल्का / शुरुआती (1-5% पत्तियां)' : 'Mild / Early (1-5% leaves)'}</option>
-              <option value="moderate" selected>🟡 ${lang === 'hi' ? 'मध्यम (5-25% पत्तियां)' : 'Moderate (5-25% leaves)'}</option>
-              <option value="severe">🔴 ${lang === 'hi' ? 'गंभीर / फैला हुआ (>25% पत्तियां)' : 'Severe (>25% crop affected)'}</option>
+              <option value="mild">${lang === 'hi' ? 'हल्का / शुरुआती (1-5% पत्तियां)' : 'Mild / Early (1-5% leaves)'}</option>
+              <option value="moderate" selected>${lang === 'hi' ? 'मध्यम (5-25% पत्तियां)' : 'Moderate (5-25% leaves)'}</option>
+              <option value="severe">${lang === 'hi' ? 'गंभीर / फैला हुआ (>25% पत्तियां)' : 'Severe (>25% crop affected)'}</option>
             </select>
           </div>
 
           <div class="form-actions">
             <button type="submit" class="btn-primary">
-              💾 ${lang === 'hi' ? 'निदान ड्राफ्ट सहेजें (ऑफ़लाइन)' : 'Save Diagnosis Draft (Offline)'}
+              ${lang === 'hi' ? 'निदान ड्राफ्ट सहेजें (ऑफ़लाइन)' : 'Save Diagnosis Draft (Offline)'}
             </button>
           </div>
         </form>

@@ -7,25 +7,26 @@ from backend.app.repositories.market_catalog import market_catalog
 from backend.app.schemas.market import PriceTrendDirection
 from backend.app.services.market.market_intelligence import MarketIntelligenceService
 from backend.app.services.market.net_realization_calculator import NetRealizationCalculator
-from frontend.components.ui_widgets import ui_alert, ui_badge, ui_divider
+from frontend.components.ui_widgets import (
+    ui_page_header,
+    ui_section_header,
+    ui_divider,
+    ui_card,
+    ui_metric_card,
+    ui_alert,
+    ui_badge,
+)
+from frontend.components.icons import render_icon
 
 
 def render_market_intelligence_view():
     """Render comprehensive agricultural market intelligence view."""
-    st.markdown(
-        """
-        <div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 1.5rem; border-radius: 12px; color: white; margin-bottom: 1.5rem;">
-            <h1 style="color: white; margin: 0; font-size: 2.2rem;">📈 Agricultural Market Intelligence</h1>
-            <p style="margin: 0.5rem 0 0 0; opacity: 0.9; font-size: 1.05rem;">
-                Real-Time APMC Mandi Rates, Nearby Spatial Comparisons, Official MSP Benchmarks & Time-Series Forecasting
-            </p>
-            <div style="margin-top: 0.8rem; font-size: 0.85rem; opacity: 0.85;">
-                🏛️ Official Data Grounding: AGMARKNET Daily Bulletins • e-NAM Trade Network • CACP / DA&FW Statutory MSP
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    ui_page_header(
+        title="Agricultural Market Intelligence",
+        subtitle="Real-Time APMC Mandi Rates, Nearby Spatial Comparisons, Official MSP Benchmarks & Time-Series Forecasting.",
+        icon_name="trending-up",
     )
+    st.caption("Official Data Grounding: AGMARKNET Daily Bulletins | e-NAM Trade Network | CACP / DA&FW Statutory MSP")
 
     market_intel = MarketIntelligenceService()
 
@@ -41,7 +42,7 @@ def render_market_intelligence_view():
 
     with col_c1:
         selected_comm_label = st.selectbox(
-            "🌾 Select Agricultural Commodity",
+            "Select Agricultural Commodity",
             list(comm_options.keys()),
             index=0,
         )
@@ -54,15 +55,15 @@ def render_market_intelligence_view():
             mandi_options[f"{m.market_name} ({m.state})"] = m.market_id
 
         selected_mandi_label = st.selectbox(
-            "📍 Primary APMC Mandi",
+            "Primary APMC Mandi",
             list(mandi_options.keys()),
-            index=1,  # Default Meerut
+            index=1,
         )
         selected_mid = mandi_options[selected_mandi_label]
 
     with col_c3:
         search_radius = st.slider(
-            "🚗 Radius (km)",
+            "Radius (km)",
             min_value=30,
             max_value=300,
             value=120,
@@ -81,7 +82,7 @@ def render_market_intelligence_view():
     if not summary.get("is_available"):
         ui_alert(
             summary.get("error", "Market intelligence temporarily unavailable for selected commodity."),
-            type="warning",
+            level="warning",
         )
         return
 
@@ -96,17 +97,16 @@ def render_market_intelligence_view():
     # 2. ACTIVE MARKET ALERTS
     # ==========================================================================
     if alerts:
-        st.markdown("### 🔔 Active Market Alerts")
+        ui_section_header("Active Market Alerts", "Price anomalies and market notifications.", "bell")
         for alert in alerts:
-            alert_type = alert.get("alert_type")
-            severity = alert.get("severity", "WARNING")
-            icon = "🚨" if severity == "CRITICAL" else ("⚠️" if severity == "WARNING" else "ℹ️")
-            st.warning(f"{icon} **{alert.get('headline')}**\n\n{alert.get('message')}")
+            severity = alert.get("severity", "WARNING").upper()
+            level = "error" if severity == "CRITICAL" else ("warning" if severity == "WARNING" else "info")
+            ui_alert(f"**{alert.get('headline')}** — {alert.get('message')}", level=level)
 
     # ==========================================================================
     # 3. CURRENT PRICE & MSP CARDS
     # ==========================================================================
-    st.markdown("### 💰 Prevailing APMC Market Rates")
+    ui_section_header("Prevailing APMC Market Rates", "Latest physical terminal transaction rates from agricultural produce markets.", "dollar-sign")
     m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 
     modal_price = latest["modal_price"]
@@ -159,26 +159,26 @@ def render_market_intelligence_view():
     # MSP Transparency Banner
     if msp_info:
         if msp_info.get("has_msp"):
-            status_color = "#e8f5e9" if msp_info["status"] == "ABOVE_MSP" else "#ffebee"
-            border_color = "#4caf50" if msp_info["status"] == "ABOVE_MSP" else "#f44336"
+            status_color = "#F0FDF4" if msp_info["status"] == "ABOVE_MSP" else "#FEF2F2"
+            border_color = "#16A34A" if msp_info["status"] == "ABOVE_MSP" else "#DC2626"
             st.markdown(
                 f"""
-                <div style="background-color: {status_color}; border-left: 5px solid {border_color}; padding: 0.8rem 1rem; border-radius: 6px; margin: 0.8rem 0;">
-                    <b>🏛️ Minimum Support Price (MSP) Analysis:</b> {msp_info.get('advisory')}<br>
-                    <small style="color: #555;"><i>Procurement Agencies: {', '.join(msp_info.get('procurement_agencies', []))} • Quality: {msp_info.get('eligible_variety', 'FAQ')} • <b>Statutory note:</b> {msp_info.get('disclaimer')}</i></small>
+                <div style="background-color: {status_color}; border-left: 5px solid {border_color}; border: 1px solid #E2E8F0; border-left-width: 5px; padding: 0.9rem 1.1rem; border-radius: 6px; margin: 0.8rem 0;">
+                    <b style="color: {border_color}; font-size: 0.95rem;">Minimum Support Price (MSP) Analysis:</b> {msp_info.get('advisory')}<br>
+                    <small style="color: #64748B;"><i>Procurement Agencies: {', '.join(msp_info.get('procurement_agencies', []))} | Quality: {msp_info.get('eligible_variety', 'FAQ')} | <b>Statutory note:</b> {msp_info.get('disclaimer')}</i></small>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
         elif msp_info.get("message"):
-            st.info(f"ℹ️ **Commodity Note:** {msp_info.get('message')}")
+            ui_alert(f"Commodity Note: {msp_info.get('message')}", level="info")
 
     ui_divider()
 
     # ==========================================================================
     # 4. NEARBY MANDI SPATIAL COMPARISON TABLE
     # ==========================================================================
-    st.markdown("### 🗺️ Nearby Mandi Price Comparison (Within Search Radius)")
+    ui_section_header("Nearby Mandi Price Comparison", f"Comparing markets within {search_radius} km search radius.", "map-pin")
     if nearby:
         nearby_rows = []
         for n in nearby:
@@ -198,7 +198,7 @@ def render_market_intelligence_view():
 
         df_nearby = pd.DataFrame(nearby_rows)
         st.dataframe(df_nearby, use_container_width=True, hide_index=True)
-        st.caption("📏 *Distances represent straight-line geodesic distance calculated from verified coordinates.*")
+        st.caption("Distances represent straight-line geodesic distance calculated from verified coordinates.")
     else:
         st.caption("No additional APMC mandis trading this commodity found within the selected radius.")
 
@@ -207,8 +207,8 @@ def render_market_intelligence_view():
     # ==========================================================================
     # 5. HISTORICAL PRICE TREND & VOLATILITY ANALYTICS
     # ==========================================================================
-    st.markdown(f"### 📊 Historical Price Trajectory & Volatility ({latest['market_name']})")
-    
+    ui_section_header(f"Historical Price Trajectory & Volatility ({latest['market_name']})", "Observed auction price movement and statistical dispersion over recent trading days.", "bar-chart")
+
     if trend and trend.get("history_points"):
         t_col1, t_col2 = st.columns([2.5, 1.2])
 
@@ -219,26 +219,26 @@ def render_market_intelligence_view():
 
             chart_data = hist_df.set_index("Date")[["modal_price", "min_price", "max_price"]]
             chart_data.columns = ["Modal Price (₹/qtl)", "Min Price (₹/qtl)", "Max Price (₹/qtl)"]
-            st.line_chart(chart_data, color=["#1E88E5", "#43A047", "#FB8C00"])
-            st.caption("📈 *Historical wholesale transaction rates (₹/quintal) over recent trading sessions.*")
+            st.line_chart(chart_data, color=["#10B981", "#059669", "#D97706"])
+            st.caption("Historical wholesale transaction rates (₹/quintal) over recent trading sessions.")
 
         with t_col2:
-            st.markdown("#### 📐 Statistical Metrics")
+            st.markdown("#### Statistical Metrics")
             st.markdown(f"**Trend Direction:** `{trend['trend_direction'].upper()}`")
             st.markdown(f"**Period Average:** ₹{trend['period_average']:,.2f}/qtl")
             st.markdown(f"**Period Median:** ₹{trend['period_median']:,.2f}/qtl")
             st.markdown(f"**Standard Dev (Volatility):** ₹{trend['volatility_std']:,.2f}/qtl")
             st.markdown(f"**Observed Price Range:** ₹{trend['price_range']:,.2f}/qtl")
             st.markdown(f"**Data Completeness:** {trend['data_completeness_pct']:.0f}%")
-            st.info(f"💡 **Trajectory Insight:** {trend['trend_explanation']}")
+            ui_alert(f"Trajectory Insight: {trend['trend_explanation']}", level="info")
 
     ui_divider()
 
     # ==========================================================================
     # 6. TIME-SERIES FORECASTING & UNCERTAINTY INTERVALS
     # ==========================================================================
-    st.markdown("### 🔮 14-Day Price Forecast & Walk-Forward Evaluation")
-    
+    ui_section_header("14-Day Price Forecast & Walk-Forward Evaluation", "Statistical projections modeled with uncertainty bands and evaluated against naive persistence benchmarks.", "trending-up")
+
     if forecast and forecast.get("forecast_points"):
         fc_col1, fc_col2 = st.columns([2.2, 1.2])
 
@@ -246,28 +246,27 @@ def render_market_intelligence_view():
             fc_points = forecast["forecast_points"]
             fc_df = pd.DataFrame(fc_points)
             fc_df["Date"] = pd.to_datetime(fc_df["forecast_date"])
-            
-            # Format forecast display chart
+
             fc_chart = fc_df.set_index("Date")[["predicted_modal_price", "lower_interval_80", "upper_interval_80"]]
             fc_chart.columns = ["Predicted Rate (₹/qtl)", "Lower Bound (80% CI)", "Upper Bound (80% CI)"]
-            st.line_chart(fc_chart, color=["#3949AB", "#8E24AA", "#00897B"])
-            st.caption("📊 *Forecast horizon with expanding 80% statistical prediction uncertainty interval.*")
+            st.line_chart(fc_chart, color=["#16532D", "#059669", "#0284C7"])
+            st.caption("Forecast horizon with expanding 80% statistical prediction uncertainty interval.")
 
         with fc_col2:
-            st.markdown("#### 🛡️ Model Rigor & Evaluation")
+            st.markdown("#### Model Rigor & Evaluation")
             st.markdown(f"**Model:** {forecast['model_name']}")
             st.markdown(f"**Confidence Tier:** `{forecast['confidence_tier']}`")
             st.markdown(f"**Backtest MAE:** ₹{forecast['backtest_mae']:,.2f}/qtl")
             st.markdown(f"**Backtest RMSE:** ₹{forecast['backtest_rmse']:,.2f}/qtl")
             st.markdown(f"**Naive Baseline MAE:** ₹{forecast['baseline_naive_mae']:,.2f}/qtl")
-            
+
             if forecast.get("model_outperformed_baseline"):
-                st.success("✅ Model outperforms naive persistence benchmark in walk-forward evaluation.")
+                ui_alert("Model outperforms naive persistence benchmark in walk-forward evaluation.", level="success")
             else:
-                st.warning("⚠️ High volatility observed; baseline persistence closely tracking.")
+                ui_alert("High volatility observed; baseline persistence closely tracking.", level="warning")
 
         # Forecast Points Table
-        with st.expander("📋 View Daily Forecast Points & 95% Confidence Intervals", expanded=False):
+        with st.expander("View Daily Forecast Points & Confidence Intervals", expanded=False):
             fc_table = []
             for p in fc_points:
                 fc_table.append({
@@ -278,17 +277,16 @@ def render_market_intelligence_view():
                 })
             st.dataframe(pd.DataFrame(fc_table), use_container_width=True, hide_index=True)
 
-        st.caption(f"⚖️ *Statutory Economic Disclaimer:* {forecast.get('statutory_disclaimer')}")
+        st.caption(f"Statutory Economic Disclaimer: {forecast.get('statutory_disclaimer')}")
     else:
-        st.info("ℹ️ Time-series forecasting requires at least 14 sequential trading observations.")
+        ui_alert("Time-series forecasting requires at least 14 sequential trading observations.", level="info")
 
     ui_divider()
 
     # ==========================================================================
     # 7. NET REALIZATION CALCULATOR (Farmgate Logistics & Opportunity Analysis)
     # ==========================================================================
-    st.markdown("### 🧮 Farmgate Net Realization Calculator")
-    st.caption("Calculate whether traveling to a higher-priced distant mandi offsets transport and handling costs.")
+    ui_section_header("Farmgate Net Realization Calculator", "Evaluate whether transport and handling costs to a distant market are offset by higher auction prices.", "sliders")
 
     calc_c1, calc_c2, calc_c3, calc_c4 = st.columns(4)
 
@@ -304,8 +302,7 @@ def render_market_intelligence_view():
     with calc_c2:
         mandi_dest_names = [n["market_name"] for n in nearby] if nearby else [latest["market_name"]]
         dest_mandi_choice = st.selectbox("Target Selling Mandi", mandi_dest_names, index=0)
-        
-        # Match selected mandi
+
         target_mandi = next((n for n in nearby if n["market_name"] == dest_mandi_choice), None)
         dest_dist = target_mandi["distance_km"] if target_mandi else 0.0
         dest_rate = target_mandi["modal_price"] if target_mandi else modal_price
@@ -354,7 +351,7 @@ def render_market_intelligence_view():
             delta=f"₹{calc_res.net_realization_per_quintal:,.2f} / qtl",
         )
 
-    with st.expander("📝 View Financial Assumptions & Quality Caveat", expanded=False):
+    with st.expander("View Financial Assumptions & Quality Caveat", expanded=False):
         for assumption in calc_res.assumptions:
             st.markdown(f"- {assumption}")
-        st.caption(f"⚠️ *Disclaimer:* {calc_res.disclaimer}")
+        st.caption(f"Disclaimer: {calc_res.disclaimer}")

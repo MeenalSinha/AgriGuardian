@@ -81,7 +81,7 @@ export class SyncCenter {
     this.container.innerHTML = `
       <div class="sync-center-card">
         <div class="sync-header">
-          <h2>🔄 ${lang === 'hi' ? 'सिंक्रोनाइज़ेशन केंद्र' : 'Synchronization Center'}</h2>
+          <h2>${lang === 'hi' ? 'सिंक्रोनाइज़ेशन केंद्र' : 'Synchronization Center'}</h2>
           <span class="sync-status-tag ${isOnline ? 'tag-online' : 'tag-offline'}">
             ${isOnline ? (lang === 'hi' ? 'क्लाउड कनेक्टेड' : 'Cloud Connected') : (lang === 'hi' ? 'ऑफलाइन' : 'Offline')}
           </span>
@@ -96,10 +96,10 @@ export class SyncCenter {
         <!-- Actions Bar -->
         <div class="sync-actions-grid">
           <button id="btn-manual-sync" class="btn-primary" ${!isOnline || this.isSyncing ? 'disabled' : ''}>
-            ${this.isSyncing ? '⏳ ' + (lang === 'hi' ? 'सिंक हो रहा है...' : 'Syncing...') : '⚡ ' + (lang === 'hi' ? 'अभी सिंक करें' : 'Sync Now')}
+            ${this.isSyncing ? (lang === 'hi' ? 'सिंक हो रहा है...' : 'Syncing...') : (lang === 'hi' ? 'अभी सिंक करें' : 'Sync Now')}
           </button>
           <button id="btn-bootstrap" class="btn-secondary" ${!isOnline || this.isSyncing ? 'disabled' : ''}>
-            📥 ${lang === 'hi' ? 'पूरा डेटा डाउनलोड करें' : 'Full Data Bootstrap'}
+            ${lang === 'hi' ? 'पूरा डेटा डाउनलोड करें' : 'Full Data Bootstrap'}
           </button>
         </div>
 
@@ -107,15 +107,15 @@ export class SyncCenter {
         <div class="preference-box">
           <label class="toggle-label">
             <input type="checkbox" id="chk-low-data" ${this.lowDataMode ? 'checked' : ''}>
-            <span><strong>📉 ${lang === 'hi' ? 'लो-डेटा मोड' : 'Low-Bandwidth Mode'}</strong> (${lang === 'hi' ? 'कम डेटा खपत, केवल मुख्य जानकारी' : 'Save mobile data, defer large images'})</span>
+            <span><strong>${lang === 'hi' ? 'लो-डेटा मोड' : 'Low-Bandwidth Mode'}</strong> (${lang === 'hi' ? 'कम डेटा खपत, केवल मुख्य जानकारी' : 'Save mobile data, defer large images'})</span>
           </label>
         </div>
 
         <!-- Pending Mutations Queue -->
         <div class="sync-section">
-          <h3>📋 ${lang === 'hi' ? 'लंबित सिंक रिकॉर्ड्स' : 'Pending Server Updates'} (${this.pendingMutations.length})</h3>
+          <h3>${lang === 'hi' ? 'लंबित सिंक रिकॉर्ड्स' : 'Pending Server Updates'} (${this.pendingMutations.length})</h3>
           ${this.pendingMutations.length === 0
-            ? `<div class="empty-sync-box">✅ ${lang === 'hi' ? 'सभी बदलाव सर्वर पर सुरक्षित हैं।' : 'All local changes are fully synchronized.'}</div>`
+            ? `<div class="empty-sync-box">${lang === 'hi' ? 'सभी बदलाव सर्वर पर सुरक्षित हैं।' : 'All local changes are fully synchronized.'}</div>`
             : `
               <div class="mutations-list">
                 ${this.pendingMutations.map((m) => `
@@ -127,7 +127,7 @@ export class SyncCenter {
                     </div>
                     <div class="mut-status">
                       <span class="pill-badge pill-${m.status}">
-                        ${m.status === 'pending_sync' ? '⏳ ' + (lang === 'hi' ? 'सिंक बाकी' : 'Pending Sync') : m.status}
+                        ${m.status === 'pending_sync' ? (lang === 'hi' ? 'सिंक बाकी' : 'Pending Sync') : m.status}
                       </span>
                     </div>
                   </div>
@@ -138,16 +138,16 @@ export class SyncCenter {
 
         <!-- Pending Photographs -->
         <div class="sync-section">
-          <h3>📷 ${lang === 'hi' ? 'अपलोड होने वाली तस्वीरें' : 'Queued Photographs'} (${this.pendingAttachments.length})</h3>
+          <h3>${lang === 'hi' ? 'अपलोड होने वाली तस्वीरें' : 'Queued Photographs'} (${this.pendingAttachments.length})</h3>
           ${this.pendingAttachments.length === 0
-            ? `<div class="empty-sync-box">🌾 ${lang === 'hi' ? 'कोई लंबित तस्वीर नहीं।' : 'No photos pending upload.'}</div>`
+            ? `<div class="empty-sync-box">${lang === 'hi' ? 'कोई लंबित तस्वीर नहीं।' : 'No photos pending upload.'}</div>`
             : `
               <div class="attachments-list">
                 ${this.pendingAttachments.map((a) => `
                   <div class="attachment-item">
-                    <span>🖼️ ${a.file_name}</span>
+                    <span>${a.file_name}</span>
                     <span class="att-size">(${Math.round(a.byte_size / 1024)} KB)</span>
-                    <span class="pill-badge pill-pending_sync">⏳ ${lang === 'hi' ? 'अपलोड बाकी' : 'Waiting for network'}</span>
+                    <span class="pill-badge pill-pending_sync">${lang === 'hi' ? 'अपलोड बाकी' : 'Waiting for network'}</span>
                   </div>
                 `).join('')}
               </div>

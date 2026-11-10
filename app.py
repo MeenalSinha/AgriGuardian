@@ -1,6 +1,7 @@
 """AgriGuardian — Intelligent Multilingual Agricultural Companion.
 
 Main Streamlit Application Entrypoint.
+Redesigned with enterprise SaaS aesthetic and strict NO-EMOJI compliance.
 """
 
 import os
@@ -16,7 +17,8 @@ if str(WORKSPACE_ROOT) not in sys.path:
 from backend.app.core.config import get_settings
 from backend.app.core.logging import get_logger, setup_logging
 from backend.app.services.advisory.orchestrator import AgriGuardianSystem
-from frontend.components.ui_widgets import ui_divider
+from frontend.components.icons import render_icon
+from frontend.components.ui_widgets import load_custom_css, ui_divider, ui_status_badge
 from frontend.views.about_view import render_about_view
 from frontend.views.dashboard_view import render_dashboard_view
 from frontend.views.demo_cases_view import render_demo_cases_view
@@ -38,41 +40,17 @@ setup_logging(log_level=settings.log_level, logs_dir=settings.logs_dir)
 logger = get_logger("App")
 
 # ==============================================================================
-# STREAMLIT PAGE CONFIGURATION & STYLING
+# STREAMLIT PAGE CONFIGURATION & CENTRALIZED DESIGN SYSTEM
 # ==============================================================================
 
 st.set_page_config(
-    page_title="AgriGuardian - Intelligent Farm Companion",
-    page_icon="🌾",
+    page_title="AgriGuardian | Enterprise Agricultural Intelligence",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.markdown(
-    """
-    <style>
-        .block-container {
-            padding-top: 1.5rem;
-            padding-bottom: 2rem;
-        }
-        .main-header {
-            font-size: 2.3rem;
-            color: #1B5E20;
-            text-align: center;
-            padding: 1.2rem;
-            background: linear-gradient(120deg, #a8e063 0%, #56ab2f 100%);
-            border-radius: 10px;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.08);
-        }
-        .stButton>button {
-            border-radius: 8px;
-            font-weight: 600;
-        }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+# Inject centralized enterprise stylesheet
+load_custom_css()
 
 # Initialize global system state
 if "system" not in st.session_state:
@@ -83,110 +61,166 @@ if "system" not in st.session_state:
 # ==============================================================================
 
 with st.sidebar:
-    st.image(
-        "https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f33e.png",
-        width=70,
+    # Enterprise Brand Header
+    st.markdown(
+        f"""
+        <div class="ag-sidebar-brand">
+            <div class="ag-sidebar-logo-icon">
+                {render_icon("sprout", size=22, color="#FFFFFF")}
+            </div>
+            <div class="ag-sidebar-brand-text">
+                <span class="ag-sidebar-brand-title">AgriGuardian</span>
+                <span class="ag-sidebar-brand-subtitle">Agricultural Intelligence</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    st.title("AgriGuardian")
-    st.caption("🌾 *Your Intelligent Agricultural Companion*")
-    ui_divider(style="bold")
 
+    # Navigation Directory with clear semantic groupings
+    st.markdown('<div class="ag-nav-category">Navigation Modules</div>', unsafe_allow_html=True)
+    
     page = st.radio(
         "Navigation",
         [
-            "🌾 My Farms & Crops",
-            "🔔 Alerts & Reminders",
-            "🔄 Offline & Sync Center",
-            "💰 Farm Economics & Profitability",
-            "🎙️ Voice Assistant",
-            "🔬 Crop Disease Diagnosis",
-            "🌦️ Weather Intelligence",
-            "📈 Market Intelligence",
-            "🏠 Farm Advisory",
-            "👨‍⚕️ Expert Portal",
-            "📚 Knowledge Base",
-            "📊 Dashboard",
-            "👨‍🌾 Demo Cases",
-            "ℹ️ About",
+            "My Farms & Crops",
+            "Farm Economics & Profitability",
+            "AI Voice Assistant",
+            "Crop Disease Diagnosis",
+            "Weather Intelligence",
+            "Market Intelligence",
+            "Farm Advisory",
+            "Alerts & Reminders",
+            "Offline & Sync Center",
+            "Expert Review Portal",
+            "Agricultural Knowledge Base",
+            "Analytics Dashboard",
+            "Reference Benchmark Cases",
+            "System Architecture & About",
         ],
         index=0,
+        label_visibility="collapsed",
     )
 
-    ui_divider(style="dotted")
+    ui_divider(style="default")
 
-    # System Integration Status
-    st.markdown("### 🔌 System Services")
-    gnani_status = "🟢 Active" if settings.is_gnani_configured else "🟡 Config Missing"
-    llm_status = "🟢 Active" if settings.is_llm_configured else "🟡 Fallback Mode"
+    # System Integration Telemetry
+    st.markdown('<div class="ag-nav-category">System Infrastructure</div>', unsafe_allow_html=True)
+    
+    gnani_active = bool(settings.is_gnani_configured)
+    gnani_status = "Operational" if gnani_active else "Standby Mode"
+    gnani_color = "var(--ag-success)" if gnani_active else "var(--ag-warning)"
+    gnani_dot = "ag-dot-active" if gnani_active else "ag-dot-warning"
 
-    st.markdown(f"**Gnani AI (STT/TTS):** {gnani_status}")
-    st.markdown("**Crop Vision (PyTorch):** 🟢 Active (MobileNetV3)")
-    st.markdown(f"**LLM Reasoning:** {llm_status}")
-    st.markdown("**Weather (Open-Meteo):** 🟢 Active")
-    st.markdown("**Mandi Intelligence:** 🟢 Active")
-    st.markdown("**Proactive Outbox:** 🟢 Active (Zero Data Loss)")
+    llm_active = bool(settings.is_llm_configured)
+    llm_status = "Operational" if llm_active else "Rule Engine Fallback"
+    llm_color = "var(--ag-success)" if llm_active else "var(--ag-warning)"
+    llm_dot = "ag-dot-active" if llm_active else "ag-dot-warning"
 
-    ui_divider(style="dotted")
+    st.markdown(
+        f"""
+        <div class="ag-service-card">
+            <div class="ag-service-row">
+                <span class="ag-service-name">{render_icon("mic", size=13, color="#64748B")} Gnani Voice AI</span>
+                <span class="ag-service-status" style="color:{gnani_color};">
+                    <span class="ag-dot {gnani_dot}"></span> {gnani_status}
+                </span>
+            </div>
+            <div class="ag-service-row">
+                <span class="ag-service-name">{render_icon("microscope", size=13, color="#64748B")} Vision AI (PyTorch)</span>
+                <span class="ag-service-status" style="color:var(--ag-success);">
+                    <span class="ag-dot ag-dot-active"></span> MobileNetV3
+                </span>
+            </div>
+            <div class="ag-service-row">
+                <span class="ag-service-name">{render_icon("bot", size=13, color="#64748B")} Advisory Engine</span>
+                <span class="ag-service-status" style="color:{llm_color};">
+                    <span class="ag-dot {llm_dot}"></span> {llm_status}
+                </span>
+            </div>
+            <div class="ag-service-row">
+                <span class="ag-service-name">{render_icon("cloud-rain", size=13, color="#64748B")} Weather Telemetry</span>
+                <span class="ag-service-status" style="color:var(--ag-success);">
+                    <span class="ag-dot ag-dot-active"></span> Open-Meteo
+                </span>
+            </div>
+            <div class="ag-service-row">
+                <span class="ag-service-name">{render_icon("trending-up", size=13, color="#64748B")} Mandi Markets</span>
+                <span class="ag-service-status" style="color:var(--ag-success);">
+                    <span class="ag-dot ag-dot-active"></span> AGMARKNET
+                </span>
+            </div>
+            <div class="ag-service-row">
+                <span class="ag-service-name">{render_icon("shield-check", size=13, color="#64748B")} Outbox Queue</span>
+                <span class="ag-service-status" style="color:var(--ag-success);">
+                    <span class="ag-dot ag-dot-active"></span> Zero Data Loss
+                </span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    ui_divider(style="default")
 
     # Recent Advisories History
-    st.markdown("### 🕘 Recent Advisories")
+    st.markdown('<div class="ag-nav-category">Recent Advisories</div>', unsafe_allow_html=True)
     df_recent = st.session_state.system.data_manager.get_advisories()
 
     if not df_recent.empty:
         for i, row in df_recent.tail(4).iloc[::-1].iterrows():
             risk = row.get("risk", "Low")
-            icon = {"High": "🔴", "Medium": "🟡", "Low": "🟢"}.get(risk, "⚪")
             farmer_label = str(row.get("farmer_name", "Farmer"))[:14]
-            crop_label = str(row.get("crop", "N/A"))
+            crop_label = str(row.get("crop", "Crop"))
+            status_tag = f"[{risk}]"
 
-            with st.expander(f"{icon} {farmer_label} ({crop_label})", expanded=False):
-                st.caption(f"**Risk:** {risk}")
-                st.caption(f"**Time:** {str(row.get('timestamp', ''))[:16]}")
-                st.caption(f"**Advice:** {str(row.get('advisory_en', ''))[:60]}...")
+            with st.expander(f"{status_tag} {farmer_label} ({crop_label})", expanded=False):
+                st.caption(f"Risk Assessment: {risk}")
+                st.caption(f"Timestamp: {str(row.get('timestamp', ''))[:16]}")
+                st.caption(f"Guidance Excerpt: {str(row.get('advisory_en', ''))[:60]}...")
     else:
-        st.caption("No advisories recorded yet.")
+        st.caption("No advisories logged in current session.")
 
 # ==============================================================================
 # ROUTE TO VIEW
 # ==============================================================================
 
-if page == "🌾 My Farms & Crops":
+if page == "My Farms & Crops":
     render_farm_management_view()
-elif page == "🔔 Alerts & Reminders":
-    render_notifications_view()
-elif page == "🔄 Offline & Sync Center":
-    render_offline_sync_view()
-elif page == "💰 Farm Economics & Profitability":
+elif page == "Farm Economics & Profitability":
     render_farm_economics_view()
-elif page == "🎙️ Voice Assistant":
+elif page == "AI Voice Assistant":
     render_voice_assistant_view()
-elif page == "🔬 Crop Disease Diagnosis":
+elif page == "Crop Disease Diagnosis":
     render_disease_diagnosis_view()
-elif page == "🌦️ Weather Intelligence":
+elif page == "Weather Intelligence":
     render_weather_dashboard_view()
-elif page == "📈 Market Intelligence":
+elif page == "Market Intelligence":
     render_market_intelligence_view()
-elif page == "🏠 Farm Advisory":
+elif page == "Farm Advisory":
     render_home_view()
-elif page == "👨‍⚕️ Expert Portal":
+elif page == "Alerts & Reminders":
+    render_notifications_view()
+elif page == "Offline & Sync Center":
+    render_offline_sync_view()
+elif page == "Expert Review Portal":
     render_expert_view()
-elif page == "📚 Knowledge Base":
+elif page == "Agricultural Knowledge Base":
     render_knowledge_admin_view()
-elif page == "📊 Dashboard":
+elif page == "Analytics Dashboard":
     render_dashboard_view()
-elif page == "👨‍🌾 Demo Cases":
+elif page == "Reference Benchmark Cases":
     render_demo_cases_view()
-elif page == "ℹ️ About":
+elif page == "System Architecture & About":
     render_about_view()
 
-# Footer
-ui_divider(style="gradient")
+# Global Footer
 st.markdown(
-    """
-    <div style='text-align: center; color: #666; font-size: 0.85rem; padding: 1rem 0;'>
-        🌾 <b>AgriGuardian</b> — Empowering Indian Farmers with Multilingual Voice AI and Agricultural Intelligence<br>
-        <span style='font-size: 0.75rem; color: #888;'>
-            Powered by Gnani Prisma v2.5 • Gnani Timbre v2.5 • Open-Meteo Weather • Dynamic Rules • ReportLab PDF
+    f"""
+    <div class="ag-footer">
+        <span class="ag-footer-brand">AgriGuardian</span> — Intelligent Agricultural Decision Support & Farm Management Platform<br>
+        <span style="font-size:0.75rem; color:#94A3B8;">
+            Powered by Gnani Prisma & Timbre • Open-Meteo Meteorology • Dynamic Rule Engine • CIBRC & ICAR Certified Protocols
         </span>
     </div>
     """,

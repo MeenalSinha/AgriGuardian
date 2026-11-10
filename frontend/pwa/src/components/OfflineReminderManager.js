@@ -70,7 +70,7 @@ export class OfflineReminderManager {
       <div class="reminder-manager-view">
         <div class="form-card">
           <div class="form-header">
-            <h2>⏰ ${lang === 'hi' ? 'नया रिमाइंडर जोड़ें' : 'Set Smart Farm Reminder'}</h2>
+            <h2>${lang === 'hi' ? 'नया रिमाइंडर जोड़ें' : 'Set Smart Farm Reminder'}</h2>
           </div>
           <form id="reminder-create-form">
             <div class="form-row">
@@ -88,11 +88,11 @@ export class OfflineReminderManager {
               <div class="form-group">
                 <label><strong>${lang === 'hi' ? 'कार्य प्रकार' : 'Activity Type'}</strong></label>
                 <select name="activity_type" class="form-control">
-                  <option value="pest_spray">🌧️ ${lang === 'hi' ? 'कीटनाशक / फफूंदनाशक छिड़काव' : 'Pest / Fungicide Spray'}</option>
-                  <option value="fertilization">🌿 ${lang === 'hi' ? 'उर्वरक / पोषण' : 'Fertilization'}</option>
-                  <option value="irrigation">💧 ${lang === 'hi' ? 'सिंचाई' : 'Irrigation'}</option>
-                  <option value="harvesting">🌾 ${lang === 'hi' ? 'कटाई' : 'Harvesting'}</option>
-                  <option value="other">📝 ${lang === 'hi' ? 'अन्य' : 'Other'}</option>
+                  <option value="pest_spray">${lang === 'hi' ? 'कीटनाशक / फफूंदनाशक छिड़काव' : 'Pest / Fungicide Spray'}</option>
+                  <option value="fertilization">${lang === 'hi' ? 'उर्वरक / पोषण' : 'Fertilization'}</option>
+                  <option value="irrigation">${lang === 'hi' ? 'सिंचाई' : 'Irrigation'}</option>
+                  <option value="harvesting">${lang === 'hi' ? 'कटाई' : 'Harvesting'}</option>
+                  <option value="other">${lang === 'hi' ? 'अन्य' : 'Other'}</option>
                 </select>
               </div>
 
@@ -114,26 +114,26 @@ export class OfflineReminderManager {
 
             <div class="form-actions">
               <button type="submit" class="btn-primary">
-                🔔 ${lang === 'hi' ? 'रिमाइंडर सुरक्षित करें' : 'Save Reminder (Offline Safe)'}
+                ${lang === 'hi' ? 'रिमाइंडर सुरक्षित करें' : 'Save Reminder (Offline Safe)'}
               </button>
             </div>
           </form>
         </div>
 
         <div class="dashboard-section" style="margin-top: 24px;">
-          <h3>📋 ${lang === 'hi' ? 'सक्रिय और निर्धारित रिमाइंडर' : 'All Scheduled Reminders'} (${this.reminders.length})</h3>
+          <h3>${lang === 'hi' ? 'सक्रिय और निर्धारित रिमाइंडर' : 'All Scheduled Reminders'} (${this.reminders.length})</h3>
           <div class="cards-list">
             ${this.reminders.length === 0
-              ? `<div class="empty-card">🔔 ${lang === 'hi' ? 'कोई रिमाइंडर नहीं।' : 'No reminders found.'}</div>`
+              ? `<div class="empty-card">${lang === 'hi' ? 'कोई रिमाइंडर नहीं।' : 'No reminders found.'}</div>`
               : this.reminders.map((r) => `
                 <div class="item-card reminder-card ${r.weather_risk_flag ? 'card-hazard' : ''}">
                   <div class="card-details">
                     <strong class="card-heading">${lang === 'hi' ? r.title_hi || r.title_en : r.title_en}</strong>
-                    <span class="card-sub">📅 ${r.scheduled_date} ${r.due_time || ''} • 🏷️ ${r.activity_type}</span>
+                    <span class="card-sub">${r.scheduled_date} ${r.due_time || ''} &bull; ${r.activity_type}</span>
                     ${r.description_en ? `<p class="card-notes">${r.description_en}</p>` : ''}
                     ${r.weather_risk_flag ? `
                       <div class="weather-hazard-banner">
-                        ⚠️ ${lang === 'hi' ? r.weather_risk_reason_hi || r.weather_risk_reason_en : r.weather_risk_reason_en}
+                        ${lang === 'hi' ? r.weather_risk_reason_hi || r.weather_risk_reason_en : r.weather_risk_reason_en}
                       </div>
                     ` : ''}
                   </div>

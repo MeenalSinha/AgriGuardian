@@ -21,21 +21,24 @@ from backend.app.schemas.expert import (
     BiologicalControlItem,
 )
 from backend.app.schemas.farm import UserRole
-from frontend.components.ui_widgets import ui_alert, ui_divider, ui_metric_card
+from frontend.components.ui_widgets import (
+    ui_page_header,
+    ui_section_header,
+    ui_divider,
+    ui_card,
+    ui_metric_card,
+    ui_alert,
+    ui_badge,
+)
+from frontend.components.icons import render_icon
 
 
 def render_expert_view():
     """Render the primary Streamlit Agricultural Expert Verification Portal."""
-    st.markdown(
-        """
-        <div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 1.5rem; border-radius: 12px; color: white; margin-bottom: 1.5rem;">
-            <h1 style="color: white; margin: 0; font-size: 2rem;">👨‍⚕️ Agricultural Expert Verification Portal</h1>
-            <p style="margin: 0.5rem 0 0 0; opacity: 0.9; font-size: 1.05rem;">
-                Human-in-the-Loop AI Decision Support, Plant Pathology Review, CIBRC Chemical Safety & Knowledge Governance
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    ui_page_header(
+        title="Agricultural Expert Verification Portal",
+        subtitle="Human-in-the-Loop AI Decision Support, Plant Pathology Review, CIBRC Chemical Safety & Knowledge Governance",
+        icon_name="user-check",
     )
 
     repo = get_farm_repo()
@@ -62,7 +65,7 @@ def render_expert_view():
     # Fetch expert profile
     expert_profile = repo.get_expert_profile_by_user_id(user.user_id)
     if not expert_profile and user.role == UserRole.AGRONOMIST:
-        st.warning("Your agronomist account does not yet have an active profile. Please contact an administrator.")
+        ui_alert("Your agronomist account does not yet have an active profile. Please contact an administrator.", level="warning")
         return
 
     # 2. Render Header Badges & Caseload Telemetry
@@ -71,11 +74,11 @@ def render_expert_view():
     # 3. Main Review Tabs
     tab_queue, tab_dossier, tab_collab, tab_proposals, tab_admin = st.tabs(
         [
-            "📋 Review Queue",
-            "🔬 Case Dossier & Review Desk",
-            "🤝 Officer Collaboration",
-            "💡 Knowledge Proposals",
-            "🏛️ Admin Governance",
+            "Review Queue",
+            "Case Dossier & Review Desk",
+            "Officer Collaboration",
+            "Knowledge Proposals",
+            "Admin Governance",
         ]
     )
 
@@ -95,13 +98,12 @@ def render_expert_view():
         if user.role == UserRole.ADMINISTRATOR:
             _render_admin_governance_tab(repo, user)
         else:
-            st.info("Administrative provisioning and credential verification require Administrator privileges.")
+            ui_alert("Administrative provisioning and credential verification require Administrator privileges.", level="info")
 
 
 def _render_expert_login_card(repo):
     """Render login form for agronomists and administrators."""
-    st.markdown("### 🔐 Agronomist & Expert Sign-In")
-    st.caption("Sign in with your accredited agronomist or administrator credentials to access the verification desk.")
+    ui_section_header("Agronomist & Expert Sign-In", "Sign in with your accredited agronomist or administrator credentials to access the verification desk.", "shield-check")
 
     col1, col2 = st.columns([1, 1])
     with col1:
@@ -112,7 +114,7 @@ def _render_expert_login_card(repo):
 
             if submit:
                 if not username or not password:
-                    st.error("Please enter both username and password.")
+                    ui_alert("Please enter both username and password.", level="error")
                 else:
                     try:
                         from backend.app.services.auth.auth_service import AuthService
@@ -121,13 +123,13 @@ def _render_expert_login_card(repo):
                         resp = auth_srv.authenticate_user(UserLoginRequest(username=username, password=password))
                         user_rec = repo.get_user_by_username(resp.username)
                         if user_rec.role not in (UserRole.AGRONOMIST, UserRole.ADMINISTRATOR):
-                            st.error(f"Account role '{user_rec.role.value}' is not authorized for the Expert Portal.")
+                            ui_alert(f"Account role '{user_rec.role.value}' is not authorized for the Expert Portal.", level="error")
                         else:
                             st.session_state.current_user = user_rec
-                            st.success(f"Welcome back, {user_rec.username}!")
+                            ui_alert(f"Welcome back, {user_rec.username}!", level="success")
                             st.rerun()
                     except Exception as e:
-                        st.error(f"Authentication failed: {e}")
+                        ui_alert(f"Authentication failed: {e}", level="error")
 
     with col2:
         st.info(
@@ -146,12 +148,12 @@ def _render_expert_header(user, expert_profile: ExpertProfile):
 
     with col1:
         if expert_profile:
-            st.markdown(f"### 👨‍🌾 {expert_profile.full_name} — *{expert_profile.designation}*")
-            st.caption(f"🏛️ **Institution:** {expert_profile.institution} | **Experience:** {expert_profile.experience_years} years")
+            st.markdown(f"### {expert_profile.full_name} — *{expert_profile.designation}*")
+            st.caption(f"**Institution:** {expert_profile.institution} | **Experience:** {expert_profile.experience_years} years")
             crops = ", ".join(expert_profile.specializations.crop_types[:4])
-            st.caption(f"🌾 **Specializations:** {crops or 'General Agronomy'} | **Status:** 🟢 {expert_profile.verification_status.value.upper()}")
+            st.caption(f"**Specializations:** {crops or 'General Agronomy'} | **Status:** {expert_profile.verification_status.value.upper()}")
         else:
-            st.markdown(f"### 🛡️ {user.username} — *Platform Administrator*")
+            st.markdown(f"### {user.username} — *Platform Administrator*")
             st.caption("Platform-wide governance and human-in-the-loop oversight active.")
 
     with col2:
@@ -164,15 +166,14 @@ def _render_expert_header(user, expert_profile: ExpertProfile):
 
     with col4:
         rating = expert_profile.accuracy_rating if expert_profile else 5.0
-        ui_metric_card("Quality Rating", f"{rating:.1f} / 5.0", delta="⭐ Accredited")
+        ui_metric_card("Quality Rating", f"{rating:.1f} / 5.0", delta="Accredited")
 
     ui_divider(style="dotted")
 
 
 def _render_review_queue_tab(repo, user, expert_profile):
     """Render queued and claimed cases for agronomist review."""
-    st.markdown("### 📋 Expert Verification Queue")
-    st.caption("Cases routed automatically by the Policy Engine due to low model confidence, chemical intervention, or field escalation.")
+    ui_section_header("Expert Verification Queue", "Cases routed automatically by the Policy Engine due to low model confidence, chemical intervention, or field escalation.", "user-check")
 
     c1, c2, c3 = st.columns([1, 1, 1])
     with c1:
@@ -203,7 +204,7 @@ def _render_review_queue_tab(repo, user, expert_profile):
         review_cases = [c for c in review_cases if not c.get("assigned_expert_id") or c.get("status") == "queued"]
 
     if not review_cases:
-        st.info("No cases matching the selected filters found in the review queue.")
+        ui_alert("No cases matching the selected filters found in the review queue.", level="info")
         return
 
     st.markdown(f"**Found {len(review_cases)} cases in queue:**")
@@ -213,8 +214,8 @@ def _render_review_queue_tab(repo, user, expert_profile):
             continue
 
         priority = r.get("priority", "medium")
-        p_badge = {"critical": "🔴 CRITICAL", "high": "🟠 HIGH", "medium": "🟡 MEDIUM", "low": "🟢 LOW"}.get(
-            priority, "⚪"
+        p_badge = {"critical": "CRITICAL", "high": "HIGH", "medium": "MEDIUM", "low": "LOW"}.get(
+            priority, "NORMAL"
         )
         status_str = r.get("status", "queued")
 
@@ -224,7 +225,7 @@ def _render_review_queue_tab(repo, user, expert_profile):
                 st.markdown(f"**Case #{r['case_id'][:12]} — {case.crop}**")
                 st.caption(f"Farmer: {case.farmer_name} | Location: {case.district}, {case.state}")
             with col_b:
-                st.markdown(f"**Priority:** {p_badge}")
+                st.markdown(f"**Priority:** `{p_badge}`")
                 sla = r.get("sla_deadline")
                 if sla:
                     st.caption(f"SLA: {sla[:16].replace('T', ' ')}")
@@ -236,17 +237,16 @@ def _render_review_queue_tab(repo, user, expert_profile):
                 else:
                     st.caption("Unassigned")
             with col_d:
-                # Actions
                 if status_str == "queued" and expert_profile:
                     if st.button("Claim Case", key=f"claim_{r['review_id']}", use_container_width=True):
                         repo.claim_review_case(r["review_id"], expert_profile.expert_id)
-                        st.success(f"Claimed case #{r['case_id'][:8]}!")
+                        ui_alert(f"Claimed case #{r['case_id'][:8]}!", level="success")
                         st.session_state.active_review_case_id = r["case_id"]
                         st.rerun()
 
                 if st.button("Open Dossier", key=f"open_{r['review_id']}", use_container_width=True):
                     st.session_state.active_review_case_id = r["case_id"]
-                    st.success(f"Loaded dossier for case #{r['case_id'][:8]}. Switch to 'Case Dossier & Review Desk' tab.")
+                    ui_alert(f"Loaded dossier for case #{r['case_id'][:8]}. Switch to 'Case Dossier & Review Desk' tab.", level="success")
                     st.rerun()
 
             ui_divider(style="dotted")
@@ -256,20 +256,20 @@ def _render_case_dossier_tab(repo, system, user, expert_profile):
     """Render comprehensive multi-source case dossier and clinical decision desk."""
     active_case_id = getattr(st.session_state, "active_review_case_id", None)
     if not active_case_id:
-        st.info("Select a case from the 'Review Queue' tab to load its complete clinical dossier.")
+        ui_alert("Select a case from the 'Review Queue' tab to load its complete clinical dossier.", level="info")
         return
 
     try:
         dossier = system.expert_review_service.build_case_dossier(active_case_id)
     except Exception as e:
-        st.error(f"Could not load dossier: {e}")
+        ui_alert(f"Could not load dossier: {e}", level="error")
         return
 
-    st.markdown(f"## 🔬 Clinical Dossier — Case #{dossier.case_id}")
+    st.markdown(f"## Clinical Dossier — Case #{dossier.case_id}")
     st.caption(f"Review Priority: **{dossier.review_priority.value.upper()}** | Current Status: `{dossier.review_status.value.upper()}`")
 
     # Section 1: Farmer & Field Context
-    with st.expander("👨‍🌾 1. Farmer, Farm & Field Profile", expanded=True):
+    with st.expander("1. Farmer, Farm & Field Profile", expanded=True):
         fcol1, fcol2, fcol3 = st.columns(3)
         with fcol1:
             st.markdown(f"**Farmer:** {dossier.farmer_name}")
@@ -285,13 +285,13 @@ def _render_case_dossier_tab(repo, system, user, expert_profile):
             st.markdown(f"**Irrigation:** {dossier.irrigation_type or 'Canal / Tubewell'}")
 
     # Section 2: Visual Symptoms & ML Telemetry
-    with st.expander("📸 2. Foliar Imagery & Computer Vision Diagnosis", expanded=True):
+    with st.expander("2. Foliar Imagery & Computer Vision Diagnosis", expanded=True):
         vcol1, vcol2 = st.columns([1, 1])
         with vcol1:
             if dossier.image_url_or_path:
                 st.image(dossier.image_url_or_path, caption="Farmer Uploaded Leaf Sample", use_container_width=True)
             else:
-                st.info("No leaf image uploaded; symptomatic diagnosis based on field description.")
+                ui_alert("No leaf image uploaded; symptomatic diagnosis based on field description.", level="info")
 
         with vcol2:
             st.markdown(f"**AI Primary Diagnosis:** `{dossier.ai_primary_disease}`")
@@ -308,7 +308,7 @@ def _render_case_dossier_tab(repo, system, user, expert_profile):
                     st.caption(f"- {d_name} ({p_val * 100:.1f}%)")
 
     # Section 3: Microclimate & Agronomic Evidence
-    with st.expander("🌦️ 3. Meteorological Risk & ICAR Agronomic Facts", expanded=False):
+    with st.expander("3. Meteorological Risk & ICAR Agronomic Facts", expanded=False):
         mcol1, mcol2 = st.columns(2)
         with mcol1:
             st.markdown(f"**Weather Summary:** {dossier.weather_summary}")
@@ -316,16 +316,15 @@ def _render_case_dossier_tab(repo, system, user, expert_profile):
         with mcol2:
             st.markdown("**Grounded ICAR / KVK Facts:**")
             for f in dossier.icar_retrieved_facts:
-                st.caption(f"• **{f.get('topic')}:** {f.get('recommendation')} *({f.get('source')})*")
+                st.caption(f"- **{f.get('topic')}:** {f.get('recommendation')} *({f.get('source')})*")
 
     # Section 4: Field Officer Ground Observations
     if dossier.field_officer_notes:
-        with st.expander("📋 4. Field Officer Physical Inspection Notes", expanded=True):
-            st.info(f"**Officer:** {dossier.officer_name or 'Field Officer'} ({dossier.officer_visited_at[:16] if dossier.officer_visited_at else 'Recent'})\n\n{dossier.field_officer_notes}")
+        with st.expander("4. Field Officer Physical Inspection Notes", expanded=True):
+            ui_alert(f"**Officer:** {dossier.officer_name or 'Field Officer'} ({dossier.officer_visited_at[:16] if dossier.officer_visited_at else 'Recent'})\n\n{dossier.field_officer_notes}", level="info")
 
     # Section 5: Decision Desk (Agronomist Action)
-    st.markdown("### ✍️ Clinical Decision Desk")
-    st.caption("Review or adjust plant pathology diagnosis and prescribe CIBRC-compliant treatment protocol.")
+    ui_section_header("Clinical Decision Desk", "Review or adjust plant pathology diagnosis and prescribe CIBRC-compliant treatment protocol.", "sliders")
 
     with st.form(f"decision_form_{dossier.case_id}"):
         st.markdown("#### Step A: Pathology Diagnosis Verification")
@@ -339,10 +338,10 @@ def _render_case_dossier_tab(repo, system, user, expert_profile):
             ],
             index=0,
             format_func=lambda x: {
-                DiagnosisDecision.CONFIRMED.value: "✅ Confirm AI Diagnosis as Accurate",
-                DiagnosisDecision.MODIFIED.value: "🔄 Modify Diagnosis (Differential / Alternative Pathology)",
-                DiagnosisDecision.REJECTED_NON_PATHOLOGICAL.value: "⚠️ Reject Diagnosis (Abiotic Stress / Nutrient Deficiency)",
-                DiagnosisDecision.INSUFFICIENT_IMAGE_QUALITY.value: "❓ Insufficient Image Quality (Request Retake)",
+                DiagnosisDecision.CONFIRMED.value: "Confirm AI Diagnosis as Accurate",
+                DiagnosisDecision.MODIFIED.value: "Modify Diagnosis (Differential / Alternative Pathology)",
+                DiagnosisDecision.REJECTED_NON_PATHOLOGICAL.value: "Reject Diagnosis (Abiotic Stress / Nutrient Deficiency)",
+                DiagnosisDecision.INSUFFICIENT_IMAGE_QUALITY.value: "Insufficient Image Quality (Request Retake)",
             }.get(x, x),
         )
 
@@ -370,10 +369,10 @@ def _render_case_dossier_tab(repo, system, user, expert_profile):
             ],
             index=0,
             format_func=lambda x: {
-                RecommendationDecision.APPROVED_AS_IS.value: "✅ Approve AI Treatment Plan As-Is",
-                RecommendationDecision.MODIFIED_DOSAGE_TIMING.value: "⚖️ Adjust Dosage, Spray Interval or Timing",
-                RecommendationDecision.SUBSTITUTED_ORGANIC_BIO.value: "🌿 Substitute Biological / Organic Controls",
-                RecommendationDecision.REPLACED_FORMULATION.value: "🧪 Replace Chemical Formulation with Alternative Active Ingredient",
+                RecommendationDecision.APPROVED_AS_IS.value: "Approve AI Treatment Plan As-Is",
+                RecommendationDecision.MODIFIED_DOSAGE_TIMING.value: "Adjust Dosage, Spray Interval or Timing",
+                RecommendationDecision.SUBSTITUTED_ORGANIC_BIO.value: "Substitute Biological / Organic Controls",
+                RecommendationDecision.REPLACED_FORMULATION.value: "Replace Chemical Formulation with Alternative Active Ingredient",
             }.get(x, x),
         )
 
@@ -391,11 +390,11 @@ def _render_case_dossier_tab(repo, system, user, expert_profile):
             height=70,
         )
 
-        submit_decision = st.form_submit_button("🚀 Finalize & Release Verified Guidance", use_container_width=True)
+        submit_decision = st.form_submit_button("Finalize & Release Verified Guidance", use_container_width=True)
 
         if submit_decision:
             if not pathology_notes or len(pathology_notes.strip()) < 5:
-                st.error("Please provide clinical pathology rationale (at least 5 characters).")
+                ui_alert("Please provide clinical pathology rationale (at least 5 characters).", level="error")
             else:
                 try:
                     exp_id = expert_profile.expert_id if expert_profile else "exp_admin"
@@ -434,33 +433,30 @@ def _render_case_dossier_tab(repo, system, user, expert_profile):
                     )
 
                     res = system.expert_review_service.submit_expert_decision(submission, exp_id)
-                    st.success(f"Decision recorded! {res.get('message')}")
+                    ui_alert(f"Decision recorded! {res.get('message')}", level="success")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Error submitting decision: {e}")
+                    ui_alert(f"Error submitting decision: {e}", level="error")
 
 
 def _render_collaboration_tab(repo, user):
     """Render cross-role collaboration timeline for active case."""
     active_case_id = getattr(st.session_state, "active_review_case_id", None)
     if not active_case_id:
-        st.info("Select a case from the 'Review Queue' tab to view its collaboration history.")
+        ui_alert("Select a case from the 'Review Queue' tab to view its collaboration history.", level="info")
         return
 
     rev = repo.get_review_case_by_advisory_id(active_case_id)
     if not rev:
-        st.info("Case is not in the review queue.")
+        ui_alert("Case is not in the review queue.", level="info")
         return
 
-    st.markdown(f"### 🤝 Collaboration Timeline — Review #{rev['review_id'][:10]}")
+    ui_section_header(f"Collaboration Timeline — Review #{rev['review_id'][:10]}", "Comments and clinical notes shared between agronomists, field officers, and administrators.", "activity")
     comments = repo.list_review_comments(rev["review_id"])
 
     if comments:
         for c in comments:
-            role_icon = {"agronomist": "👨‍⚕️", "administrator": "🛡️", "field_officer": "📋", "farmer": "👨‍🌾"}.get(
-                c.author_role, "💬"
-            )
-            with st.chat_message(name=c.author_name, avatar=role_icon):
+            with st.chat_message(name=c.author_name):
                 st.markdown(f"**{c.author_name}** *({c.author_role.title()})* — `{c.created_at[:16].replace('T', ' ')}`")
                 st.write(c.content)
     else:
@@ -482,22 +478,21 @@ def _render_collaboration_tab(repo, user):
                 content=new_comment,
             )
             repo.add_review_comment(cm)
-            st.success("Comment added!")
+            ui_alert("Comment added!", level="success")
             st.rerun()
 
 
 def _render_proposals_tab(repo):
     """Render continuous knowledge improvement proposals derived from expert overrides."""
-    st.markdown("### 💡 Continuous Knowledge Improvement Proposals")
-    st.caption("Whenever an agronomist overrides or refines an AI diagnosis, a proposal is recorded to improve future model and rule accuracy.")
+    ui_section_header("Continuous Knowledge Improvement Proposals", "Whenever an agronomist overrides or refines an AI diagnosis, a proposal is recorded to improve future model and rule accuracy.", "book-open")
 
     proposals = repo.list_knowledge_proposals()
     if not proposals:
-        st.info("No knowledge improvement proposals recorded yet.")
+        ui_alert("No knowledge improvement proposals recorded yet.", level="info")
         return
 
     for p in proposals:
-        with st.expander(f"Proposal #{p.proposal_id[:10]} — Override on {p.crop} ({p.original_ai_disease} ➡️ {p.expert_confirmed_disease})"):
+        with st.expander(f"Proposal #{p.proposal_id[:10]} — Override on {p.crop} ({p.original_ai_disease} -> {p.expert_confirmed_disease})"):
             st.markdown(f"**Correction Category:** `{p.correction_category}`")
             st.markdown(f"**Agronomist Rationale:** {p.reason_for_override}")
             st.markdown(f"**Suggested Knowledge Fact / Rule:** {p.suggested_kb_fact_or_rule}")
@@ -506,10 +501,9 @@ def _render_proposals_tab(repo):
 
 def _render_admin_governance_tab(repo, admin_user):
     """Render administrative expert credential verification and provisioning interface."""
-    st.markdown("### 🏛️ Agricultural Expert Governance & Provisioning")
-    st.caption("Administratively provision new accredited agronomist accounts and verify institutional credentials.")
+    ui_section_header("Agricultural Expert Governance & Provisioning", "Administratively provision new accredited agronomist accounts and verify institutional credentials.", "user-check")
 
-    with st.expander("➕ Provision New Accredited Agronomist", expanded=False):
+    with st.expander("Provision New Accredited Agronomist", expanded=False):
         with st.form("provision_expert_form"):
             pcol1, pcol2 = st.columns(2)
             with pcol1:
@@ -533,7 +527,7 @@ def _render_admin_governance_tab(repo, admin_user):
             prov_btn = st.form_submit_button("Provision & Verify Agronomist Account", use_container_width=True)
             if prov_btn:
                 if not u_name or not f_name or not inst:
-                    st.error("Please complete all required fields.")
+                    ui_alert("Please complete all required fields.", level="error")
                 else:
                     try:
                         import uuid
@@ -576,16 +570,16 @@ def _render_admin_governance_tab(repo, admin_user):
                             verified_at=now_str,
                         )
                         repo.create_expert_profile(prof)
-                        st.success(f"Successfully provisioned verified agronomist '{f_name}' ({expert_id})!")
+                        ui_alert(f"Successfully provisioned verified agronomist '{f_name}' ({expert_id})!", level="success")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error provisioning expert: {e}")
+                        ui_alert(f"Error provisioning expert: {e}", level="error")
 
     # List registered experts
     st.markdown("#### Registered Agricultural Experts")
     experts = repo.list_expert_profiles()
     if not experts:
-        st.info("No expert profiles registered in database.")
+        ui_alert("No expert profiles registered in database.", level="info")
         return
 
     for exp in experts:
@@ -593,7 +587,7 @@ def _render_admin_governance_tab(repo, admin_user):
             ecol1, ecol2, ecol3 = st.columns([3, 2, 2])
             with ecol1:
                 st.markdown(f"**{exp.full_name}** ({exp.designation})")
-                st.caption(f"🏛️ {exp.institution} | ID: `{exp.expert_id}`")
+                st.caption(f"{exp.institution} | ID: `{exp.expert_id}`")
             with ecol2:
                 st.markdown(f"**Status:** `{exp.verification_status.value.upper()}`")
                 st.caption(f"Caseload: {exp.active_caseload} | Reviewed: {exp.total_reviewed_cases}")
@@ -601,9 +595,8 @@ def _render_admin_governance_tab(repo, admin_user):
                 if exp.verification_status != ExpertAccountStatus.ACTIVE_VERIFIED:
                     if st.button("Verify & Approve", key=f"ver_{exp.expert_id}"):
                         repo.verify_expert(exp.expert_id, admin_user.user_id, ExpertAccountStatus.ACTIVE_VERIFIED)
-                        st.success(f"Approved {exp.full_name}!")
+                        ui_alert(f"Approved {exp.full_name}!", level="success")
                         st.rerun()
                 else:
                     st.caption("Accredited & Active")
             ui_divider(style="dotted")
-

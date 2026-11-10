@@ -2993,7 +2993,7 @@ def health_dependencies():
 
 
 @app.get("/api/v1/metrics", tags=["Reliability & Health"])
-def get_prometheus_metrics(format: str = Query("text", enum=["text", "json"])):
+def get_prometheus_metrics(format: str = Query("text", description="Metrics output format: 'text' or 'json'")):
     """Exposes real operational telemetry in Prometheus text format or JSON."""
     metrics = get_metrics_collector()
     if format == "json":

@@ -1,0 +1,85 @@
+version: "3.8"
+
+services:
+  # 1. FastAPI Headless REST Backend + PWA Static Mount
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agriguardian_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=AgriGuardian
+      - APP_ENV=production
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - JWT_SECRET_KEY=production_compose_secret_key_minimum_32_characters_long
+      - ALLOWED_ORIGINS=http://localhost:8501,http://localhost:8000,http://127.0.0.1:8501,http://127.0.0.1:8000
+      - DATABASE_URL=postgresql://agri_user:agri_secure_pass@db:5432/agriguardian_db
+      - BACKUP_DIR=/app/backups
+    volumes:
+      - agriguardian_data:/app/data
+      - agriguardian_logs:/app/logs
+      - agriguardian_backups:/app/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - agriguardian_net
+
+  # 2. Streamlit Web Interface
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agriguardian_frontend
+    restart: unless-stopped
+    command: ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    ports:
+      - "8501:8501"
+    environment:
+      - APP_NAME=AgriGuardian
+      - APP_ENV=production
+      - DEBUG=false
+      - BACKEND_API_URL=http://backend:8000
+    volumes:
+      - agriguardian_data:/app/data
+      - agriguardian_logs:/app/logs
+    depends_on:
+      - backend
+    networks:
+      - agriguardian_net
+
+  # 3. PostgreSQL Database (Production Engine)
+  db:
+    image: postgres:16-alpine
+    container_name: agriguardian_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=agri_user
+      - POSTGRES_PASSWORD=agri_secure_pass
+      - POSTGRES_DB=agriguardian_db
+    volumes:
+      - agriguardian_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agri_user -d agriguardian_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agriguardian_net
+
+volumes:
+  agriguardian_data:
+  agriguardian_pgdata:
+  agriguardian_logs:
+  agriguardian_backups:
+
+networks:
+  agriguardian_net:
+    driver: bridge
+

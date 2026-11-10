@@ -207,3 +207,4 @@ When comparing 2 to 4 potential crops for an upcoming season:
 1. Benchmarks are loaded from regional ICAR/CACP empirical datasets.
 2. The comparison matrix projects capital required, expected gross return, projected net return per acre, and break-even price.
 3. **Mandatory Agronomic Disclaimer:** Prominently states that projections are statistical estimates based on historical mandi averages and agro-climatic norms; actual outcomes depend on local soil condition, irrigation availability, weather events, and pest infestations.
+

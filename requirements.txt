@@ -12,5 +12,6 @@ matplotlib>=3.7.0
 folium>=0.15.0
 streamlit-folium>=0.15.0
 openai>=1.30.0
+argon2-cffi>=23.1.0
 pytest>=8.0.0
 pytest-mock>=3.12.0

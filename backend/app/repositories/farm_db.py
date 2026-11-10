@@ -87,6 +87,11 @@ from backend.app.schemas.economics import (
     PaymentStatus,
     ScenarioType,
 )
+from backend.app.schemas.privacy import (
+    ConsentStatus,
+    ConsentType,
+    UserConsentRecord,
+)
 
 logger = get_logger("FarmDBRepository")
 
@@ -1056,6 +1061,32 @@ class FarmDatabaseRepository:
             );
             """)
 
+            # 44. Phase 12 Revoked Tokens (Session Revocation & Token Blacklisting)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS revoked_tokens (
+                jti TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                revoked_at TEXT NOT NULL,
+                expires_at INTEGER NOT NULL
+            );
+            """)
+
+            # 45. Phase 12 User Consents (DPDP Act & Privacy Governance)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_consents (
+                consent_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                farmer_id TEXT,
+                consent_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                policy_version TEXT NOT NULL,
+                purpose TEXT NOT NULL,
+                ip_address TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """)
+
             # Performance & Isolation Indexes
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_farms_farmer ON farms(farmer_id);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_plots_farm ON farm_plots(farm_id);")
@@ -1117,6 +1148,11 @@ class FarmDatabaseRepository:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_benchmarks_crop_state ON financial_benchmarks(crop_name, state);")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_fin_audit_entity ON financial_audit_log(entity_type, entity_id);")
 
+            # Phase 12 Security & Privacy Indexes
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_revoked_tokens_exp ON revoked_tokens(expires_at);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_consents_user ON user_consents(user_id, consent_type);")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_user_consents_farmer ON user_consents(farmer_id);")
+
         logger.info(f"Initialized FarmDatabaseRepository at {self.db_path}")
 
     # =========================================================================
@@ -1171,6 +1207,178 @@ class FarmDatabaseRepository:
         """Update last login timestamp."""
         with self.get_connection() as conn:
             conn.execute("UPDATE users SET last_login = ? WHERE user_id = ?", (last_login, user_id))
+
+    def update_user_password(self, user_id: str, password_hash: str, salt: str) -> None:
+        """Update user password hash and salt (used during Argon2id progressive upgrade)."""
+        with self.get_connection() as conn:
+            conn.execute(
+                "UPDATE users SET password_hash = ?, salt = ? WHERE user_id = ?",
+                (password_hash, salt, user_id),
+            )
+
+    def revoke_token(self, jti: str, user_id: str, expires_at: int) -> None:
+        """Record token revocation in blacklist."""
+        now_str = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO revoked_tokens (jti, user_id, revoked_at, expires_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (jti, user_id, now_str, expires_at),
+            )
+
+    def is_token_revoked(self, jti: str) -> bool:
+        """Check if JWT JTI has been revoked."""
+        with self.get_connection() as conn:
+            row = conn.execute("SELECT jti FROM revoked_tokens WHERE jti = ?", (jti,)).fetchone()
+            return row is not None
+
+    def cleanup_expired_tokens(self) -> int:
+        """Remove expired tokens from revoked_tokens table."""
+        now_ts = int(datetime.now(timezone.utc).timestamp())
+        with self.get_connection() as conn:
+            cursor = conn.execute("DELETE FROM revoked_tokens WHERE expires_at < ?", (now_ts,))
+            return cursor.rowcount
+
+    # =========================================================================
+    # PHASE 12: PRIVACY & CONSENT MANAGEMENT REPOSITORY METHODS
+    # =========================================================================
+
+    def record_consent(self, consent: UserConsentRecord) -> UserConsentRecord:
+        """Record or update user consent for DPDP Act compliance."""
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO user_consents (
+                    consent_id, user_id, farmer_id, consent_type, status,
+                    policy_version, purpose, ip_address, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    consent.consent_id,
+                    consent.user_id,
+                    consent.farmer_id,
+                    consent.consent_type.value,
+                    consent.status.value,
+                    consent.policy_version,
+                    consent.purpose,
+                    consent.ip_address,
+                    consent.created_at,
+                    consent.updated_at,
+                ),
+            )
+        return consent
+
+    def get_user_consents(self, user_id: str) -> List[UserConsentRecord]:
+        """List active and historical consents for a user."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM user_consents WHERE user_id = ? ORDER BY created_at DESC",
+                (user_id,),
+            ).fetchall()
+            return [
+                UserConsentRecord(
+                    consent_id=r["consent_id"],
+                    user_id=r["user_id"],
+                    farmer_id=r["farmer_id"],
+                    consent_type=ConsentType(r["consent_type"]),
+                    status=ConsentStatus(r["status"]),
+                    policy_version=r["policy_version"],
+                    purpose=r["purpose"],
+                    ip_address=r["ip_address"],
+                    created_at=r["created_at"],
+                    updated_at=r["updated_at"],
+                )
+                for r in rows
+            ]
+
+    def withdraw_consent(self, user_id: str, consent_type: str) -> bool:
+        """Withdraw consent for a processing purpose."""
+        now_str = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE user_consents
+                SET status = ?, updated_at = ?
+                WHERE user_id = ? AND consent_type = ?
+                """,
+                (ConsentStatus.WITHDRAWN.value, now_str, user_id, consent_type),
+            )
+            return cursor.rowcount > 0
+
+    def get_farmer_full_export_data(self, farmer_id: str) -> Dict[str, Any]:
+        """Generate comprehensive DPDP / GDPR export bundle for data subject portability."""
+        profile = self.get_farmer_profile(farmer_id)
+        user_id = profile.user_id if profile else ""
+        farms = self.list_farms_by_farmer(farmer_id)
+        plots = self.get_plots_by_farmer(farmer_id)
+        cycles = self.get_all_crop_cycles_by_farmer(farmer_id)
+        expenses = self.list_farm_expenses(farmer_id)
+        harvests = self.list_harvest_records(farmer_id)
+        sales = self.list_farm_sales(farmer_id)
+        budgets_raw = self.list_crop_cycle_budgets(farmer_id)
+        budgets = [b[0] for b in budgets_raw]
+        consents = self.get_user_consents(user_id) if user_id else []
+        devices = self.get_devices_for_user(user_id) if user_id else []
+
+        now = datetime.now(timezone.utc).isoformat()
+        return {
+            "export_timestamp": now,
+            "user_id": user_id,
+            "farmer_id": farmer_id,
+            "profile": profile.model_dump() if profile else {},
+            "farms": [f.model_dump() if hasattr(f, "model_dump") else f.dict() for f in farms],
+            "plots": [p.model_dump() if hasattr(p, "model_dump") else p.dict() for p in plots],
+            "crop_cycles": [c.model_dump() if hasattr(c, "model_dump") else c.dict() for c in cycles],
+            "expenses": [e.model_dump() if hasattr(e, "model_dump") else e.dict() for e in expenses],
+            "harvests": [h.model_dump() if hasattr(h, "model_dump") else h.dict() for h in harvests],
+            "sales": [s.model_dump() if hasattr(s, "model_dump") else s.dict() for s in sales],
+            "budgets": [b.model_dump() if hasattr(b, "model_dump") else b.dict() for b in budgets],
+            "consents": [c.model_dump() if hasattr(c, "model_dump") else c.dict() for c in consents],
+            "active_devices": [d.model_dump() if hasattr(d, "model_dump") else d.dict() for d in devices],
+        }
+
+    def delete_farmer_account_anonymized(self, user_id: str, farmer_id: str) -> bool:
+        """Perform privacy-preserving right-to-erasure account deletion under DPDP Act.
+        
+        Anonymizes PII (names, phone numbers, usernames) while maintaining immutable statutory
+        audit records and financial ledgers required under Indian commercial regulations.
+        """
+        anon_username = f"deleted_user_{uuid.uuid4().hex[:8]}"
+        anon_name = "Deleted Farmer Account"
+        now_str = datetime.now(timezone.utc).isoformat()
+
+        with self.get_connection() as conn:
+            # 1. Anonymize user record
+            conn.execute(
+                """
+                UPDATE users
+                SET username = ?, password_hash = 'ACCOUNT_DELETED', salt = 'DELETED'
+                WHERE user_id = ?
+                """,
+                (anon_username, user_id),
+            )
+            # 2. Anonymize profile
+            conn.execute(
+                """
+                UPDATE farmer_profiles
+                SET full_name = ?, phone_number = NULL, updated_at = ?
+                WHERE farmer_id = ?
+                """,
+                (anon_name, now_str, farmer_id),
+            )
+            # 3. Revoke all devices
+            conn.execute(
+                "UPDATE sync_devices SET is_revoked = 1, revoked_at = ? WHERE user_id = ?",
+                (now_str, user_id),
+            )
+            # 4. Withdraw all consents
+            conn.execute(
+                "UPDATE user_consents SET status = 'withdrawn', updated_at = ? WHERE user_id = ?",
+                (now_str, user_id),
+            )
+        return True
 
     # =========================================================================
     # FARMER PROFILE REPOSITORY METHODS

@@ -3,6 +3,7 @@
 import time
 from typing import Any, Dict, Optional, Tuple, Union
 import httpx
+from backend.app.core.circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.exceptions import (
     GnaniAPIError,
@@ -11,6 +12,7 @@ from backend.app.core.exceptions import (
     GnaniTimeoutError,
 )
 from backend.app.core.logging import get_logger
+from backend.app.core.metrics import get_metrics_collector
 
 logger = get_logger("GnaniClient")
 
@@ -53,6 +55,10 @@ class GnaniBaseClient:
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         request_headers = self._get_headers(headers)
 
+        cb = get_circuit_breaker("gnani_ai")
+        cb.before_call()
+        metrics = get_metrics_collector()
+
         last_exception = None
         backoff_delay = 1.0
 
@@ -72,6 +78,8 @@ class GnaniBaseClient:
                 # Check HTTP error status codes
                 if response.status_code in (401, 403):
                     logger.error(f"Gnani authentication failed: HTTP {response.status_code}")
+                    cb.record_failure(Exception(f"Gnani auth failed: HTTP {response.status_code}"))
+                    metrics.record_provider_call("gnani_ai", success=False)
                     raise GnaniAuthError(
                         f"Gnani authentication failed (HTTP {response.status_code}). Verify GNANI_API_KEY.",
                         status_code=response.status_code,
@@ -84,6 +92,8 @@ class GnaniBaseClient:
                         time.sleep(backoff_delay)
                         backoff_delay *= 2
                         continue
+                    cb.record_failure(Exception("Gnani rate limited"))
+                    metrics.record_provider_call("gnani_ai", success=False)
                     raise GnaniRateLimitError(
                         "Gnani API rate limit exceeded. Please try again shortly.",
                         status_code=429,
@@ -95,6 +105,8 @@ class GnaniBaseClient:
                         time.sleep(backoff_delay)
                         backoff_delay *= 2
                         continue
+                    cb.record_failure(Exception(f"Gnani server error: {response.status_code}"))
+                    metrics.record_provider_call("gnani_ai", success=False)
                     raise GnaniAPIError(
                         f"Gnani server error (HTTP {response.status_code}): {response.text[:200]}",
                         status_code=response.status_code,
@@ -102,13 +114,19 @@ class GnaniBaseClient:
 
                 if response.status_code >= 400:
                     logger.error(f"Gnani client error HTTP {response.status_code}: {response.text[:200]}")
+                    cb.record_failure(Exception(f"Gnani client error: {response.status_code}"))
+                    metrics.record_provider_call("gnani_ai", success=False)
                     raise GnaniAPIError(
                         f"Gnani request error (HTTP {response.status_code}): {response.text[:200]}",
                         status_code=response.status_code,
                     )
 
+                cb.record_success()
+                metrics.record_provider_call("gnani_ai", success=True)
                 return response
 
+            except (GnaniAuthError, GnaniRateLimitError, GnaniAPIError):
+                raise
             except httpx.TimeoutException as e:
                 logger.warning(f"Gnani request timed out on attempt {attempt}: {e}")
                 last_exception = GnaniTimeoutError(
@@ -119,6 +137,8 @@ class GnaniBaseClient:
                     time.sleep(backoff_delay)
                     backoff_delay *= 2
                     continue
+                cb.record_failure(last_exception)
+                metrics.record_provider_call("gnani_ai", success=False)
                 raise last_exception
 
             except httpx.RequestError as e:
@@ -131,6 +151,8 @@ class GnaniBaseClient:
                     time.sleep(backoff_delay)
                     backoff_delay *= 2
                     continue
+                cb.record_failure(last_exception)
+                metrics.record_provider_call("gnani_ai", success=False)
                 raise last_exception
 
         if last_exception:

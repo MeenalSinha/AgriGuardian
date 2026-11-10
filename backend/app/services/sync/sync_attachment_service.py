@@ -70,12 +70,31 @@ class SyncAttachmentService:
                 detail=f"Unsupported media type '{content_type}'. Allowed types: {sorted(list(ALLOWED_MIME_TYPES))}",
             )
 
+        # Validate magic byte signatures (Phase 12 File Security)
+        is_valid_signature = False
+        if len(file_bytes) >= 4:
+            if normalized_mime in ("image/jpeg", "image/jpg") and file_bytes.startswith(b"\xff\xd8\xff"):
+                is_valid_signature = True
+            elif normalized_mime == "image/png" and file_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+                is_valid_signature = True
+            elif normalized_mime == "image/webp" and file_bytes.startswith(b"RIFF") and len(file_bytes) >= 12 and file_bytes[8:12] == b"WEBP":
+                is_valid_signature = True
+
+        if not is_valid_signature:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=f"File signature (magic bytes) mismatch: content does not match declared MIME type '{content_type}'.",
+            )
+
+        # Sanitize filename against path traversal
+        clean_filename = os.path.basename(filename)
+
         # Compute SHA-256 checksum
         sha256 = hashlib.sha256(file_bytes).hexdigest()
         attachment_id = f"att_{uuid.uuid4().hex[:12]}"
 
         # Storage filename uses attachment_id and sanitized extension
-        ext = Path(filename).suffix.lower() or ".jpg"
+        ext = Path(clean_filename).suffix.lower() or ".jpg"
         stored_filename = f"{attachment_id}_{sha256[:8]}{ext}"
         storage_path = self.storage_dir / stored_filename
 

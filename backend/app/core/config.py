@@ -4,7 +4,7 @@ import os
 import secrets
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -184,7 +184,7 @@ class Settings(BaseSettings):
     data_gov_in_api_key: Optional[str] = Field(default=None, description="OGD India data.gov.in API Key")
     enam_api_key: Optional[str] = Field(default=None, description="Institutional e-NAM APMC API Key")
 
-    # --- Phase 6: Farmer Authentication & Security Settings ---
+    # --- Phase 6 & Phase 12: Security, Authentication & Production Settings ---
     jwt_secret_key: str = Field(
         default_factory=lambda: os.getenv("JWT_SECRET_KEY") or secrets.token_hex(32),
         description="Cryptographic HMAC signing key for JWT session tokens (loaded from JWT_SECRET_KEY or generated dynamically)",
@@ -192,6 +192,20 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440  # 24 hours
     farm_db_path: str = "data/farm_guardian.db"
+    database_url: Optional[str] = Field(default=None, description="Optional PostgreSQL URI (e.g. postgresql://user:pass@host:5432/db)")
+    allowed_origins: List[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:8501",
+            "http://localhost:8000",
+            "http://127.0.0.1:8501",
+            "http://127.0.0.1:8000",
+        ],
+        description="Allowed CORS origins list",
+    )
+    enable_docs_in_prod: bool = Field(default=False, description="Whether to expose /docs and /redoc in production environment")
+    rate_limit_login_max_attempts: int = Field(default=5, description="Maximum failed login attempts before lockout")
+    rate_limit_window_seconds: int = Field(default=300, description="Sliding window in seconds for rate limiting")
+    max_request_body_size_bytes: int = Field(default=15 * 1024 * 1024, description="Max request payload size (15 MB)")
 
     # --- Storage and File System Paths ---
     data_dir: str = "data"
@@ -199,9 +213,20 @@ class Settings(BaseSettings):
     reports_dir: str = "reports"
     logs_dir: str = "logs"
     config_dir: str = "config"
+    backup_dir: str = "backups"
     max_audio_size_bytes: int = 10 * 1024 * 1024  # 10 MB limit
     max_audio_duration_seconds: int = 60
     cleanup_temp_files: bool = True
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, v: Any) -> List[str]:
+        """Support comma-separated string or list for allowed origins."""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        if isinstance(v, list):
+            return v
+        return ["http://localhost:8501", "http://localhost:8000", "http://127.0.0.1:8501", "http://127.0.0.1:8000"]
 
     # --- Feature Flags ---
     feature_voice_assistant: bool = True
@@ -226,6 +251,7 @@ class Settings(BaseSettings):
             self.reports_dir,
             self.logs_dir,
             self.config_dir,
+            self.backup_dir,
             "temp",
         ]:
             Path(dir_path).mkdir(parents=True, exist_ok=True)

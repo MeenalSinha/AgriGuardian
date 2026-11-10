@@ -1,4 +1,4 @@
-"""Authentication and security service with salted PBKDF2 password hashing and token lifecycle."""
+"""Authentication and security service with Argon2id password hashing, PBKDF2 migration, and token lifecycle (Phase 12)."""
 
 import base64
 import hashlib
@@ -8,11 +8,12 @@ import os
 import secrets
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.logging import get_logger
+from backend.app.core.rate_limiter import get_login_rate_limiter
 from backend.app.repositories.farm_db import FarmDatabaseRepository, get_farm_repo
 from backend.app.schemas.farm import (
     FarmerProfile,
@@ -25,6 +26,24 @@ from backend.app.schemas.farm import (
 )
 
 logger = get_logger("AuthService")
+
+# Initialize Argon2 PasswordHasher if available
+try:
+    from argon2 import PasswordHasher
+    from argon2.exceptions import VerifyMismatchError, VerificationError
+    HAS_ARGON2 = True
+    _argon2_hasher = PasswordHasher(
+        time_cost=2,
+        memory_cost=65536,  # 64 MB
+        parallelism=1,
+        hash_len=32,
+        salt_len=16,
+    )
+    logger.info("Argon2id password hashing engine initialized successfully.")
+except ImportError:
+    HAS_ARGON2 = False
+    _argon2_hasher = None
+    logger.warning("argon2-cffi not installed; falling back to PBKDF2-HMAC-SHA256.")
 
 
 class AuthenticationError(Exception):
@@ -43,16 +62,23 @@ class AuthService:
             secret = secrets.token_hex(32)
         self.secret_key = secret.encode("utf-8")
         self.token_expire_seconds = getattr(self.settings, "access_token_expire_minutes", 1440) * 60
+        self.rate_limiter = get_login_rate_limiter()
 
     # =========================================================================
-    # PASSWORD HASHING (PBKDF2-HMAC-SHA256, Salted, 100,000 Iterations)
+    # PASSWORD HASHING (Argon2id with PBKDF2 Backward Compatibility)
     # =========================================================================
 
     def hash_password(self, password: str, salt: Optional[str] = None) -> Tuple[str, str]:
-        """Hash a plaintext password with a random cryptographic salt."""
+        """Hash a plaintext password using Argon2id (default) or salted PBKDF2 fallback."""
         if not salt:
             salt = secrets.token_hex(16)
-        
+
+        if HAS_ARGON2 and _argon2_hasher is not None:
+            # Argon2 embeds its cryptographic salt directly within the hash string
+            argon2_hash = _argon2_hasher.hash(password)
+            return argon2_hash, salt
+
+        # Fallback to PBKDF2-HMAC-SHA256 (100,000 iterations)
         salt_bytes = bytes.fromhex(salt)
         pwd_hash = hashlib.pbkdf2_hmac(
             hash_name="sha256",
@@ -63,9 +89,37 @@ class AuthService:
         return pwd_hash, salt
 
     def verify_password(self, password: str, password_hash: str, salt: str) -> bool:
-        """Verify password against salt and hash using constant-time comparison."""
-        calc_hash, _ = self.hash_password(password, salt=salt)
-        return secrets.compare_digest(calc_hash, password_hash)
+        """Verify password against stored hash using constant-time comparison.
+        
+        Supports both modern Argon2id hashes and legacy PBKDF2 hashes.
+        """
+        if not password or not password_hash:
+            return False
+
+        # Check if hash is Argon2id
+        if password_hash.startswith("$argon2id$") or password_hash.startswith("$argon2"):
+            if HAS_ARGON2 and _argon2_hasher is not None:
+                try:
+                    return _argon2_hasher.verify(password_hash, password)
+                except (VerifyMismatchError, VerificationError):
+                    return False
+                except Exception as e:
+                    logger.error(f"Argon2 verification unexpected error: {e}")
+                    return False
+            return False
+
+        # Fallback: legacy PBKDF2-HMAC-SHA256 verification
+        try:
+            salt_bytes = bytes.fromhex(salt)
+            calc_hash = hashlib.pbkdf2_hmac(
+                hash_name="sha256",
+                password=password.encode("utf-8"),
+                salt=salt_bytes,
+                iterations=100000,
+            ).hex()
+            return secrets.compare_digest(calc_hash, password_hash)
+        except Exception:
+            return False
 
     # =========================================================================
     # TOKEN LIFECYCLE (HMAC-SHA256 Cryptographic Bearer Token)
@@ -91,7 +145,7 @@ class AuthService:
         return f"{b64_payload}.{signature}"
 
     def decode_and_validate_token(self, token: str) -> Dict[str, Any]:
-        """Validate signature, check expiration, and decode token payload."""
+        """Validate signature, check expiration, token revocation, and decode token payload."""
         if not token or "." not in token:
             raise AuthenticationError("Invalid or malformed authentication token format.")
 
@@ -119,7 +173,22 @@ class AuthService:
         if time.time() > exp:
             raise AuthenticationError("Authentication token has expired. Please log in again.")
 
+        # Check token blacklist / revocation status
+        jti = payload_data.get("jti")
+        if jti and self.repo.is_token_revoked(jti):
+            raise AuthenticationError("Authentication token has been revoked. Please log in again.")
+
         return payload_data
+
+    def revoke_token(self, token: str) -> None:
+        """Revoke a token by blacklisting its JTI until expiration."""
+        payload = self.decode_and_validate_token(token)
+        jti = payload.get("jti")
+        user_id = payload.get("sub")
+        exp = payload.get("exp", int(time.time()) + self.token_expire_seconds)
+        if jti and user_id:
+            self.repo.revoke_token(jti=jti, user_id=user_id, expires_at=exp)
+            logger.info(f"Revoked token JTI {jti} for user {user_id}")
 
     # =========================================================================
     # REGISTRATION & LOGIN WORKFLOWS
@@ -130,7 +199,7 @@ class AuthService:
         
         CRITICAL SECURITY RULE: Public self-registration strictly provisions ordinary FARMER accounts.
         Privileged roles (FIELD_OFFICER, AGRONOMIST, ADMINISTRATOR) must be provisioned through
-        administrative workflows. Any client-supplied privileged role is safely ignored.
+        administrative workflows. Any client-supplied privileged role is safely rejected/ignored.
         """
         existing = self.repo.get_user_by_username(req.username.strip())
         if existing:
@@ -138,7 +207,7 @@ class AuthService:
 
         # Hash password securely
         pwd_hash, salt = self.hash_password(req.password)
-        now_str = datetime.now().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         user_id = f"usr_{uuid.uuid4().hex[:12]}"
 
         # Always enforce FARMER role for public registration
@@ -191,7 +260,7 @@ class AuthService:
             raise ValueError(f"Username '{username}' is already registered.")
 
         pwd_hash, salt = self.hash_password(password)
-        now_str = datetime.now().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         user_id = f"usr_{uuid.uuid4().hex[:12]}"
 
         user = UserRecord(
@@ -208,36 +277,68 @@ class AuthService:
         logger.info(f"Administratively provisioned privileged user '{username}' with role {role.value}")
         return user, token
 
-    def authenticate_user(self, req: UserLoginRequest) -> UserLoginResponse:
-        """Verify login credentials and return bearer token with profile summary."""
-        user = self.repo.get_user_by_username(req.username.strip())
+    def authenticate_user(self, req: UserLoginRequest, client_ip: Optional[str] = None) -> UserLoginResponse:
+        """Verify login credentials with brute-force rate limiting and transparent hash upgrade."""
+        username_clean = req.username.strip()
+
+        # Check brute-force lockout on username or IP
+        is_locked, remaining = self.rate_limiter.is_locked_out(username_clean)
+        if is_locked:
+            logger.warning(f"Login rejected: '{username_clean}' is temporarily locked out ({remaining}s remaining).")
+            raise AuthenticationError(
+                f"Too many failed login attempts. Please wait {remaining} seconds before trying again."
+            )
+
+        user = self.repo.get_user_by_username(username_clean)
         if not user:
+            self.rate_limiter.record_failure(username_clean)
+            if client_ip:
+                self.rate_limiter.record_failure(client_ip)
+            # Generic error message to prevent username enumeration
             raise AuthenticationError("Invalid username or password.")
 
         if not self.verify_password(req.password, user.password_hash, user.salt):
+            self.rate_limiter.record_failure(username_clean)
+            if client_ip:
+                self.rate_limiter.record_failure(client_ip)
+            # Generic error message to prevent username enumeration
             raise AuthenticationError("Invalid username or password.")
 
+        # Login succeeded: clear rate limiter counter
+        self.rate_limiter.record_success(username_clean)
+        if client_ip:
+            self.rate_limiter.record_success(client_ip)
+
+        # Transparently upgrade legacy PBKDF2 hash to modern Argon2id
+        if HAS_ARGON2 and not (user.password_hash.startswith("$argon2id$") or user.password_hash.startswith("$argon2")):
+            try:
+                new_hash, new_salt = self.hash_password(req.password)
+                self.repo.update_user_password(user.user_id, new_hash, new_salt)
+                logger.info(f"Transparently migrated password hash for user '{user.username}' to Argon2id.")
+            except Exception as e:
+                logger.warning(f"Failed to auto-upgrade password hash to Argon2id for '{user.username}': {e}")
+
         profile = self.repo.get_farmer_profile_by_user_id(user.user_id)
-        if not profile:
+        if not profile and user.role == UserRole.FARMER:
             raise AuthenticationError("User account exists but has no linked farmer profile.")
 
         # Update last login
-        now_str = datetime.now().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         self.repo.update_user_last_login(user.user_id, now_str)
 
         token = self.create_access_token(user, profile)
-        logger.info(f"Authenticated farmer '{user.username}' ({profile.farmer_id})")
+        logger.info(f"Authenticated user '{user.username}' (role={user.role.value})")
 
         return UserLoginResponse(
             access_token=token,
             token_type="bearer",
             user_id=user.user_id,
-            farmer_id=profile.farmer_id,
+            farmer_id=profile.farmer_id if profile else "",
             username=user.username,
-            full_name=profile.full_name,
+            full_name=profile.full_name if profile else user.username,
             role=user.role,
-            preferred_language=profile.preferred_language,
-            profile_completion_pct=profile.profile_completion_pct,
+            preferred_language=profile.preferred_language if profile else "hi-IN",
+            profile_completion_pct=profile.profile_completion_pct if profile else 100.0,
         )
 
     def get_current_user(self, token: str) -> UserRecord:
@@ -275,4 +376,3 @@ class AuthService:
             raise AuthenticationError("Farmer profile not found.")
 
         return user, profile
-

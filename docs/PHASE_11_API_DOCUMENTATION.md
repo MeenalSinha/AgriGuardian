@@ -514,3 +514,4 @@ All farm economics endpoints require authentication via Bearer token (`Authoriza
     }
   ]
   ```
+

@@ -458,7 +458,7 @@ def _render_collaboration_tab(repo, user):
                 c.author_role, "💬"
             )
             with st.chat_message(name=c.author_name, avatar=role_icon):
-                st.markdown(f"**{c.author_name}** *({c.author_role.title()})* — <small>{c.created_at[:16].replace('T', ' ')}</small>", unsafe_allow_html=True)
+                st.markdown(f"**{c.author_name}** *({c.author_role.title()})* — `{c.created_at[:16].replace('T', ' ')}`")
                 st.write(c.content)
     else:
         st.caption("No comments posted on this review case yet.")

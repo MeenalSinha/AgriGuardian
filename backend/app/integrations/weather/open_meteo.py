@@ -3,9 +3,11 @@
 import time
 from typing import Any, Dict, Optional
 import requests
+from backend.app.core.circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.exceptions import WeatherAPIError
 from backend.app.core.logging import get_logger
+from backend.app.core.metrics import get_metrics_collector
 from backend.app.integrations.weather.historical_weather import HistoricalWeatherService
 from backend.app.integrations.weather.weather_cache import weather_cache
 from backend.app.integrations.weather.weather_normalizer import normalize_open_meteo_response
@@ -53,10 +55,15 @@ class WeatherService:
             "forecast_days": 3,
         }
 
+        cb = get_circuit_breaker("open_meteo")
+        metrics = get_metrics_collector()
         try:
             logger.info(f"Fetching legacy weather for coordinates ({latitude:.4f}, {longitude:.4f})")
+            cb.before_call()
             response = requests.get(self.base_url, params=params, timeout=self.timeout)
             response.raise_for_status()
+            cb.record_success()
+            metrics.record_provider_call("open_meteo", success=True)
             data = response.json()
 
             current = data.get("current", {})
@@ -90,6 +97,9 @@ class WeatherService:
             )
 
         except Exception as e:
+            if not isinstance(e, CircuitBreakerOpenException):
+                cb.record_failure(e)
+            metrics.record_provider_call("open_meteo", success=False)
             logger.warning(f"Live weather fetch failed ({e}). Returning explicit unavailable context.")
             return WeatherContext(
                 temperature=None,
@@ -155,10 +165,15 @@ class WeatherService:
             "forecast_days": min(max(forecast_days, 1), 16),
         }
 
+        cb = get_circuit_breaker("open_meteo")
+        metrics = get_metrics_collector()
         try:
             logger.info(f"Querying Open-Meteo API for ({lat:.4f}, {lon:.4f})")
+            cb.before_call()
             resp = requests.get(self.base_url, params=params, timeout=self.timeout)
             resp.raise_for_status()
+            cb.record_success()
+            metrics.record_provider_call("open_meteo", success=True)
             data = resp.json()
 
             # Cache the raw response
@@ -169,6 +184,9 @@ class WeatherService:
             return report
 
         except Exception as e:
+            if not isinstance(e, CircuitBreakerOpenException):
+                cb.record_failure(e)
+            metrics.record_provider_call("open_meteo", success=False)
             logger.warning(f"Live weather API request failed ({e}). Returning transparent unavailable report.")
             return WeatherReport(
                 location=loc,

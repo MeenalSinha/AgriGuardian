@@ -20,6 +20,7 @@ from backend.app.schemas.analytics import (
 from backend.app.schemas.farm import UserRole
 from backend.app.services.advisory.orchestrator import AgriGuardianSystem
 from frontend.components.ui_widgets import ui_alert, ui_card, ui_divider, ui_metric_card
+from frontend.utils.security import safe_text
 
 
 def render_dashboard_view() -> None:
@@ -220,23 +221,28 @@ def _render_farmer_dashboard(orchestrator, current_farmer, force_refresh: bool) 
         st.markdown("### 🌿 Active Crop Phenological Stages & Progress")
         if overview.active_crop_stages:
             for s in overview.active_crop_stages:
+                crop_label = f"{safe_text(s.get('crop_name'))} ({safe_text(s.get('variety') or 'Standard')})"
+                season_label = safe_text(s.get('season'))
+                days_label = safe_text(s.get('days_since_sowing'))
+                stage_label = safe_text(str(s.get('current_stage', '')).replace('_', ' ').title())
+                yield_label = safe_text(s.get('target_yield') or 'N/A')
                 st.markdown(
                     f"""
                     <div style="background-color: #FAFAFA; border: 1px solid #E0E0E0; border-radius: 8px; padding: 0.9rem; margin-bottom: 0.8rem;">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <span style="font-size: 1.1rem; font-weight: bold; color: #2E7D32;">{s['crop_name']} ({s.get('variety') or 'Standard'})</span>
+                                <span style="font-size: 1.1rem; font-weight: bold; color: #2E7D32;">{crop_label}</span>
                                 <span style="margin-left: 0.5rem; background: #E8F5E9; color: #1B5E20; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">
-                                    {s['season']}
+                                    {season_label}
                                 </span>
                             </div>
                             <span style="font-weight: bold; color: #1565C0; font-size: 0.9rem;">
-                                {s['days_since_sowing']} Days Since Sowing
+                                {days_label} Days Since Sowing
                             </span>
                         </div>
                         <p style="margin: 0.4rem 0 0.2rem 0; font-size: 0.9rem; color: #555;">
-                            <strong>Current Stage:</strong> <span style="color: #E65100; font-weight: 600;">{s['current_stage'].replace('_', ' ').title()}</span> | 
-                            <strong>Target Yield:</strong> {s.get('target_yield') or 'N/A'} q/acre
+                            <strong>Current Stage:</strong> <span style="color: #E65100; font-weight: 600;">{stage_label}</span> | 
+                            <strong>Target Yield:</strong> {yield_label} q/acre
                         </p>
                     </div>
                     """,
@@ -262,15 +268,19 @@ def _render_farmer_dashboard(orchestrator, current_farmer, force_refresh: bool) 
                     "#1976D2" if ins.severity == "recommendation" else "#388E3C"
                 )
             )
+            ins_title = safe_text(ins.title)
+            ins_source = safe_text(ins.source)
+            ins_desc = safe_text(ins.description)
+            action_html = f'<div style="background-color: #F5F5F5; padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.88rem; color: #1B5E20;"><strong>Action:</strong> {safe_text(ins.suggested_action)}</div>' if ins.suggested_action else ''
             st.markdown(
                 f"""
                 <div style="background-color: white; border-left: 4px solid {sev_color}; border-radius: 6px; padding: 0.9rem; margin-bottom: 0.6rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08);">
                     <div style="display: flex; justify-content: space-between;">
-                        <strong style="color: {sev_color}; font-size: 1rem;">{ins.title}</strong>
-                        <span style="font-size: 0.8rem; color: #777;">{ins.source}</span>
+                        <strong style="color: {sev_color}; font-size: 1rem;">{ins_title}</strong>
+                        <span style="font-size: 0.8rem; color: #777;">{ins_source}</span>
                     </div>
-                    <p style="margin: 0.3rem 0; font-size: 0.92rem; color: #333;">{ins.description}</p>
-                    {f'<div style="background-color: #F5F5F5; padding: 0.4rem 0.6rem; border-radius: 4px; font-size: 0.88rem; color: #1B5E20;"><strong>Action:</strong> {ins.suggested_action}</div>' if ins.suggested_action else ''}
+                    <p style="margin: 0.3rem 0; font-size: 0.92rem; color: #333;">{ins_desc}</p>
+                    {action_html}
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -285,16 +295,20 @@ def _render_farmer_dashboard(orchestrator, current_farmer, force_refresh: bool) 
         if overview.due_activities:
             for act in overview.due_activities:
                 status_color = "#D32F2F" if act.status.value == "overdue" else "#1976D2"
+                act_title = safe_text(act.title)
+                act_status = safe_text(act.status.value.upper())
+                act_type = safe_text(act.activity_type.value.title())
+                act_due = safe_text(act.due_date.isoformat() if act.due_date else 'Immediate')
                 st.markdown(
                     f"""
                     <div style="background-color: #FAFAFA; border: 1px solid #E0E0E0; border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 0.5rem;">
                         <div style="display: flex; justify-content: space-between;">
-                            <strong>{act.title}</strong>
-                            <span style="color: {status_color}; font-weight: bold; font-size: 0.8rem;">{act.status.value.upper()}</span>
+                            <strong>{act_title}</strong>
+                            <span style="color: {status_color}; font-weight: bold; font-size: 0.8rem;">{act_status}</span>
                         </div>
                         <p style="margin: 0.2rem 0; font-size: 0.85rem; color: #555;">
-                            <strong>Type:</strong> {act.activity_type.value.title()} | 
-                            <strong>Due:</strong> {act.due_date.isoformat() if act.due_date else 'Immediate'}
+                            <strong>Type:</strong> {act_type} | 
+                            <strong>Due:</strong> {act_due}
                         </p>
                     </div>
                     """,
@@ -308,15 +322,20 @@ def _render_farmer_dashboard(orchestrator, current_farmer, force_refresh: bool) 
         if overview.recent_health_cases:
             for case in overview.recent_health_cases:
                 risk_color = "#D32F2F" if case.risk == "High" else ("#F57F17" if case.risk == "Medium" else "#388E3C")
+                c_id = safe_text(case.case_id)
+                c_crop = safe_text(case.crop)
+                c_risk = safe_text(case.risk.upper())
+                c_symp = safe_text(case.symptoms[:50])
+                c_status = safe_text(case.status.title())
                 st.markdown(
                     f"""
                     <div style="background-color: #FAFAFA; border: 1px solid #E0E0E0; border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 0.5rem;">
                         <div style="display: flex; justify-content: space-between;">
-                            <strong>Case {case.case_id} — {case.crop}</strong>
-                            <span style="color: {risk_color}; font-weight: bold; font-size: 0.8rem;">{case.risk.upper()} RISK</span>
+                            <strong>Case {c_id} — {c_crop}</strong>
+                            <span style="color: {risk_color}; font-weight: bold; font-size: 0.8rem;">{c_risk} RISK</span>
                         </div>
                         <p style="margin: 0.2rem 0; font-size: 0.85rem; color: #555;">
-                            <strong>Symptoms:</strong> {case.symptoms[:50]}... | <strong>Status:</strong> {case.status.title()}
+                            <strong>Symptoms:</strong> {c_symp}... | <strong>Status:</strong> {c_status}
                         </p>
                     </div>
                     """,

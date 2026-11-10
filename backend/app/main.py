@@ -6,17 +6,34 @@ crop diagnostics, weather context, and agricultural advisory services.
 
 import os
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from backend.app.core.circuit_breaker import get_circuit_breaker
 from backend.app.core.config import SUPPORTED_LANGUAGES, TIMBRE_V25_VOICES, get_settings
 from backend.app.core.exceptions import GnaniAPIError, GnaniAuthError
 from backend.app.core.logging import get_logger, setup_logging
+from backend.app.core.metrics import get_metrics_collector
+from backend.app.core.middleware import (
+    CorrelationIdMiddleware,
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
+from backend.app.core.production_validator import validate_production_configuration
+from backend.app.schemas.privacy import (
+    AccountDeletionRequest,
+    AccountDeletionResponse,
+    ConsentSubmitRequest,
+    ConsentType,
+    ConsentWithdrawRequest,
+    FarmerDataExportResponse,
+    UserConsentRecord,
+)
 from backend.app.integrations.gnani.audio_utils import save_temporary_audio
 from backend.app.schemas.advisory import AdvisoryResult
 from backend.app.schemas.conversation import ConversationSession, ConversationTurn
@@ -172,21 +189,34 @@ settings = get_settings()
 setup_logging(log_level=settings.log_level, logs_dir=settings.logs_dir)
 logger = get_logger("FastAPIServer")
 
+# Phase 12: Production Readiness & Secret Validation
+validate_production_configuration(settings)
+
+# Conditional OpenAPI documentation exposure
+is_prod = (settings.app_env or "development").strip().lower() in ("production", "prod")
+docs_url = "/docs" if (not is_prod or settings.enable_docs_in_prod) else None
+redoc_url = "/redoc" if (not is_prod or settings.enable_docs_in_prod) else None
+
 # Initialize FastAPI app with OpenAPI metadata
 app = FastAPI(
     title="AgriGuardian API",
-    description="Multilingual Voice Intelligence & Agricultural Advisory API powered by Gnani AI.",
-    version="2.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    description="Multilingual Voice Intelligence, Farm Economics & Agricultural Advisory API powered by Gnani AI.",
+    version="2.12.0",
+    docs_url=docs_url,
+    redoc_url=redoc_url,
 )
 
-# Enable CORS for web and mobile frontends
+# Phase 12 Security & Telemetry Middlewares
+app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestSizeLimitMiddleware, max_bytes=settings.max_request_body_size_bytes)
+
+# Enable CORS with explicit allowed origins list (No wildcard with credentials)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
     allow_headers=["*"],
 )
 
@@ -928,10 +958,24 @@ def register_farmer(req: UserRegistrationRequest):
 
 
 @app.post("/api/v1/auth/login", response_model=UserLoginResponse, tags=["Farmer Identity & Multi-Farm"])
-def login_farmer(req: UserLoginRequest):
-    """Authenticate farmer with password and receive signed bearer token."""
+def login_farmer(req: UserLoginRequest, request: Request = None):
+    """Authenticate farmer with password, brute-force rate limiting, and receive signed bearer token."""
+    client_ip = request.client.host if (request and getattr(request, "client", None)) else None
     try:
-        return auth_service.authenticate_user(req)
+        return auth_service.authenticate_user(req, client_ip=client_ip)
+    except AuthenticationError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+
+@app.post("/api/v1/auth/logout", tags=["Farmer Identity & Multi-Farm"])
+def logout_farmer(authorization: Optional[str] = Header(None)):
+    """Revoke active JWT bearer token and invalidate current device session."""
+    if not authorization:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authorization token required.")
+    token = authorization.replace("Bearer ", "").strip()
+    try:
+        auth_service.revoke_token(token)
+        return {"status": "success", "message": "Session successfully terminated and token revoked."}
     except AuthenticationError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
@@ -2849,6 +2893,194 @@ def create_financial_benchmark(
     if user.role not in (UserRole.ADMINISTRATOR, UserRole.FIELD_OFFICER):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only administrators and field officers can publish benchmarks.")
     return economics_service.create_benchmark(payload)
+
+
+# ==============================================================================
+# PHASE 12: RELIABILITY, OBSERVABILITY & HEALTH CHECK ENDPOINTS
+# ==============================================================================
+
+@app.get("/api/v1/health/live", tags=["Reliability & Health"])
+def health_liveness():
+    """Liveness probe: verifies that the server process is responsive and executing."""
+    metrics = get_metrics_collector()
+    summary = metrics.get_summary()
+    return {
+        "status": "healthy",
+        "probe": "liveness",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "uptime_seconds": summary["uptime_seconds"],
+        "version": "2.12.0",
+        "pid": os.getpid(),
+    }
+
+
+@app.get("/api/v1/health/ready", tags=["Reliability & Health"])
+def health_readiness():
+    """Readiness probe: validates database connectivity and storage readiness before receiving traffic."""
+    db_ok = False
+    try:
+        with system.farm_context.repo.get_connection() as conn:
+            cursor = conn.execute("SELECT 1 AS ready")
+            row = cursor.fetchone()
+            db_ok = row and (row["ready"] == 1 or row[0] == 1)
+    except Exception as e:
+        logger.error(f"Readiness probe failed database check: {e}")
+        db_ok = False
+
+    data_dir_ok = Path(settings.data_dir).is_dir()
+
+    if not db_ok or not data_dir_ok:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "status": "not_ready",
+                "database_connected": db_ok,
+                "storage_available": data_dir_ok,
+            },
+        )
+
+    return {
+        "status": "ready",
+        "probe": "readiness",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "database_connected": True,
+        "storage_available": True,
+    }
+
+
+@app.get("/api/v1/health/deps", tags=["Reliability & Health"])
+def health_dependencies():
+    """Dependency diagnostic probe: checks all external providers and circuit breaker statuses."""
+    db_status = "operational"
+    try:
+        with system.farm_context.repo.get_connection() as conn:
+            conn.execute("SELECT 1")
+    except Exception as e:
+        db_status = f"unhealthy: {e}"
+
+    weather_cb = get_circuit_breaker("open_meteo").get_status()
+    gnani_cb = get_circuit_breaker("gnani_ai").get_status()
+    metrics = get_metrics_collector().get_summary()
+
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "status": "healthy" if db_status == "operational" else "degraded",
+        "dependencies": {
+            "database": {
+                "type": "sqlite",
+                "path": settings.farm_db_path,
+                "status": db_status,
+            },
+            "open_meteo_weather": {
+                "configured": True,
+                "circuit_breaker": weather_cb,
+            },
+            "gnani_speech_ai": {
+                "configured": settings.is_gnani_configured,
+                "circuit_breaker": gnani_cb,
+            },
+            "openai_llm": {
+                "configured": settings.is_llm_configured,
+                "model": settings.llm_model,
+            },
+        },
+        "telemetry_summary": {
+            "total_requests": metrics["total_requests"],
+            "error_rate_pct": metrics["error_rate_pct"],
+            "average_latency_ms": metrics["average_latency_ms"],
+        },
+    }
+
+
+@app.get("/api/v1/metrics", tags=["Reliability & Health"])
+def get_prometheus_metrics(format: str = Query("text", enum=["text", "json"])):
+    """Exposes real operational telemetry in Prometheus text format or JSON."""
+    metrics = get_metrics_collector()
+    if format == "json":
+        return metrics.get_summary()
+    return PlainTextResponse(metrics.to_prometheus_format(), media_type="text/plain; version=0.0.4")
+
+
+# ==============================================================================
+# PHASE 12: PRIVACY & DATA GOVERNANCE ENDPOINTS (DPDP ACT COMPLIANCE)
+# ==============================================================================
+
+@app.get("/api/v1/privacy/consents", response_model=List[UserConsentRecord], tags=["Privacy & Data Governance"])
+def list_farmer_consents(auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth)):
+    """List all active and historical data processing consents for authenticated farmer."""
+    user, _ = auth
+    return system.farm_context.repo.get_user_consents(user.user_id)
+
+
+@app.post("/api/v1/privacy/consents", response_model=UserConsentRecord, tags=["Privacy & Data Governance"])
+def submit_farmer_consent(
+    payload: ConsentSubmitRequest,
+    request: Request,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Grant or update consent for a specific data processing purpose."""
+    user, profile = auth
+    client_ip = request.client.host if request.client else None
+    now_str = datetime.now(timezone.utc).isoformat()
+    consent = UserConsentRecord(
+        consent_id=f"cns_{uuid.uuid4().hex[:12]}",
+        user_id=user.user_id,
+        farmer_id=profile.farmer_id,
+        consent_type=payload.consent_type,
+        status=payload.status,
+        policy_version=payload.policy_version,
+        purpose=payload.purpose,
+        ip_address=client_ip,
+        created_at=now_str,
+        updated_at=now_str,
+    )
+    return system.farm_context.repo.record_consent(consent)
+
+
+@app.post("/api/v1/privacy/consents/withdraw", tags=["Privacy & Data Governance"])
+def withdraw_farmer_consent(
+    payload: ConsentWithdrawRequest,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Explicitly withdraw consent for a processing purpose."""
+    user, _ = auth
+    success = system.farm_context.repo.withdraw_consent(user.user_id, payload.consent_type.value)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Consent record not found.")
+    return {
+        "status": "withdrawn",
+        "consent_type": payload.consent_type.value,
+        "message": f"Consent for '{payload.consent_type.value}' has been successfully withdrawn.",
+    }
+
+
+@app.get("/api/v1/privacy/export-data", response_model=FarmerDataExportResponse, tags=["Privacy & Data Governance"])
+def export_farmer_data(auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth)):
+    """Generate comprehensive machine-readable archive for data portability under DPDP Act / GDPR."""
+    _, profile = auth
+    data = system.farm_context.repo.get_farmer_full_export_data(profile.farmer_id)
+    return FarmerDataExportResponse(**data)
+
+
+@app.post("/api/v1/privacy/delete-account", response_model=AccountDeletionResponse, tags=["Privacy & Data Governance"])
+def delete_farmer_account(
+    payload: AccountDeletionRequest,
+    auth: Tuple[UserRecord, FarmerProfile] = Depends(get_current_farmer_auth),
+):
+    """Right-to-erasure account deletion: anonymizes personal identifiers while preserving statutory ledgers."""
+    user, profile = auth
+    if not auth_service.verify_password(payload.confirm_password, user.password_hash, user.salt):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password confirmation.")
+
+    system.farm_context.repo.delete_farmer_account_anonymized(user.user_id, profile.farmer_id)
+    now_str = datetime.now(timezone.utc).isoformat()
+    return AccountDeletionResponse(
+        status="anonymized_and_deleted",
+        message_en="Your account has been permanently anonymized and personal details erased.",
+        message_hi="आपका खाता स्थायी रूप से गुमनाम कर दिया गया है और व्यक्तिगत विवरण हटा दिए गए हैं।",
+        deleted_at=now_str,
+        retention_notice="Under Indian agricultural accounting rules, historical transaction figures are retained in anonymized form.",
+    )
 
 
 

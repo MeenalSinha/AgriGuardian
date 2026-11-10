@@ -169,3 +169,4 @@ When visiting remote plots without mobile internet:
 3. You can record expenses, log harvests, and record sales completely offline.
 4. As soon as your device reconnects to a 4G/5G or Wi-Fi network, the **Offline Mutation Queue** automatically replays your records to the central server with optimistic concurrency control.
 5. If another person concurrently edited the same record, the system prompts you with the interactive **Conflict Resolver**.
+

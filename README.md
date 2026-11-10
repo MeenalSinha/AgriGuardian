@@ -128,6 +128,17 @@ Built with **Streamlit, Gnani AI (Prisma v2.5 STT & Timbre v2.5 TTS), Open-Meteo
 * **Offline-First Synchronization Support:** Integrated with Phase 10 mutation queue, optimistic concurrency, and PWA companion IndexedDB v2 schema (`expenses`, `harvests`, `sales`, `budgets`).
 * **Interactive 6-Tab Streamlit Cockpit:** Visual dashboard in `frontend/views/farm_economics_view.py` covering Overview, Expenses, Harvest, Sales, Profitability/Budgets, and Planning.
 
+### 🛡️ Production Hardening, Security, Privacy & Observability (Phase 12)
+* **Argon2id Password Security:** Production-grade Argon2id credential hashing with seamless automatic in-place upgrade for legacy PBKDF2 hashes.
+* **Brute-Force Rate Limiting & Token Blacklisting:** Multi-key login rate limiter (lockout after 5 failed attempts in 5m) and database-backed JWT revocation via Table 44 `revoked_tokens`.
+* **DPDP Act 2023 Compliance:** Table 45 `user_consents` tracking purpose-specific consent, right-to-access machine-readable data export archive (`GET /api/v1/privacy/export-data`), and right-to-erasure account anonymization (`POST /api/v1/privacy/delete-account`).
+* **HTTP Defensive Middlewares:** Pure ASGI defensive headers (`nosniff`, `DENY`, CSP, `Referrer-Policy`, HSTS), DoS protection capping request body size to 15 MB, and contextual correlation ID injection (`X-Request-ID`).
+* **Production Validator:** Startup validation rejecting weak JWT keys (<32 chars / low entropy) and wildcard CORS in production environments.
+* **Resilience & Circuit Breakers:** Circuit breakers for Open-Meteo Weather and Gnani AI Speech services with fast-fail protection and graceful fallback to regional climatological normals.
+* **Real Operational Observability:** Structured JSON logging with automated credential redaction, three-tier health probes (`/health/live`, `/health/ready`, `/health/deps`), and real Prometheus metrics (`/api/v1/metrics`).
+* **Zero-Downtime Backup & Recovery:** Online SQLite backup API with SHA-256 verification (`scripts/backup_database.py`), integrity-checked restore (`scripts/restore_database.py`), and PostgreSQL migration script (`scripts/migrate_sqlite_to_postgres.py`) satisfying RPO < 1 hour and RTO < 15 minutes.
+* **Containerization & CI/CD:** Multi-stage production `Dockerfile` (unprivileged `appuser`), `docker-compose.yml` multi-service stack, and GitHub Actions CI workflow (`.github/workflows/ci.yml`).
+
 ---
 
 ## 🧩 Architecture & Tech Stack
@@ -216,8 +227,11 @@ uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 
 Execute the comprehensive test suite with `pytest`:
 ```bash
-# Run all unit, integration, offline sync, and economics tests (295 passed)
+# Run all unit, integration, offline sync, economics, and security tests (315 passed, 2 skipped)
 python -m pytest tests -v
+
+# Run dedicated Phase 12 security hardening, privacy, and e2e test suite (22 passed)
+python -m pytest tests/security tests/e2e -v
 
 # Run dedicated Phase 11 farm economics test suite (30 passed)
 python -m pytest tests/economics -v
@@ -232,6 +246,14 @@ python -m pytest tests/integration/test_gnani_live.py -v
 ---
 
 ## 📚 Documentation Links
+* [Phase 12 Final Engineering Report (`docs/PHASE_12_FINAL_ENGINEERING_REPORT.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_12_FINAL_ENGINEERING_REPORT.md)
+* [Phase 12 Security Hardening Report (`docs/SECURITY_HARDENING_REPORT.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/SECURITY_HARDENING_REPORT.md)
+* [Phase 12 Privacy & Data Governance (`docs/PRIVACY_AND_DATA_GOVERNANCE.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PRIVACY_AND_DATA_GOVERNANCE.md)
+* [Phase 12 Observability & Operations Guide (`docs/OBSERVABILITY_AND_OPERATIONS.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/OBSERVABILITY_AND_OPERATIONS.md)
+* [Phase 12 Backup & Disaster Recovery Plan (`docs/BACKUP_AND_DISASTER_RECOVERY.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/BACKUP_AND_DISASTER_RECOVERY.md)
+* [Phase 12 Production Deployment Guide (`docs/PRODUCTION_DEPLOYMENT_GUIDE.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PRODUCTION_DEPLOYMENT_GUIDE.md)
+* [Phase 12 Production Readiness Checklist (`docs/PRODUCTION_READINESS_CHECKLIST.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PRODUCTION_READINESS_CHECKLIST.md)
+* [Phase 11 Audit & Remediation (`docs/PHASE_11_AUDIT_AND_REMEDIATION.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_11_AUDIT_AND_REMEDIATION.md)
 * [Phase 11 Final Engineering Report (`docs/PHASE_11_FINAL_REPORT.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_11_FINAL_REPORT.md)
 * [Phase 11 REST API Documentation (`docs/PHASE_11_API_DOCUMENTATION.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_11_API_DOCUMENTATION.md)
 * [Phase 11 Financial & Agronomic Methodology (`docs/PHASE_11_FINANCIAL_METHODOLOGY.md`)](file:///c:/Users/Meenal%20Sinha/Downloads/AgriGuardian/docs/PHASE_11_FINANCIAL_METHODOLOGY.md)

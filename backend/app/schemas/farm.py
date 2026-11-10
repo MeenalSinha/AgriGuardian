@@ -120,11 +120,34 @@ class LiteracyPreference(str, Enum):
 
 class UserRegistrationRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, description="Unique username or mobile number")
-    password: str = Field(..., min_length=6, description="Password (min 6 characters)")
+    password: str = Field(..., min_length=8, description="Password (min 8 characters)")
     full_name: str = Field(..., min_length=2, max_length=100, description="Farmer full name")
     phone_number: Optional[str] = Field(default=None, description="10-digit mobile number")
     preferred_language: str = Field(default="hi-IN", description="Preferred language code (e.g. hi-IN, en-IN, ta-IN)")
-    role: UserRole = Field(default=UserRole.FARMER, description="Account role")
+    role: Optional[UserRole] = Field(default=UserRole.FARMER, description="Account role (public registration restricted to FARMER)")
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_complexity(cls, v: str) -> str:
+        """Enforce password complexity: at least 8 chars, containing letters and digits."""
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long.")
+        has_alpha = any(c.isalpha() for c in v)
+        has_digit = any(c.isdigit() for c in v)
+        if not (has_alpha and has_digit):
+            raise ValueError("Password must contain both letters and digits for security.")
+        return v
+
+    @field_validator("role")
+    @classmethod
+    def validate_registration_role(cls, v: Optional[UserRole]) -> UserRole:
+        """Prevent privilege escalation attacks on public self-registration."""
+        if v is not None and v != UserRole.FARMER:
+            raise ValueError(
+                f"Unauthorized role assignment: Self-registration for '{v.value}' is prohibited. "
+                "Privileged accounts must be provisioned by a platform administrator."
+            )
+        return UserRole.FARMER
 
 
 class UserLoginRequest(BaseModel):

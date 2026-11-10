@@ -4,12 +4,19 @@ import os
 import base64
 import tempfile
 import uuid
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 import cv2
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    nn = None
+    F = None
+    TORCH_AVAILABLE = False
 from PIL import Image
 from backend.app.core.config import get_settings
 from backend.app.core.logging import get_logger
@@ -20,9 +27,9 @@ logger = get_logger("GradCAM")
 class GradCAMExplainer:
     """Computes genuine Gradient-weighted Class Activation Mapping (Grad-CAM)."""
 
-    def __init__(self, model: nn.Module, target_layer: Optional[nn.Module] = None):
+    def __init__(self, model: Any, target_layer: Optional[Any] = None):
         self.model = model
-        self.target_layer = target_layer or model.features[-1]
+        self.target_layer = target_layer or (getattr(model, "features", [None])[-1] if model is not None else None)
         self.gradients: Optional[torch.Tensor] = None
         self.activations: Optional[torch.Tensor] = None
         self._hook_handles = []

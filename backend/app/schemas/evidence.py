@@ -20,3 +20,13 @@ class EvidenceExcerpt(BaseModel):
     def excerpt_text(self) -> str:
         """Alias for quote_or_excerpt."""
         return self.quote_or_excerpt
+
+    @property
+    def page_or_section(self) -> str:
+        """Formatted page or section location."""
+        parts = []
+        if self.page:
+            parts.append(f"p. {self.page}")
+        if self.section:
+            parts.append(str(self.section))
+        return ", ".join(parts)

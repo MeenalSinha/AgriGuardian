@@ -31,8 +31,18 @@ def ui_divider(text: Optional[str] = None, style: str = "default") -> None:
         )
 
 
-def ui_card(title: str, content: str, icon: str = "📋", color: str = "#FAFAFA", border_color: str = "#4CAF50") -> None:
+def ui_card(title: str, content: str = "", icon: str = "📋", color: str = "#FAFAFA", border_color: str = "#4CAF50") -> None:
     """Render structured information card."""
+    if not content:
+        st.markdown(
+            f"""
+            <div style="background-color:{color}; padding:1rem; border-radius:8px; border-left:4px solid {border_color}; margin:0.5rem 0; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+                <div style="color:#333; font-size:0.92rem; line-height:1.4;">{title}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
     st.markdown(
         f"""
         <div style="background-color:{color}; padding:1rem; border-radius:8px; border-left:4px solid {border_color}; margin:0.5rem 0; box-shadow:0 1px 3px rgba(0,0,0,0.06);">

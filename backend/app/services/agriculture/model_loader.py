@@ -4,10 +4,18 @@ import os
 import json
 import hashlib
 from typing import Any, Dict, List, Optional, Tuple
-import torch
-import torch.nn as nn
-import torchvision.models as models
-import torchvision.transforms as transforms
+try:
+    import torch
+    import torch.nn as nn
+    import torchvision.models as models
+    import torchvision.transforms as transforms
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    nn = None
+    models = None
+    transforms = None
+    TORCH_AVAILABLE = False
 from backend.app.core.config import get_settings
 from backend.app.core.exceptions import ConfigurationError
 from backend.app.core.logging import get_logger
@@ -58,6 +66,15 @@ class ModelLoader:
 
         self.model_path = resolved_model_path
         self.manifest_path = resolved_manifest_path
+        if not TORCH_AVAILABLE:
+            self.device = None
+            self.model = None
+            self.manifest = {}
+            self.classes = []
+            self.transform = None
+            logger.warning("PyTorch/torchvision not available. ModelLoader initialized in stub mode.")
+            return
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model: Optional[nn.Module] = None
         self.manifest: Dict[str, Any] = {}

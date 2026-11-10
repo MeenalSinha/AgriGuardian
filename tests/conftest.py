@@ -7,7 +7,6 @@ import pytest
 from backend.app.core.config import Settings
 from backend.app.repositories.data_manager import DataManager
 from backend.app.services.agriculture.rule_engine import DynamicRuleEngine
-from backend.app.services.advisory.orchestrator import AgriGuardianSystem
 
 
 @pytest.fixture

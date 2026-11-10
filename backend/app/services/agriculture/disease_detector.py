@@ -4,8 +4,14 @@ import os
 import time
 from typing import Any, Dict, List, Optional
 import numpy as np
-import torch
-import torch.nn.functional as F
+try:
+    import torch
+    import torch.nn.functional as F
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    F = None
+    TORCH_AVAILABLE = False
 from PIL import Image
 
 from backend.app.core.config import Settings, get_settings
@@ -36,13 +42,23 @@ class PlantDiseaseDetector:
 
     def __init__(self, settings: Optional[Settings] = None):
         self.settings = settings or get_settings()
-        self.model_loader = ModelLoader.get_instance()
-        self.model = self.model_loader.model
-        self.manifest = self.model_loader.get_manifest()
-        self.classes = self.model_loader.get_classes()
-        self.class_names = [c.get("name", f"Class {i}") for i, c in enumerate(self.classes)]
-        self.transform = self.model_loader.transform
-        self.explainer = GradCAMExplainer(self.model)
+        if TORCH_AVAILABLE:
+            self.model_loader = ModelLoader.get_instance()
+            self.model = self.model_loader.model
+            self.manifest = self.model_loader.get_manifest()
+            self.classes = self.model_loader.get_classes()
+            self.class_names = [c.get("name", f"Class {i}") for i, c in enumerate(self.classes)]
+            self.transform = self.model_loader.transform
+            self.explainer = GradCAMExplainer(self.model)
+        else:
+            self.model_loader = None
+            self.model = None
+            self.manifest = {}
+            self.classes = []
+            self.class_names = []
+            self.transform = None
+            self.explainer = None
+            logger.warning("PyTorch not installed in environment; disease detection will operate in fallback mode.")
         self.default_threshold = float(self.manifest.get("confidence_threshold", 0.40))
 
         # Disease severity clinical weighting lookup

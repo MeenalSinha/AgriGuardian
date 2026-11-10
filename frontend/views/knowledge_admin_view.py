@@ -142,8 +142,9 @@ def render_knowledge_admin_view():
                         for ev in fact.evidence:
                             st.caption(f"**Evidence ID:** `{ev.evidence_id}` | **Source:** `{ev.source_id}` ({ev.organization})")
                             st.markdown(f"> *\"{ev.excerpt_text}\"*")
-                            if ev.page_or_section:
-                                st.caption(f"Section/Page: {ev.page_or_section}")
+                            loc = getattr(ev, "page_or_section", None) or (f"p. {ev.page}" if getattr(ev, "page", None) else getattr(ev, "section", ""))
+                            if loc:
+                                st.caption(f"Section/Page: {loc}")
                 ui_divider(style="dotted")
 
     # =========================================================================

@@ -78,7 +78,7 @@ class DataManager:
             }
 
             self.ensure_csv_exists()
-            df = pd.read_csv(self.csv_path)
+            df = pd.read_csv(self.csv_path, dtype=str, keep_default_na=False)
             new_df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
             new_df.to_csv(self.csv_path, index=False)
             logger.info(f"Advisory saved for {record['farmer_name']} ({record['crop']})")
@@ -91,7 +91,7 @@ class DataManager:
         """Load all saved advisories."""
         try:
             self.ensure_csv_exists()
-            return pd.read_csv(self.csv_path)
+            return pd.read_csv(self.csv_path, dtype=str, keep_default_na=False)
         except Exception as e:
             logger.error(f"Failed to read advisories from {self.csv_path}: {e}")
             return pd.DataFrame(columns=COLUMNS)
@@ -99,11 +99,12 @@ class DataManager:
     def update_status(self, index: int, status: str, feedback: str = "") -> bool:
         """Update review status or expert feedback for a specific advisory row."""
         try:
-            df = pd.read_csv(self.csv_path)
+            df = pd.read_csv(self.csv_path, dtype=str, keep_default_na=False)
             if 0 <= index < len(df):
-                df.loc[index, "status"] = status
+                df = df.astype(object)
+                df.loc[index, "status"] = str(status)
                 if feedback:
-                    df.loc[index, "feedback"] = feedback
+                    df.loc[index, "feedback"] = str(feedback)
                 df.to_csv(self.csv_path, index=False)
                 logger.info(f"Updated status for advisory #{index} -> {status}")
                 return True

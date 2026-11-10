@@ -66,11 +66,13 @@ class NotificationService:
         category: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
+        unread_only: Optional[bool] = None,
     ) -> List[NotificationRecord]:
         """Fetch notifications for farmer inbox."""
+        effective_status = "unread" if unread_only else status
         return self.repo.list_notifications_for_farmer(
             farmer_id=farmer_id,
-            status=status,
+            status=effective_status,
             category=category,
             limit=limit,
             offset=offset,
@@ -101,6 +103,14 @@ class NotificationService:
         """Update notification preferences."""
         self.repo.save_notification_preference(pref)
         return self.get_preferences(pref.farmer_id)
+
+    def get_channel_consents(self, farmer_id: str):
+        """Get farmer's channel-specific consents."""
+        return self.repo.get_channel_consents(farmer_id)
+
+    def save_channel_consent(self, consent):
+        """Save farmer channel consent."""
+        return self.repo.save_channel_consent(consent)
 
     # Smart Reminders
     def create_reminder(self, farmer_id: str, req: FarmReminderCreate) -> FarmReminderRecord:
@@ -161,6 +171,14 @@ class NotificationService:
         """Get outbox counts by state."""
         return self.repo.get_outbox_metrics()
 
+    def get_outbox_telemetry(self) -> Dict[str, Any]:
+        """Get outbox telemetry and queue counts."""
+        metrics = self.get_outbox_metrics()
+        return {
+            "status_counts": metrics,
+            "total_enqueued": sum(metrics.values()),
+        }
+
     def list_outbox_items(self, status: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
         """List outbox queue items."""
         return self.repo.list_outbox_items(status=status, limit=limit)
@@ -172,4 +190,17 @@ class NotificationService:
     def get_channel_health(self) -> List[ChannelHealthInfo]:
         """Return truthful channel readiness and delivery statistics."""
         return self.outbox_service.get_channel_health_report()
+
+    def get_channels_telemetry(self) -> Dict[str, Any]:
+        """Return readiness and gateway status for all dispatch channels."""
+        health_list = self.get_channel_health()
+        res = {}
+        for h in health_list:
+            res[h.channel.value] = {
+                "provider": h.provider_name,
+                "configured": h.configured,
+                "environment_mode": "Production" if h.configured else "Local Sandbox / Simulated",
+                "note": h.details or "Operational",
+            }
+        return res
 

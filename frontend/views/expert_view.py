@@ -116,8 +116,10 @@ def _render_expert_login_card(repo):
                 else:
                     try:
                         from backend.app.services.auth.auth_service import AuthService
+                        from backend.app.schemas.farm import UserLoginRequest
                         auth_srv = AuthService(repo)
-                        user_rec = auth_srv.authenticate(username, password)
+                        resp = auth_srv.authenticate_user(UserLoginRequest(username=username, password=password))
+                        user_rec = repo.get_user_by_username(resp.username)
                         if user_rec.role not in (UserRole.AGRONOMIST, UserRole.ADMINISTRATOR):
                             st.error(f"Account role '{user_rec.role.value}' is not authorized for the Expert Portal.")
                         else:
@@ -293,7 +295,8 @@ def _render_case_dossier_tab(repo, system, user, expert_profile):
 
         with vcol2:
             st.markdown(f"**AI Primary Diagnosis:** `{dossier.ai_primary_disease}`")
-            st.markdown(f"**Model Confidence:** `{dossier.ai_confidence * 100:.1f}%`")
+            conf_str = f"{dossier.ai_confidence * 100:.1f}%" if dossier.ai_confidence is not None else "N/A (Symptomatic)"
+            st.markdown(f"**Model Confidence:** `{conf_str}`")
             st.markdown(f"**Detected Severity:** `{dossier.ai_severity}`")
             st.markdown(f"**Symptoms Reported:** {dossier.symptoms}")
 

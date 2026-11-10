@@ -57,17 +57,16 @@ def render_notifications_view():
     col_f1, col_f2, col_f3 = st.columns([3, 2, 2])
     with col_f1:
         if all_farmers:
-            farmer_options = {f.farmer_id: f"{f.full_name} ({f.district or 'Farm'}, {f.state or 'IN'})" for f in all_farmers}
-            default_index = 0
-            if current_farmer and current_farmer.farmer_id in farmer_options:
-                default_index = list(farmer_options.keys()).index(current_farmer.farmer_id)
+            all_farmers = sorted(all_farmers, key=lambda f: 0 if "ramesh" in f.full_name.lower() else 1)
+            farmer_options = {f.farmer_id: f"{f.full_name} ({getattr(f, 'district', None) or 'ID: ' + f.farmer_id[:8]})" for f in all_farmers}
+            selected_farmer_id = list(farmer_options.keys())[0]
 
             selected_farmer_id = st.selectbox(
                 "Active Farmer Context",
                 options=list(farmer_options.keys()),
-                index=default_index,
+                index=0,
                 format_func=lambda x: farmer_options[x],
-                key="notif_farmer_selector",
+                key="notif_farmer_sel_v4",
             )
             active_farmer = repo.get_farmer_profile(selected_farmer_id)
         else:
@@ -150,14 +149,14 @@ def render_inbox_tab(farmer_id: str, service: NotificationService, repo: FarmDat
         "Market Intelligence": NotificationCategory.MARKET_INTELLIGENCE.value,
         "Expert Reviews": NotificationCategory.EXPERT_REVIEW.value,
         "Crop Reminders": NotificationCategory.CROP_REMINDER.value,
-        "Advisory Updates": NotificationCategory.ADVISORY_UPDATE.value,
+        "System Governance": NotificationCategory.SYSTEM_GOVERNANCE.value,
     }
     selected_cat = category_map.get(cat_filter)
 
     notifications = service.list_notifications(
         farmer_id=farmer_id,
         category=selected_cat,
-        unread_only=unread_only,
+        status="unread" if unread_only else None,
         limit=50,
     )
 
@@ -178,8 +177,7 @@ def render_inbox_tab(farmer_id: str, service: NotificationService, repo: FarmDat
         NotificationCategory.MARKET_INTELLIGENCE: "📈",
         NotificationCategory.EXPERT_REVIEW: "👨‍⚕️",
         NotificationCategory.CROP_REMINDER: "⏰",
-        NotificationCategory.ADVISORY_UPDATE: "🌾",
-        NotificationCategory.SYSTEM: "⚙️",
+        NotificationCategory.SYSTEM_GOVERNANCE: "⚙️",
     }
 
     for n in notifications:

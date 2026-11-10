@@ -54,7 +54,7 @@ def ui_card(title: str, content: str = "", icon: str = "📋", color: str = "#FA
     )
 
 
-def ui_metric_card(label: str, value: str, delta: Optional[str] = None, icon: str = "📊", color: str = "#2E7D32") -> None:
+def ui_metric_card(label: str, value: str, delta: Optional[str] = None, icon: str = "📊", color: str = "#2E7D32", **kwargs) -> None:
     """Render metric KPI card."""
     delta_html = f"<div style='color:#666; font-size:0.8rem; margin-top:2px;'>{delta}</div>" if delta else ""
     st.markdown(
@@ -70,15 +70,16 @@ def ui_metric_card(label: str, value: str, delta: Optional[str] = None, icon: st
     )
 
 
-def ui_alert(message: str, type: str = "info") -> None:
+def ui_alert(message: str, type: str = "info", level: Optional[str] = None, **kwargs) -> None:
     """Render alert banner."""
+    alert_type = level or type or "info"
     styles = {
         "success": ("#E8F5E9", "#2E7D32", "✅"),
         "warning": ("#FFF8E1", "#F57F17", "⚠️"),
         "error": ("#FFEBEE", "#C62828", "❌"),
         "info": ("#E3F2FD", "#1565C0", "ℹ️"),
     }
-    bg, fg, icon = styles.get(type, styles["info"])
+    bg, fg, icon = styles.get(alert_type, styles["info"])
     st.markdown(
         f"""
         <div style="background-color:{bg}; color:{fg}; padding:0.8rem 1rem; border-radius:6px; border-left:4px solid {fg}; margin:0.6rem 0; font-size:0.92rem;">

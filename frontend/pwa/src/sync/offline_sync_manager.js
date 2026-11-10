@@ -12,7 +12,7 @@ export class OfflineSyncManager {
     this.queue = queue;
     this.netManager = netManager;
     this.isSyncing = false;
-    this.authToken = null;
+    this.authToken = (typeof localStorage !== 'undefined' && localStorage.getItem('auth_token')) || null;
     this.syncListeners = new Set();
 
     // Auto-sync when connectivity transitions to ONLINE
@@ -54,8 +54,9 @@ export class OfflineSyncManager {
 
   _getHeaders() {
     const headers = { 'Content-Type': 'application/json' };
-    if (this.authToken) {
-      headers['Authorization'] = `Bearer ${this.authToken}`;
+    const token = this.authToken || (typeof localStorage !== 'undefined' && localStorage.getItem('auth_token'));
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
     return headers;
   }
